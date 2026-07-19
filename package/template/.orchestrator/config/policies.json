@@ -6,5 +6,12 @@
   "require_independent_validation": true,
   "require_deterministic_validation": true,
   "allow_parallel_read_only_analysis": true,
-  "allow_parallel_workspace_writes": false
+  "allow_parallel_workspace_writes": false,
+  "token_economy": {
+    "enabled": true,
+    "caveman_default": "full",
+    "model_routing": "config/models.json",
+    "forbid_max_tier_for": ["trivial", "classify", "docs", "documentation"],
+    "require_task_class_before_call_agent": true
+  }
 }

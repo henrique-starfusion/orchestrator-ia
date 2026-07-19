@@ -3,7 +3,7 @@ description: Branches main/develop e commit+push obrigatório ao concluir tarefa
 alwaysApply: true
 ---
 
-# Git workflow (bootstrap-agents)
+# Git workflow
 
 ## Branches
 
@@ -12,18 +12,17 @@ alwaysApply: true
 | `main` | Produção / releases estáveis |
 | `develop` | Desenvolvimento ativo (branch de trabalho padrão) |
 
-- Trabalho diário e PRs de feature partem de `develop` e voltam para `develop`.
-- Promover para `main` só com merge consciente (release / promoção).
-- Não usar a branch antiga `development`.
+- Trabalho diário e PRs partem de `develop` e voltam para `develop`.
+- Promover para `main` só em release consciente.
 
 ## Commit e push ao concluir
 
-Sempre que uma tarefa ou atualização for **concluída e testada** neste repositório:
+Quando uma tarefa ou atualização for **concluída e testada**:
 
-1. Rodar os testes relevantes (ex.: `npm test` / `tests/Run-AllTests.ps1`) quando o escopo tocar scripts/instalador.
-2. Fazer **commit** das mudanças da tarefa (mensagem clara, foco no porquê).
-3. Fazer **push** para o remoto (`origin`), na branch correta (`develop` em desenvolvimento).
+1. Rodar os testes relevantes do projeto.
+2. Fazer **commit** das mudanças da tarefa.
+3. Fazer **push** para `origin` na branch correta.
 
-Isto **sobrescreve** a regra geral de “só commitar se pedirem”: neste projeto, concluir + testar implica commit e push.
+Neste projeto, concluir + testar implica commit e push (não esperar pedido explícito).
 
-Não fazer push `--force` em `main`. Não alterar `git config`.
+Não usar `push --force` em `main`. Não alterar `git config`.

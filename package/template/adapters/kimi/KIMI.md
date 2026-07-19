@@ -1,5 +1,5 @@
-# Orchestrator adapter for Kimi CLI
+# Orchestrator adapter for Kimi
 #
-# Canonical project configuration lives in `.orchestrator/`.
+# Canonical: `.orchestrator/`. See `config/models.json`.
 
-Use `.orchestrator/` for shared orchestration, skills, and memory.
+Prefer newest Kimi model exposed by the CLI. Keep replies terse (caveman). Escalate tier only on validation failure.

@@ -252,6 +252,7 @@ function Ensure-SkillPackage {
     if ($Id -eq 'superpowers') { $present = Test-Path -LiteralPath (Join-Path $homeSkills 'using-superpowers') }
     elseif ($Id -eq 'find-skills') { $present = Test-Path -LiteralPath (Join-Path $homeSkills 'find-skills') }
     elseif ($Id -eq 'firecrawl') { $present = Test-Path -LiteralPath (Join-Path $homeSkills 'firecrawl') }
+    elseif ($Id -eq 'caveman') { $present = Test-Path -LiteralPath (Join-Path $homeSkills 'caveman') }
     else { $present = Test-Path -LiteralPath (Join-Path $homeSkills $Id) }
 
     if ($present -and -not $Force) {

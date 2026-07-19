@@ -1,5 +1,5 @@
 # Orchestrator adapter for Gemini CLI
 #
-# Canonical project configuration lives in `.orchestrator/`.
+# Canonical: `.orchestrator/`. Models: `.orchestrator/config/models.json`.
 
-Refer to `.orchestrator/` for shared agent configuration and skills.
+Prefer terse caveman-style output. Use newest Gemini available; map task class to `fast` vs `balanced`/`max` tiers in `models.json`.

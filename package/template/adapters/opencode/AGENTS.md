@@ -1,5 +1,5 @@
 # Orchestrator adapter for OpenCode
 #
-# Canonical project configuration lives in `.orchestrator/`.
+# Canonical: `.orchestrator/`. See `config/models.json` for cost-aware routing.
 
-Shared rules, skills, and runtime data are stored in `.orchestrator/`.
+Use caveman-style brevity. Resolve concrete model names with `opencode models` when tiers differ on the host.

@@ -44,6 +44,11 @@
                       "mode":  "merge"
                   },
                   {
+                      "source":  "template/.orchestrator/config/models.json",
+                      "destination":  ".orchestrator/config/models.json",
+                      "mode":  "merge"
+                  },
+                  {
                       "source":  "template/.orchestrator/config/policies.json",
                       "destination":  ".orchestrator/config/policies.json",
                       "mode":  "merge"
@@ -257,6 +262,11 @@
                       "source":  "template/.orchestrator/skills/registry.json",
                       "destination":  ".orchestrator/skills/registry.json",
                       "mode":  "merge"
+                  },
+                  {
+                      "source":  "template/.orchestrator/skills/economize-tokens/SKILL.md",
+                      "destination":  ".orchestrator/skills/economize-tokens/SKILL.md",
+                      "mode":  "managed"
                   },
                   {
                       "source":  "template/.orchestrator/skills/analyze-project/SKILL.md",

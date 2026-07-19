@@ -125,9 +125,10 @@ O `update` sincroniza o pacote, aplica template/manifest de forma aditiva, redet
 No `init`/`update`, o pacote também configura no **perfil do usuário** (não só no projeto):
 
 - MCPs: Context7, Playwright, Sequential Thinking (Claude + Cursor)
-- Plugins Claude: context7, playwright, superpowers, skill-creator, atlassian, frontend-design
-- Skills globais (`~/.agents`): Superpowers, find-skills, Firecrawl
+- Plugins Claude: context7, playwright, superpowers, skill-creator, atlassian, frontend-design, **caveman**
+- Skills globais (`~/.agents`): Superpowers, find-skills, Firecrawl, **caveman** (economia de tokens)
 - CLIs npm: `openwolf`, `firecrawl-cli`
+- Roteamento de modelos por tarefa: `.orchestrator/config/models.json` (docs→Sonnet 5, análise complexa→Fable 5, trivial→Haiku). Ver [`docs/model-routing.md`](docs/model-routing.md).
 
 ```bash
 orchestrator global-tools

@@ -44,7 +44,8 @@
     "superpowers@claude-plugins-official",
     "skill-creator@claude-plugins-official",
     "atlassian@claude-plugins-official",
-    "frontend-design@claude-plugins-official"
+    "frontend-design@claude-plugins-official",
+    "caveman@caveman"
   ],
   "skill_packages": [
     {
@@ -61,6 +62,11 @@
       "id": "firecrawl",
       "source": "firecrawl/cli",
       "notes": "hub Firecrawl + variantes CLI"
+    },
+    {
+      "id": "caveman",
+      "source": "juliusbrussee/caveman",
+      "notes": "modo caveman — ~75% menos tokens de prosa"
     }
   ]
 }

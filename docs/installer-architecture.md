@@ -256,6 +256,7 @@ Para evoluir o pacote sem quebrar workspaces:
 - [`legacy-migration.md`](legacy-migration.md) — `.claude/` → `.orchestrator/`
 - [`repo-layout.md`](repo-layout.md) — organização deste repositório
 - [`global-tools.md`](global-tools.md) — MCPs/plugins/skills no perfil do usuário
+- [`model-routing.md`](model-routing.md) — caveman + modelos por CLI/tarefa
 - [`legacy/README.md`](legacy/README.md) — material deprecado
 - [`troubleshooting.md`](troubleshooting.md) — diagnóstico operacional
 - `package/template/docs/agent-environment.md` — layout canônico no workspace

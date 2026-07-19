@@ -10,8 +10,10 @@ Catálogo: [`package/global-tools/catalog.json`](../package/global-tools/catalog
 |---|---|
 | CLI npm (`-g`) | `openwolf`, `firecrawl-cli` |
 | MCP (Claude user + Cursor `~/.cursor/mcp.json`) | Context7, Playwright, Sequential Thinking |
-| Plugins Claude (`-s user`) | context7, playwright, superpowers, skill-creator, atlassian, frontend-design |
-| Skills (`npx skills add … -g` → `~/.agents/skills`) | obra/superpowers, vercel-labs/skills, firecrawl/cli |
+| Plugins Claude (`-s user`) | context7, playwright, superpowers, skill-creator, atlassian, frontend-design, **caveman** |
+| Skills (`npx skills add … -g` → `~/.agents/skills`) | obra/superpowers, vercel-labs/skills, firecrawl/cli, **caveman** |
+
+Economia de tokens + roteamento de modelos: [`model-routing.md`](model-routing.md).
 
 OpenWolf/Graphify **no projeto** continuam em `Install-Tools` (`openwolf init`, `graphify install --project`).
 

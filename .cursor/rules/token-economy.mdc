@@ -1,0 +1,24 @@
+---
+description: Economia de tokens (caveman) e roteamento de modelos por tarefa
+alwaysApply: true
+---
+
+# Token economy + model routing
+
+Canonical config: `.orchestrator/config/models.json` and `config/policies.json`.
+
+## Caveman
+
+Default **full**: terse replies, no filler. Keep code, paths, errors exact. Off only if user says stop caveman / normal mode.
+
+## Model by task class
+
+| Task class | Tier | Prefer (Cursor) |
+|---|---|---|
+| trivial / classify | fast | `claude-4.5-haiku` |
+| docs / documentation / implementation | balanced | `claude-sonnet-5-thinking-high` |
+| architecture / hard debug | deep | `claude-opus-4-8-thinking-high` |
+| complex_analysis / long_agentic / orchestration_plan | max | `claude-fable-5-thinking-high` |
+| mechanical edits | fast | `composer-2.5-fast` |
+
+Never use Fable/Opus for docs or typos. Escalate at most one tier after failed validation.
