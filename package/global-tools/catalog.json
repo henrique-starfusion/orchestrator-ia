@@ -15,6 +15,15 @@
       "required": false
     }
   ],
+  "uv_tools": [
+    {
+      "id": "graphify",
+      "package": "graphifyy",
+      "check_command": "graphify",
+      "post_install": ["install"],
+      "notes": "CLI + MCP em ~/.local/bin; post_install sincroniza skill do usuario"
+    }
+  ],
   "mcp_servers": [
     {
       "id": "context7",

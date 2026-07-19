@@ -148,6 +148,44 @@ $graphifyEntry = [ordered]@{
     notes          = @()
 }
 
+# Instala CLI global se ausente (paridade com OpenWolf via npm -g / global-tools)
+if (-not $graphifyCmd) {
+    $uvCmd = Resolve-CommandExecutable -Name 'uv'
+    if (-not $uvCmd) {
+        $uvFallback = @(
+            (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links\uv.exe'),
+            (Join-Path $env:USERPROFILE '.local\bin\uv.exe')
+        ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+        if ($uvFallback) { $uvCmd = [pscustomobject]@{ Source = $uvFallback } }
+    }
+
+    if ($uvCmd) {
+        Write-Host '[ETAPA] Graphify ausente — instalando CLI global (uv tool install graphifyy)...'
+        if ($DryRun) {
+            Write-Host '[DRY-RUN] uv tool install graphifyy'
+            $graphifyEntry.notes += 'dry-run uv tool install'
+        }
+        else {
+            $inst = Invoke-ExternalCommand -FilePath $uvCmd.Source -ArgumentList @('tool', 'install', 'graphifyy') -TimeoutSeconds 300
+            if ($inst.exit_code -eq 0) {
+                Write-Host '[OK] Graphify CLI instalado via uv (~/.local/bin).'
+                $graphifyEntry.notes += 'uv tool install ok'
+                $graphifyCmd = Resolve-CommandExecutable -Name 'graphify'
+            }
+            else {
+                Write-Host "[AVISO] uv tool install graphifyy falhou (exit $($inst.exit_code)); bootstrap continua."
+                if ($inst.stderr) { Write-Host $inst.stderr }
+                $graphifyEntry.notes += ("uv install failed: {0}" -f $inst.exit_code)
+            }
+        }
+    }
+    else {
+        Write-Host '[AVISO] Graphify nao encontrado e uv ausente. Instale: winget install astral-sh.uv && uv tool install graphifyy'
+        Write-Host '        Ou: orchestrator global-tools'
+        $graphifyEntry.notes += 'not in PATH; uv missing'
+    }
+}
+
 if ($graphifyCmd) {
     $graphifyEntry.status = 'available'
     $graphifyEntry.path = $graphifyCmd.Source
@@ -159,7 +197,7 @@ if ($graphifyCmd) {
     }
 
     if ($RefreshTools) {
-        $uvCmd = Get-Command uv -ErrorAction SilentlyContinue
+        $uvCmd = Resolve-CommandExecutable -Name 'uv'
         if ($uvCmd) {
             Write-Host '[INFO] Tentando atualizar Graphify via uv...'
             if ($DryRun) {
@@ -173,6 +211,8 @@ if ($graphifyCmd) {
                 }
                 else {
                     $graphifyEntry.notes += 'uv upgrade ok'
+                    $graphifyCmd = Resolve-CommandExecutable -Name 'graphify'
+                    if ($graphifyCmd) { $graphifyEntry.path = $graphifyCmd.Source }
                 }
             }
         }
@@ -182,12 +222,25 @@ if ($graphifyCmd) {
     }
 
     if ($InitTools) {
-        Write-Host '[ETAPA] Inicializando Graphify no projeto (graphify install --project)...'
+        # Sync skill do usuario (corrige drift 0.9.18 vs pacote) + projeto
+        Write-Host '[ETAPA] Sincronizando Graphify no usuario (graphify install)...'
         if ($DryRun) {
+            Write-Host '[DRY-RUN] graphify install'
             Write-Host '[DRY-RUN] graphify install --project'
-            $graphifyEntry.notes += 'dry-run install --project'
+            $graphifyEntry.notes += 'dry-run install + install --project'
         }
         else {
+            $userInstall = Invoke-ExternalCommand -FilePath $graphifyCmd.Source -ArgumentList @('install') -TimeoutSeconds 180 -WorkingDirectory $projectRoot
+            if ($userInstall.exit_code -eq 0) {
+                Write-Host '[OK] graphify install (usuario/skills) concluido.'
+                $graphifyEntry.notes += 'user install ok'
+            }
+            else {
+                Write-Host "[AVISO] graphify install (usuario) falhou (exit $($userInstall.exit_code)); tentando --project mesmo assim."
+                $graphifyEntry.notes += ("user install failed: {0}" -f $userInstall.exit_code)
+            }
+
+            Write-Host '[ETAPA] Inicializando Graphify no projeto (graphify install --project)...'
             $init = Invoke-ExternalCommand -FilePath $graphifyCmd.Source -ArgumentList @('install', '--project') -TimeoutSeconds 180 -WorkingDirectory $projectRoot
             $graphifyEntry.init_exit_code = $init.exit_code
             if ($init.exit_code -eq 0) {
@@ -205,8 +258,8 @@ if ($graphifyCmd) {
     }
 }
 else {
-    Write-Host '[AVISO] Graphify nao encontrado no PATH. Instale com: uv tool install graphifyy  OU  npm i -g @sentropic/graphify'
-    $graphifyEntry.notes += 'not in PATH'
+    Write-Host '[AVISO] Graphify ainda indisponivel apos tentativa de install.'
+    $graphifyEntry.notes += 'still missing after install attempt'
 }
 
 $tools += [pscustomobject]$graphifyEntry

@@ -587,6 +587,7 @@ function Resolve-CommandExecutable {
     <#
     .SYNOPSIS
         Prefere shims .cmd/.exe no Windows (evita openwolf.ps1 que trava via Process.Start).
+        Tambem procura em ~/.local/bin e npm global quando o PATH da sessao esta incompleto.
     #>
     param(
         [Parameter(Mandatory = $true)]
@@ -594,7 +595,26 @@ function Resolve-CommandExecutable {
     )
 
     $all = @(Get-Command $Name -All -ErrorAction SilentlyContinue)
-    if ($all.Count -eq 0) { return $null }
+
+    if ($all.Count -eq 0) {
+        $candidates = @(
+            (Join-Path $env:USERPROFILE ".local\bin\$Name.exe"),
+            (Join-Path $env:USERPROFILE ".local\bin\$Name.cmd"),
+            (Join-Path $env:USERPROFILE ".local\bin\$Name"),
+            (Join-Path $env:APPDATA "npm\$Name.cmd"),
+            (Join-Path $env:APPDATA "npm\$Name.exe"),
+            (Join-Path $env:APPDATA "npm\$Name.ps1")
+        )
+        foreach ($c in $candidates) {
+            if (Test-Path -LiteralPath $c) {
+                return [pscustomobject]@{
+                    Name   = $Name
+                    Source = $c
+                }
+            }
+        }
+        return $null
+    }
 
     $preferred = $all | Where-Object {
         $ext = [IO.Path]::GetExtension($_.Source).ToLowerInvariant()

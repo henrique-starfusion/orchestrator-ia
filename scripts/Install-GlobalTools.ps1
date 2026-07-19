@@ -45,6 +45,7 @@ $report = [ordered]@{
     version    = '0.1.0'
     updated_at = (Get-Date).ToString('o')
     npm        = @()
+    uv         = @()
     mcp        = @()
     plugins    = @()
     skills     = @()
@@ -96,6 +97,81 @@ function Install-NpmGlobalIfMissing {
     else {
         Write-Host "[AVISO] Falha npm -g $PackageName (exit $($result.exit_code))"
         Add-ReportItem -Bucket 'npm' -Item @{ id = $Id; status = 'failed'; package = $PackageName; exit_code = $result.exit_code }
+    }
+}
+
+function Install-UvToolIfMissing {
+    param(
+        [string]$Id,
+        [string]$PackageName,
+        [string]$CheckCommand,
+        [string[]]$PostInstall = @()
+    )
+
+    if ((Test-CommandAvailable -Name $CheckCommand) -and -not $Force) {
+        Write-Host "[OK] CLI global ja presente: $CheckCommand"
+        Add-ReportItem -Bucket 'uv' -Item @{ id = $Id; status = 'present'; package = $PackageName }
+
+        # Skill desatualizada ainda merece post_install leve
+        if ($PostInstall.Count -gt 0 -and -not $DryRun) {
+            $cmd = Resolve-CommandExecutable -Name $CheckCommand
+            if ($cmd) {
+                foreach ($arg in $PostInstall) {
+                    Write-Host ("[ETAPA] {0} {1} (sync skill/usuario)" -f $CheckCommand, $arg)
+                    $null = Invoke-ExternalCommand -FilePath $cmd.Source -ArgumentList @($arg) -TimeoutSeconds 180
+                }
+            }
+        }
+        return
+    }
+
+    $uv = Resolve-CommandExecutable -Name 'uv'
+    if (-not $uv) {
+        $uvPath = @(
+            (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links\uv.exe'),
+            (Join-Path $env:USERPROFILE '.local\bin\uv.exe')
+        ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+        if ($uvPath) {
+            $uv = [pscustomobject]@{ Source = $uvPath }
+        }
+    }
+
+    if (-not $uv) {
+        Write-Host "[AVISO] uv ausente; nao foi possivel instalar $PackageName. Instale uv (winget install astral-sh.uv) e rode: orchestrator global-tools"
+        Add-ReportItem -Bucket 'uv' -Item @{ id = $Id; status = 'skipped'; reason = 'uv ausente'; package = $PackageName }
+        return
+    }
+
+    Write-Host "[ETAPA] uv tool install $PackageName"
+    if ($DryRun) {
+        Write-Host "[DRY-RUN] uv tool install $PackageName"
+        Add-ReportItem -Bucket 'uv' -Item @{ id = $Id; status = 'dry-run'; package = $PackageName }
+        return
+    }
+
+    $result = Invoke-ExternalCommand -FilePath $uv.Source -ArgumentList @('tool', 'install', $PackageName) -TimeoutSeconds 300
+    if ($result.exit_code -ne 0) {
+        Write-Host ("[AVISO] uv tool install {0}: exit {1}" -f $PackageName, $result.exit_code)
+        if ($result.stderr) { Write-Host $result.stderr }
+        Add-ReportItem -Bucket 'uv' -Item @{ id = $Id; status = 'failed'; package = $PackageName; exit_code = $result.exit_code }
+        return
+    }
+
+    Write-Host "[OK] uv tool instalado: $PackageName (-> ~/.local/bin)"
+    Add-ReportItem -Bucket 'uv' -Item @{ id = $Id; status = 'installed'; package = $PackageName }
+
+    $cmd = Resolve-CommandExecutable -Name $CheckCommand
+    if ($cmd -and $PostInstall.Count -gt 0) {
+        foreach ($arg in $PostInstall) {
+            Write-Host ("[ETAPA] {0} {1}" -f $CheckCommand, $arg)
+            $post = Invoke-ExternalCommand -FilePath $cmd.Source -ArgumentList @($arg) -TimeoutSeconds 180
+            if ($post.exit_code -ne 0) {
+                Write-Host ("[AVISO] {0} {1}: exit {2}" -f $CheckCommand, $arg, $post.exit_code)
+            }
+            else {
+                Write-Host ("[OK] {0} {1}" -f $CheckCommand, $arg)
+            }
+        }
     }
 }
 
@@ -289,6 +365,17 @@ Write-Host '[INFO] Install-GlobalTools: CLIs, MCPs, plugins e skills no perfil d
 if ($catalog.npm_globals) {
     foreach ($pkg in @($catalog.npm_globals)) {
         Install-NpmGlobalIfMissing -Id ([string]$pkg.id) -PackageName ([string]$pkg.package) -CheckCommand ([string]$pkg.check_command)
+    }
+}
+
+# 1b) uv tools (Graphify etc.)
+if ($catalog.uv_tools) {
+    foreach ($pkg in @($catalog.uv_tools)) {
+        $post = @()
+        if ($pkg.PSObject.Properties['post_install'] -and $pkg.post_install) {
+            $post = @($pkg.post_install | ForEach-Object { [string]$_ })
+        }
+        Install-UvToolIfMissing -Id ([string]$pkg.id) -PackageName ([string]$pkg.package) -CheckCommand ([string]$pkg.check_command) -PostInstall $post
     }
 }
 

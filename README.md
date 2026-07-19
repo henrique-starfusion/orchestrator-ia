@@ -127,7 +127,7 @@ No `init`/`update`, o pacote também configura no **perfil do usuário** (não s
 - MCPs: Context7, Playwright, Sequential Thinking (Claude + Cursor)
 - Plugins Claude: context7, playwright, superpowers, skill-creator, atlassian, frontend-design, **caveman**
 - Skills globais (`~/.agents`): Superpowers, find-skills, Firecrawl, **caveman** (economia de tokens)
-- CLIs npm: `openwolf`, `firecrawl-cli`
+- CLIs: `openwolf` (npm `-g`), `firecrawl-cli` (npm `-g`), **graphify** (`uv tool install graphifyy`)
 - Roteamento de modelos por tarefa: `.orchestrator/config/models.json` (docs→Sonnet 5, análise complexa→Fable 5, trivial→Haiku). Ver [`docs/model-routing.md`](docs/model-routing.md).
 
 ```bash
