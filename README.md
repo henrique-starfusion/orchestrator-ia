@@ -74,34 +74,65 @@ Nenhum é obrigatório além do que você usar na prática. Adaptadores de templ
 
 ---
 
-## Instalação
+## Instalação (uma linha — estilo OpenWolf / Graphify)
+
+Na pasta do seu projeto:
+
+### Node.js / npm (recomendado)
+
+```bash
+npx --yes github:henrique-starfusion/bootstrap-agents#development init
+```
+
+Ou instalar o CLI global e reutilizar em vários projetos:
+
+```bash
+npm install -g github:henrique-starfusion/bootstrap-agents#development
+cd C:\caminho\do\seu\projeto
+orchestrator init
+```
+
+Equivalente curto: `mao init` (alias do mesmo binário).
+
+### PowerShell (Windows, com `gh` autenticado)
+
+```powershell
+gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=development" | iex
+```
+
+Isso baixa o pacote para `%LOCALAPPDATA%\StarFusion\multiagent-orchestrator` (cache) e instala `.orchestrator/` no diretório atual.
+
+### O que acontece no `init`
+
+1. Obtém o pacote versionado (npm/npx ou cache git/`gh`)
+2. Copia o template para `.orchestrator/` (idempotente)
+3. Detecta agentes CLI no PATH
+4. Gera adaptadores mínimos (`CLAUDE.md`, `AGENTS.md`, etc.)
+5. Valida a instalação e grava relatório em `.orchestrator/runtime/reports/`
+
+Não usa agentes de IA para montar a estrutura. OpenWolf/Graphify/MCPs são opcionais e não bloqueiam.
 
 ### Pré-requisitos
 
-- Windows com **PowerShell 5.1+**
-- **git** no PATH
+- **PowerShell 5.1+** (Windows) ou PowerShell 7+
+- **git** no PATH (e/ou **gh** para one-liner PowerShell / repositório privado)
+- **Node.js 18+** apenas se usar `npx` / `npm`
 - Permissão de escrita no projeto-alvo
 - Pelo menos **50 MB** livres no volume do projeto
 
-### Primeira instalação
-
-Na raiz deste pacote (ou com caminho absoluto):
+### Instalação a partir do clone local
 
 ```bat
+bootstrap-agents.bat init
 bootstrap-agents.bat install -ProjectPath C:\caminho\do\projeto
 ```
 
-Sem `-ProjectPath`, o diretório atual é usado como projeto-alvo.
-
-O arquivo `bootstrap-agents.bat` é um **wrapper fino** que encaminha `%*` para `scripts/Install-Orchestrator.ps1`.
-
-Equivalente direto em PowerShell:
-
 ```powershell
-.\scripts\Install-Orchestrator.ps1 install -ProjectPath C:\caminho\do\projeto
+.\get.ps1
+.\scripts\Install-Orchestrator.ps1 init -ProjectPath C:\caminho\do\projeto
 ```
 
-Após instalação bem-sucedida, o workspace terá `.orchestrator/VERSION` alinhado à `VERSION` na raiz do pacote (atualmente **0.1.0**).
+Após sucesso, o workspace terá `.orchestrator/VERSION` alinhado à `VERSION` do pacote (atualmente **0.1.0**).
 
 ---
 
@@ -109,6 +140,7 @@ Após instalação bem-sucedida, o workspace terá `.orchestrator/VERSION` alinh
 
 | Comando | Descrição |
 |---|---|
+| `init` | Alias de `install` (compatível com OpenWolf/Graphify) |
 | `install` | Instala ou completa a estrutura `.orchestrator/` (padrão) |
 | `verify` | Preflight + validação; não altera arquivos gerenciados |
 | `upgrade` | Atualiza arquivos gerenciados quando o pacote é mais novo |

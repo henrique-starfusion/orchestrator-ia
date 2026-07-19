@@ -1,0 +1,47 @@
+{
+  "name": "@starfusion/orchestrator",
+  "version": "0.1.0",
+  "description": "Instalador versionado do Orquestrador Multiagente (StarFusion). Fonte canônica .orchestrator/",
+  "license": "UNLICENSED",
+  "author": "Henrique Rodrigues <StarFusion Consultoria, Tecnologia e Soluções em Informática LTDA.>",
+  "homepage": "https://github.com/henrique-starfusion/bootstrap-agents",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/henrique-starfusion/bootstrap-agents.git"
+  },
+  "bugs": {
+    "url": "https://github.com/henrique-starfusion/bootstrap-agents/issues"
+  },
+  "bin": {
+    "orchestrator": "bin/orchestrator.js",
+    "mao": "bin/orchestrator.js"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "package/",
+    "docs/",
+    "VERSION",
+    "LICENSE",
+    "README.md",
+    "bootstrap-agents.bat",
+    "install.ps1",
+    "get.ps1"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "multiagent",
+    "orchestrator",
+    "claude",
+    "codex",
+    "agents",
+    "starfusion",
+    "bootstrap"
+  ],
+  "scripts": {
+    "test": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/Run-AllTests.ps1"
+  },
+  "preferGlobal": true
+}

@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('install', 'verify', 'upgrade', 'repair', 'uninstall', 'status', 'analyze', 'skills')]
+    [ValidateSet('init', 'install', 'verify', 'upgrade', 'repair', 'uninstall', 'status', 'analyze', 'skills')]
     [string]$Command = 'install',
 
     [Alias('Project')]
@@ -75,6 +75,10 @@ $packageVersion = Read-PackageVersion -PackageRoot $packageRootResolved
 $workspaceVersion = Read-WorkspaceVersion -ProjectPath $projectRoot
 $logFile = $null
 $lockCreated = $false
+
+if ($Command -eq 'init') {
+    $Command = 'install'
+}
 
 try {
     switch ($Command) {

@@ -1,18 +1,40 @@
 # Referência da CLI
 
-Referência dos comandos expostos por `bootstrap-agents.bat` → `scripts/Install-Orchestrator.ps1`.
+Três formas de entrada (mesma lógica):
 
-**Sintaxe:** PowerShell 5.1. O BAT repassa argumentos sem transformação.
+1. **One-liner npm:** `npx @starfusion/orchestrator init` / `orchestrator init`
+2. **One-liner PowerShell:** `get.ps1` (via `gh api ... | iex` ou local)
+3. **Wrapper local:** `bootstrap-agents.bat` → `scripts/Install-Orchestrator.ps1`
+
+**Sintaxe PowerShell:** 5.1+. O BAT e o bin Node encaminham argumentos ao instalador.
 
 ---
 
-## Invocação
+## One-liner (projeto atual)
+
+```bash
+npx --yes github:henrique-starfusion/bootstrap-agents#development init
+```
+
+```powershell
+gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=development" | iex
+```
+
+```bash
+orchestrator init
+mao init
+```
+
+---
+
+## Invocação local
 
 ```bat
 bootstrap-agents.bat <comando> [opções]
 ```
 
 ```powershell
+.\get.ps1 <comando> [opções]
 .\scripts\Install-Orchestrator.ps1 <comando> [opções]
 ```
 
@@ -33,7 +55,9 @@ bootstrap-agents.bat verify -Project C:\dev\meu-app
 
 ## Comandos
 
-### `install`
+### `init` / `install`
+
+`init` é alias de `install` (padrão OpenWolf/Graphify).
 
 Instala ou completa o ambiente `.orchestrator/` no projeto-alvo.
 
