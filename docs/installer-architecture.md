@@ -37,7 +37,7 @@ Quickstart one-liner: [`quickstart-oneliner.md`](quickstart-oneliner.md)
 ### 1. npm / npx (estilo OpenWolf)
 
 ```bash
-npx --yes github:henrique-starfusion/bootstrap-agents#development init
+npx --yes github:henrique-starfusion/bootstrap-agents#develop init
 orchestrator init
 mao init
 ```
@@ -53,7 +53,7 @@ mao init
 
 ```powershell
 gh api -H "Accept: application/vnd.github.raw" `
-  "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=development" | iex
+  "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=develop" | iex
 ```
 
 `get.ps1`:
@@ -254,5 +254,7 @@ Para evoluir o pacote sem quebrar workspaces:
 - [`quickstart-oneliner.md`](quickstart-oneliner.md) — instalação em uma linha
 - [`cli-reference.md`](cli-reference.md) — parâmetros e exemplos
 - [`legacy-migration.md`](legacy-migration.md) — `.claude/` → `.orchestrator/`
+- [`repo-layout.md`](repo-layout.md) — organização deste repositório
+- [`legacy/README.md`](legacy/README.md) — material deprecado
 - [`troubleshooting.md`](troubleshooting.md) — diagnóstico operacional
 - `package/template/docs/agent-environment.md` — layout canônico no workspace

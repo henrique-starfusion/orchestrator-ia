@@ -583,18 +583,83 @@ function Test-PackageIntegrity {
     }
 }
 
+function Resolve-CommandExecutable {
+    <#
+    .SYNOPSIS
+        Prefere shims .cmd/.exe no Windows (evita openwolf.ps1 que trava via Process.Start).
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+
+    $all = @(Get-Command $Name -All -ErrorAction SilentlyContinue)
+    if ($all.Count -eq 0) { return $null }
+
+    $preferred = $all | Where-Object {
+        $ext = [IO.Path]::GetExtension($_.Source).ToLowerInvariant()
+        $ext -in @('.cmd', '.exe', '.bat')
+    } | Select-Object -First 1
+
+    if ($preferred) { return $preferred }
+
+    # Evita .ps1 como primeira escolha
+    $nonPs1 = $all | Where-Object {
+        [IO.Path]::GetExtension($_.Source).ToLowerInvariant() -ne '.ps1'
+    } | Select-Object -First 1
+
+    if ($nonPs1) { return $nonPs1 }
+    return $all[0]
+}
+
 function Invoke-ExternalCommand {
     param(
         [Parameter(Mandatory = $true)]
         [string]$FilePath,
-        [string]$ArgumentList = '',
+        $ArgumentList = @(),
         [int]$TimeoutSeconds = 30,
         [string]$WorkingDirectory
     )
 
+    # Normaliza argumentos (string unica ou array)
+    $argArray = @()
+    if ($ArgumentList -is [System.Array]) {
+        $argArray = @($ArgumentList | ForEach-Object { [string]$_ })
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace([string]$ArgumentList)) {
+        $argArray = @([string]$ArgumentList)
+    }
+
+    function Quote-Arg([string]$Value) {
+        if ($Value -match '[\s"]') {
+            return '"' + ($Value -replace '"', '\"') + '"'
+        }
+        return $Value
+    }
+
+    $fileName = $FilePath
+    $argsFinal = $argArray
+
+    # Shims npm (.ps1/.cmd) nao sao PE — executar via host adequado
+    $ext = [IO.Path]::GetExtension($FilePath).ToLowerInvariant()
+    if ($ext -eq '.ps1') {
+        $psHost = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+        if (-not (Test-Path -LiteralPath $psHost)) {
+            $psCmd = Get-Command powershell.exe -ErrorAction SilentlyContinue
+            if ($psCmd) { $psHost = $psCmd.Source }
+        }
+        $fileName = $psHost
+        $argsFinal = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', $FilePath) + $argArray
+    }
+    elseif ($ext -eq '.cmd' -or $ext -eq '.bat') {
+        $fileName = Join-Path $env:SystemRoot 'System32\cmd.exe'
+        $tail = (@(Quote-Arg $FilePath) + ($argArray | ForEach-Object { Quote-Arg $_ })) -join ' '
+        $argsFinal = @('/d', '/c', $tail)
+    }
+
     $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = $FilePath
-    $psi.Arguments = $ArgumentList
+    $psi.FileName = $fileName
+    $psi.Arguments = (($argsFinal | ForEach-Object { Quote-Arg ([string]$_) }) -join ' ')
     $psi.UseShellExecute = $false
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
@@ -604,10 +669,20 @@ function Invoke-ExternalCommand {
         $psi.WorkingDirectory = $WorkingDirectory
     }
 
-    $process = New-Object System.Diagnostics.Process
-    $process.StartInfo = $psi
+    try {
+        $process = New-Object System.Diagnostics.Process
+        $process.StartInfo = $psi
+        $null = $process.Start()
+    }
+    catch {
+        return @{
+            timed_out = $false
+            exit_code = 1
+            stdout    = ''
+            stderr    = $_.Exception.Message
+        }
+    }
 
-    $null = $process.Start()
     $completed = $process.WaitForExit($TimeoutSeconds * 1000)
 
     if (-not $completed) {
@@ -725,4 +800,67 @@ function Sync-WorkspaceVersion {
 
     Set-Content -LiteralPath $versionPath -Value $Version -Encoding UTF8
     return $versionPath
+}
+
+function Sync-PackageSource {
+    <#
+    .SYNOPSIS
+        Atualiza o pacote local quando PackageRoot for um clone git (cache ou repo).
+        Nunca aborta o update do workspace — falhas viram aviso.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PackageRoot,
+        [string]$Branch = 'develop',
+        [switch]$DryRun
+    )
+
+    $gitDir = Join-Path $PackageRoot '.git'
+    if (-not (Test-Path -LiteralPath $gitDir)) {
+        Write-Host '[INFO] Pacote sem .git; sync remoto ignorado.'
+        return $false
+    }
+
+    $git = Get-Command git -ErrorAction SilentlyContinue
+    if (-not $git) {
+        Write-Host '[AVISO] git nao encontrado; sync do pacote ignorado.'
+        return $false
+    }
+
+    Write-Host ("[INFO] Sincronizando pacote git ({0})..." -f $Branch)
+    if ($DryRun.IsPresent) {
+        Write-Host ('[DRY-RUN] git -C {0} fetch/pull {1}' -f $PackageRoot, $Branch)
+        return $true
+    }
+
+    $previousEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $null = & $git.Source -C $PackageRoot fetch --depth 1 origin $Branch 2>&1
+        $fetchCode = $LASTEXITCODE
+        if ($fetchCode -eq 0) {
+            $null = & $git.Source -C $PackageRoot merge --ff-only "origin/$Branch" 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                $null = & $git.Source -C $PackageRoot pull --ff-only origin $Branch 2>&1
+            }
+        }
+        else {
+            $null = & $git.Source -C $PackageRoot pull --ff-only 2>&1
+        }
+
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host '[AVISO] Nao foi possivel atualizar o pacote via git; continuando com a copia local.'
+            return $false
+        }
+
+        Write-Host '[OK] Pacote sincronizado.'
+        return $true
+    }
+    catch {
+        Write-Host ("[AVISO] Sync do pacote ignorado: {0}" -f $_.Exception.Message)
+        return $false
+    }
+    finally {
+        $ErrorActionPreference = $previousEap
+    }
 }

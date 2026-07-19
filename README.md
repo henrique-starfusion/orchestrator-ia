@@ -81,13 +81,13 @@ Na pasta do seu projeto:
 ### Node.js / npm (recomendado)
 
 ```bash
-npx --yes github:henrique-starfusion/bootstrap-agents#development init
+npx --yes github:henrique-starfusion/bootstrap-agents#develop init
 ```
 
 Ou instalar o CLI global e reutilizar em vários projetos:
 
 ```bash
-npm install -g github:henrique-starfusion/bootstrap-agents#development
+npm install -g github:henrique-starfusion/bootstrap-agents#develop
 cd C:\caminho\do\seu\projeto
 orchestrator init
 ```
@@ -97,7 +97,7 @@ Equivalente curto: `mao init` (alias do mesmo binário).
 ### PowerShell (Windows, com `gh` autenticado)
 
 ```powershell
-gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=development" | iex
+gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=develop" | iex
 ```
 
 Isso baixa o pacote para `%LOCALAPPDATA%\StarFusion\multiagent-orchestrator` (cache) e instala `.orchestrator/` no diretório atual.
@@ -142,8 +142,9 @@ Após sucesso, o workspace terá `.orchestrator/VERSION` alinhado à `VERSION` d
 |---|---|
 | `init` | Alias de `install` (compatível com OpenWolf/Graphify) |
 | `install` | Instala ou completa a estrutura `.orchestrator/` (padrão) |
+| `update` | Atualiza a estrutura `.orchestrator/` do projeto atual (recomendado) |
 | `verify` | Preflight + validação; não altera arquivos gerenciados |
-| `upgrade` | Atualiza arquivos gerenciados quando o pacote é mais novo |
+| `upgrade` | Alias de `update` (compatibilidade) |
 | `repair` | Restaura arquivos gerenciados ausentes ou corrompidos |
 | `uninstall` | Remove arquivos gerenciados; faz backup prévio |
 | `status` | Exibe versões, agentes detectados e ferramentas |
@@ -152,11 +153,23 @@ Após sucesso, o workspace terá `.orchestrator/VERSION` alinhado à `VERSION` d
 
 Exemplos:
 
+```bash
+# Na pasta do projeto — atualiza estrutura canônica
+orchestrator update
+```
+
 ```bat
+bootstrap-agents.bat update -ProjectPath C:\meu-projeto
 bootstrap-agents.bat verify -ProjectPath C:\meu-projeto
-bootstrap-agents.bat upgrade -ProjectPath C:\meu-projeto
 bootstrap-agents.bat status
 ```
+
+O `update`:
+
+1. sincroniza o pacote (git pull, quando aplicável);
+2. aplica template/manifest (aditivo; `-Force` sobrescreve managed);
+3. redetecta agentes e regenera adaptadores ausentes;
+4. valida e grava relatório.
 
 ### Comparação de versões
 
@@ -282,12 +295,37 @@ Configs, auditorias e servidores desabilitados ficam em subpastas de `mcp/`. Ati
 
 ## Plugins opcionais (OpenWolf, Graphify)
 
-Ferramentas auxiliares detectadas em `Install-Tools.ps1`:
+No `init` / `install` / `update`, o instalador **detecta e inicializa** as tools se estiverem no PATH:
 
-- **OpenWolf** — comando `openwolf`
-- **Graphify** — comando `graphify`
+| Tool | Detecção | Inicialização no projeto |
+|---|---|---|
+| OpenWolf | `openwolf` | `openwolf init` → cria `.wolf/` |
+| Graphify | `graphify` | `graphify install --project` |
 
-Ausência ou falha de instalação/atualização **nunca bloqueia** o install. Apenas avisos e registro em `.orchestrator/tools/registry.json`. Use `-SkipTools` para pular completamente.
+Status gravado em:
+
+```text
+.orchestrator/tools/registry.json
+.orchestrator/tools/openwolf/status.json
+.orchestrator/tools/graphify/status.json
+```
+
+Flags:
+
+| Flag | Efeito |
+|---|---|
+| `-InitTools` | Força inicialização |
+| `-SkipToolInit` | Só detecta (não roda init) |
+| `-SkipTools` | Ignora tools por completo |
+| `-RefreshTools` | Consulta/atualiza pacotes (npm/uv) |
+
+Ausência ou falha de init **nunca bloqueia** o bootstrap. Instale globalmente antes, se precisar:
+
+```bash
+npm install -g openwolf
+uv tool install graphifyy
+# ou: npm i -g @sentropic/graphify
+```
 
 ---
 
@@ -351,7 +389,7 @@ package/
 
 Se existir `.claude/VERSION` sem `.orchestrator/VERSION`, o `install` executa `Migrate-LegacyClaude.ps1` (importa memória/regras para `legacy-import/`). Veja [`docs/legacy-migration.md`](docs/legacy-migration.md).
 
-O prompt `prompt_ambiente_multiagente.md` é **LEGADO** — não use para primeira instalação.
+O prompt antigo está em [`docs/legacy/prompt_ambiente_multiagente.md`](docs/legacy/prompt_ambiente_multiagente.md) — **não use** para instalação.
 
 ---
 
@@ -375,16 +413,19 @@ Prioridade atual (v0.1): detecção de CLIs, bootstrap incremental versionado, s
 | `package.json` | Pacote npm `@starfusion/orchestrator` (bins `orchestrator`, `mao`) |
 | `bin/orchestrator.js` | CLI Node — one-liner / global |
 | `get.ps1` | One-liner PowerShell (cache + install no cwd) |
-| `bootstrap-agents.bat` | Wrapper fino local → PowerShell |
-| `install.ps1` | Atalho local para `Install-Orchestrator.ps1` |
+| `bootstrap-agents.bat` | Wrapper fino Windows → PowerShell (**em uso**) |
+| `install.ps1` | Atalho PowerShell local (**em uso**) |
 | `scripts/` | Implementação PowerShell do instalador |
 | `package/` | Template, manifest, checksums, migrações |
 | `tests/` | Suíte de testes em fixtures temporárias |
-| `docs/` | Documentação do instalador |
+| `docs/` | Documentação do produto |
+| `docs/legacy/` | Prompt e material deprecados |
+| `docs/repo-layout.md` | Organização deste repositório |
 | `LICENSE` | Todos os direitos reservados (StarFusion) |
-| `prompt_ambiente_multiagente.md` | Prompt legado (deprecado) |
 
-**Repositório:** https://github.com/henrique-starfusion/bootstrap-agents (branch `development`)
+**Repositório:** https://github.com/henrique-starfusion/bootstrap-agents (branch `develop`)
+
+Layout detalhado: [`docs/repo-layout.md`](docs/repo-layout.md)
 
 ---
 

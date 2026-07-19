@@ -6,15 +6,15 @@
 > Para instalação determinística (uma linha, na pasta do projeto):
 >
 > ```bash
-> npx --yes github:henrique-starfusion/bootstrap-agents#development init
+> npx --yes github:henrique-starfusion/bootstrap-agents#develop init
 > ```
 >
 > ```powershell
-> gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=development" | iex
+> gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=develop" | iex
 > ```
 >
 > Consulte `README.md`, `docs/quickstart-oneliner.md` e `docs/cli-reference.md`.
-> Este arquivo permanece apenas como referência histórica.
+> Este arquivo está em `docs/legacy/` e **não é usado** pelo instalador atual.
 
 # Inicialização de ambiente multiagente usando `.claude`
 

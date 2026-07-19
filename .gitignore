@@ -2,13 +2,18 @@
 /.orchestrator/
 /.claude/
 /.codex/
-/.cursor/
+# Gerado no workspace; rules versionadas do pacote ficam rastreadas
+/.cursor/*
+!/.cursor/rules/
+!/.cursor/rules/**
 /.gemini/
 /.kimi/
 /.opencode/
 /.openai/
 /.agents/
 /.agent/
+/.wolf/
+/graphify-out/
 
 # Vendor adapter files at project root (generated)
 /CLAUDE.md
@@ -34,3 +39,5 @@ Desktop.ini
 
 # Test leftovers
 orchestrator-tests-*/
+# Gerado localmente pelo OpenWolf (workspace)
+/.cursor/rules/openwolf.mdc

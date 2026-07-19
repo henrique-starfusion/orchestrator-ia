@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('init', 'install', 'verify', 'upgrade', 'repair', 'uninstall', 'status', 'analyze', 'skills')]
+    [ValidateSet('init', 'install', 'verify', 'update', 'upgrade', 'repair', 'uninstall', 'status', 'analyze', 'skills')]
     [string]$Command = 'install',
 
     [Alias('Project')]
@@ -17,6 +17,8 @@ param(
     [switch]$SkipAgentProbes,
     [switch]$SkipTools,
     [switch]$RefreshTools,
+    [switch]$InitTools,
+    [switch]$SkipToolInit,
     [switch]$ConfigureMcps,
     [switch]$RunSmokeTest,
     [switch]$RunProjectTests,
@@ -80,6 +82,11 @@ if ($Command -eq 'init') {
     $Command = 'install'
 }
 
+# upgrade permanece como alias legado de update
+if ($Command -eq 'upgrade') {
+    $Command = 'update'
+}
+
 try {
     switch ($Command) {
         'verify' {
@@ -103,13 +110,95 @@ try {
             exit $code
         }
 
-        'upgrade' {
-            Write-Host '[INFO] Modo: upgrade'
-            $upgradeParams = @{ ProjectPath = $projectRoot; PackageRoot = $packageRootResolved }
-            if ($Force) { $upgradeParams.Force = $true }
-            if ($DryRun) { $upgradeParams.DryRun = $true }
-            & (Join-Path $PSScriptRoot 'Update-Orchestrator.ps1') @upgradeParams
-            exit $LASTEXITCODE
+        'update' {
+            Write-Host '[INFO] Modo: update'
+            $preflightArgs = @{
+                ProjectPath = $projectRoot
+                PackageRoot = $packageRootResolved
+            }
+            if ($DryRun) { $preflightArgs.DryRun = $true }
+            $code = Invoke-ChildScript -Name 'Detect-Environment.ps1' -Arguments $preflightArgs
+            if ($code -ne 0) { exit $code }
+
+            # Atualiza o pacote (git pull) quando PackageRoot for um clone
+            if ($DryRun) {
+                Sync-PackageSource -PackageRoot $packageRootResolved -DryRun | Out-Null
+            }
+            else {
+                Sync-PackageSource -PackageRoot $packageRootResolved | Out-Null
+            }
+            $packageVersion = Read-PackageVersion -PackageRoot $packageRootResolved
+
+            if (-not $DryRun) {
+                New-InstallationLock -ProjectPath $projectRoot | Out-Null
+                $lockCreated = $true
+            }
+
+            $updateParams = @{
+                ProjectPath = $projectRoot
+                PackageRoot = $packageRootResolved
+            }
+            if ($Force) { $updateParams.Force = $true }
+            if ($DryRun) { $updateParams.DryRun = $true }
+            & (Join-Path $PSScriptRoot 'Update-Orchestrator.ps1') @updateParams
+            $updateExit = $LASTEXITCODE
+            if ($updateExit -ne 0) { exit $updateExit }
+
+            # Refresh de deteccao/adaptadores apos sync estrutural
+            Invoke-ChildScript -Name 'Detect-Agents.ps1' -Arguments @{ ProjectPath = $projectRoot } | Out-Null
+
+            $adapterArgs = @{ ProjectPath = $projectRoot; PackageRoot = $packageRootResolved }
+            if ($Force) { $adapterArgs.Force = $true }
+            Invoke-ChildScript -Name 'Generate-Adapters.ps1' -Arguments $adapterArgs | Out-Null
+
+            if (-not $SkipTools) {
+                $toolsArgs = @{ ProjectPath = $projectRoot }
+                if ($RefreshTools) { $toolsArgs.RefreshTools = $true }
+                # update: inicializa tools por padrao (exceto -SkipToolInit)
+                $doInitTools = $true
+                if ($SkipToolInit) { $doInitTools = $false }
+                if ($PSBoundParameters.ContainsKey('InitTools')) { $doInitTools = $InitTools.IsPresent }
+                if ($doInitTools) { $toolsArgs.InitTools = $true }
+                if ($DryRun) { $toolsArgs.DryRun = $true }
+                Invoke-ChildScript -Name 'Install-Tools.ps1' -Arguments $toolsArgs | Out-Null
+            }
+
+            if ($UpdateAgents) {
+                $ua = @{ ProjectPath = $projectRoot; UpdateAgents = $true }
+                if ($Force) { $ua.Force = $true }
+                if ($DryRun) { $ua.DryRun = $true }
+                Invoke-ChildScript -Name 'Update-Agents.ps1' -Arguments $ua | Out-Null
+            }
+
+            $code = Invoke-ChildScript -Name 'Validate-Orchestrator.ps1' -Arguments @{
+                ProjectPath = $projectRoot
+                PackageRoot = $packageRootResolved
+            }
+            if ($code -ne 0) { exit $code }
+
+            $reportData = @{
+                agents      = @()
+                adapters    = @()
+                tools       = @()
+                limitations = @()
+            }
+            $detectedPath = Join-Path (Get-OrchestratorRoot -ProjectPath $projectRoot) 'agents\detected.json'
+            if (Test-Path -LiteralPath $detectedPath) {
+                $detectedObj = Get-JsonFileContent -Path $detectedPath
+                if ($detectedObj.PSObject.Properties['agents']) {
+                    $reportData.agents = @($detectedObj.agents)
+                }
+            }
+
+            Invoke-ChildScript -Name 'Write-InstallationReport.ps1' -Arguments @{
+                ProjectPath = $projectRoot
+                Mode        = 'update'
+                ReportData  = $reportData
+            } | Out-Null
+
+            Write-Host '[OK] Update concluido.'
+            Write-Host ("[OK] Workspace: {0} | Pacote: {1}" -f (Read-WorkspaceVersion -ProjectPath $projectRoot), $packageVersion)
+            exit 0
         }
 
         'repair' {
@@ -267,6 +356,11 @@ try {
     if (-not $SkipTools) {
         $toolsArgs = @{ ProjectPath = $projectRoot }
         if ($RefreshTools) { $toolsArgs.RefreshTools = $true }
+        # install/init: inicializa OpenWolf/Graphify por padrao
+        $doInitTools = $true
+        if ($SkipToolInit) { $doInitTools = $false }
+        if ($PSBoundParameters.ContainsKey('InitTools')) { $doInitTools = $InitTools.IsPresent }
+        if ($doInitTools) { $toolsArgs.InitTools = $true }
         if ($DryRun) { $toolsArgs.DryRun = $true }
         Invoke-ChildScript -Name 'Install-Tools.ps1' -Arguments $toolsArgs | Out-Null
     }

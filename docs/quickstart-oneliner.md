@@ -10,13 +10,13 @@ Modelo mental igual ao [OpenWolf](https://github.com/cytostack/openwolf) e ao Gr
 Na raiz do projeto-alvo:
 
 ```bash
-npx --yes github:henrique-starfusion/bootstrap-agents#development init
+npx --yes github:henrique-starfusion/bootstrap-agents#develop init
 ```
 
 Instalação global (reutilizar em vários projetos):
 
 ```bash
-npm install -g github:henrique-starfusion/bootstrap-agents#development
+npm install -g github:henrique-starfusion/bootstrap-agents#develop
 orchestrator init
 ```
 
@@ -31,8 +31,10 @@ Comandos úteis depois:
 ```bash
 orchestrator status
 orchestrator verify
-orchestrator upgrade
+orchestrator update
 ```
+
+`update` sincroniza a estrutura `.orchestrator/` do projeto com o pacote (aditivo; use `--force` para reaplicar managed).
 
 > Repositório privado: o npm/npx usa suas credenciais Git (`gh auth` / credential helper).
 
@@ -41,7 +43,7 @@ orchestrator upgrade
 Na raiz do projeto-alvo:
 
 ```powershell
-gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=development" | iex
+gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=develop" | iex
 ```
 
 O script:
@@ -60,7 +62,7 @@ Outros comandos:
 ## Opção C — clone local
 
 ```powershell
-git clone -b development https://github.com/henrique-starfusion/bootstrap-agents.git
+git clone -b develop https://github.com/henrique-starfusion/bootstrap-agents.git
 cd seu-projeto
 ..\bootstrap-agents\get.ps1
 ```
@@ -81,7 +83,7 @@ seu-projeto/
 |---|---|---|
 | OpenWolf | `npm i -g openwolf` | `openwolf init` |
 | Graphify | `uv tool install ...` / npm | `graphify install` |
-| Este pacote | `npm i -g github:.../bootstrap-agents#development` | `orchestrator init` |
+| Este pacote | `npm i -g github:.../bootstrap-agents#develop` | `orchestrator init` |
 
 ## Segurança
 

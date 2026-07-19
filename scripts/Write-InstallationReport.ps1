@@ -27,24 +27,41 @@ elseif ($ReportData -is [string] -and (Test-Path -LiteralPath $ReportData)) {
 $workspaceVersion = Read-WorkspaceVersion -ProjectPath $projectRoot
 $packageVersion = Read-PackageVersion -PackageRoot (Get-PackageRoot)
 
+function Get-ReportValue {
+    param($Source, [string]$Name)
+    if ($null -eq $Source) { return $null }
+    if ($Source -is [hashtable]) {
+        if ($Source.ContainsKey($Name)) { return $Source[$Name] }
+        return $null
+    }
+    if ($Source.PSObject -and $Source.PSObject.Properties[$Name]) {
+        return $Source.$Name
+    }
+    return $null
+}
+
 $agentsSummary = 'n/a'
-if ($data.agents) {
-    $agentsSummary = ($data.agents | ConvertTo-Json -Compress)
+$agents = Get-ReportValue -Source $data -Name 'agents'
+if ($agents) {
+    $agentsSummary = ($agents | ConvertTo-Json -Compress)
 }
 
 $adaptersSummary = 'n/a'
-if ($data.adapters) {
-    $adaptersSummary = ($data.adapters | ConvertTo-Json -Compress)
+$adapters = Get-ReportValue -Source $data -Name 'adapters'
+if ($adapters) {
+    $adaptersSummary = ($adapters | ConvertTo-Json -Compress)
 }
 
 $toolsSummary = 'n/a'
-if ($data.tools) {
-    $toolsSummary = ($data.tools | ConvertTo-Json -Compress)
+$tools = Get-ReportValue -Source $data -Name 'tools'
+if ($tools) {
+    $toolsSummary = ($tools | ConvertTo-Json -Compress)
 }
 
 $limitations = @()
-if ($data.limitations) {
-    $limitations = @($data.limitations)
+$lim = Get-ReportValue -Source $data -Name 'limitations'
+if ($lim) {
+    $limitations = @($lim)
 }
 
 $lines = @(

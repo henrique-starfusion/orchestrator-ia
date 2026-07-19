@@ -9,27 +9,28 @@
 
 .EXAMPLES
     # Na pasta do projeto (com gh autenticado):
-    gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=development" | iex
+    gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=develop" | iex
 
     # Se o repositorio estiver clonado/publicado:
-    irm https://raw.githubusercontent.com/henrique-starfusion/bootstrap-agents/development/get.ps1 | iex
+    irm https://raw.githubusercontent.com/henrique-starfusion/bootstrap-agents/develop/get.ps1 | iex
 
     # Local:
     .\get.ps1
     .\get.ps1 verify
+    .\get.ps1 update
     .\get.ps1 upgrade -Force
 #>
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('init', 'install', 'verify', 'upgrade', 'repair', 'uninstall', 'status', 'analyze', 'skills')]
+    [ValidateSet('init', 'install', 'verify', 'update', 'upgrade', 'repair', 'uninstall', 'status', 'analyze', 'skills')]
     [string]$Command = 'init',
 
     [Alias('Project')]
     [string]$ProjectPath = (Get-Location).Path,
 
     [string]$Repo = 'henrique-starfusion/bootstrap-agents',
-    [string]$Branch = 'development',
+    [string]$Branch = 'develop',
     [string]$CacheRoot,
     [switch]$ForceRefresh,
     [Parameter(ValueFromRemainingArguments = $true)]
@@ -40,6 +41,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 if ($Command -eq 'init') { $Command = 'install' }
+if ($Command -eq 'upgrade') { $Command = 'update' }
 
 function Get-DefaultCacheRoot {
     if ($env:LOCALAPPDATA) {

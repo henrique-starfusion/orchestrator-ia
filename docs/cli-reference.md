@@ -13,11 +13,11 @@ Três formas de entrada (mesma lógica):
 ## One-liner (projeto atual)
 
 ```bash
-npx --yes github:henrique-starfusion/bootstrap-agents#development init
+npx --yes github:henrique-starfusion/bootstrap-agents#develop init
 ```
 
 ```powershell
-gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=development" | iex
+gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=develop" | iex
 ```
 
 ```bash
@@ -63,6 +63,40 @@ bootstrap-agents.bat verify -Project C:\dev\meu-app
 ---
 
 ## Comandos
+
+### `update`
+
+Atualiza a estrutura `.orchestrator/` do projeto atual (comando principal de manutenção).
+
+```bash
+orchestrator update
+orchestrator update --force
+```
+
+```bat
+bootstrap-agents.bat update -ProjectPath C:\dev\meu-app
+```
+
+```powershell
+.\get.ps1 update
+```
+
+Fluxo:
+
+1. Preflight
+2. Sync do pacote via git (quando `PackageRoot` for clone)
+3. `Update-Orchestrator.ps1` — migrations (se houver) + template + manifest
+4. Detect-Agents + Generate-Adapters
+5. Install-Tools (salvo `-SkipTools`)
+6. Validate + relatório (`Mode=update`)
+
+Versões iguais: sincroniza **somente o que falta** (aditivo).  
+Pacote mais novo: backup + upgrade de VERSION.  
+`-Force`: reaplica arquivos managed.
+
+`upgrade` é alias de `update`.
+
+---
 
 ### `init` / `install`
 
@@ -209,6 +243,8 @@ Exit 1 se o registro estiver ausente.
 |---|---|
 | `-SkipTools` | Pula `Install-Tools.ps1` |
 | `-RefreshTools` | Tenta consultar/atualizar OpenWolf (npm) e Graphify (uv) |
+| `-InitTools` | Força `openwolf init` + `graphify install --project` |
+| `-SkipToolInit` | Detecta tools sem inicializar no projeto |
 
 ### MCP
 

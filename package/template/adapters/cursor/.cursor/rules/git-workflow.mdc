@@ -1,0 +1,28 @@
+---
+description: Branches main/develop e commit+push obrigatório ao concluir tarefas
+alwaysApply: true
+---
+
+# Git workflow
+
+## Branches
+
+| Branch | Papel |
+|---|---|
+| `main` | Produção / releases estáveis |
+| `develop` | Desenvolvimento ativo (branch de trabalho padrão) |
+
+- Trabalho diário e PRs partem de `develop` e voltam para `develop`.
+- Promover para `main` só em release consciente.
+
+## Commit e push ao concluir
+
+Quando uma tarefa ou atualização for **concluída e testada**:
+
+1. Rodar os testes relevantes do projeto.
+2. Fazer **commit** das mudanças da tarefa.
+3. Fazer **push** para `origin` na branch correta.
+
+Neste projeto, concluir + testar implica commit e push (não esperar pedido explícito).
+
+Não usar `push --force` em `main`. Não alterar `git config`.

@@ -25,6 +25,7 @@ function printHelp() {
 Uso (na pasta do projeto):
   npx @starfusion/orchestrator init
   orchestrator init
+  orchestrator update
   orchestrator install|verify|upgrade|repair|uninstall|status
 
 Opções encaminhadas ao instalador PowerShell:
@@ -38,7 +39,8 @@ Opções encaminhadas ao instalador PowerShell:
 
 Exemplos:
   cd C:\\meus-projetos\\app
-  npx --yes github:henrique-starfusion/bootstrap-agents#development init
+  npx --yes github:henrique-starfusion/bootstrap-agents#develop init
+  orchestrator update
 
   npm install -g @starfusion/orchestrator
   orchestrator init
@@ -48,6 +50,7 @@ Exemplos:
 
 function mapCommand(raw) {
   if (!raw || raw === 'init' || raw === 'i') return 'install';
+  if (raw === 'upgrade') return 'update';
   return raw;
 }
 
@@ -72,7 +75,7 @@ function parseArgs(argv) {
   }
 
   const known = new Set([
-    'init', 'i', 'install', 'verify', 'upgrade', 'repair', 'uninstall', 'status', 'analyze', 'skills',
+    'init', 'i', 'install', 'verify', 'update', 'upgrade', 'repair', 'uninstall', 'status', 'analyze', 'skills',
   ]);
 
   if (known.has(first) || !first.startsWith('-')) {
@@ -106,6 +109,8 @@ function parseArgs(argv) {
       '--skip-agent-probes': '-SkipAgentProbes',
       '--skip-tools': '-SkipTools',
       '--refresh-tools': '-RefreshTools',
+      '--init-tools': '-InitTools',
+      '--skip-tool-init': '-SkipToolInit',
       '--configure-mcps': '-ConfigureMcps',
       '--run-smoke-test': '-RunSmokeTest',
       '--run-project-tests': '-RunProjectTests',
