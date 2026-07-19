@@ -1,42 +1,82 @@
 # Arquitetura do instalador
 
-Documentação técnica do pacote **bootstrap-agents** (v0.1.0). Descreve como o instalador materializa `.orchestrator/` no projeto-alvo de forma determinística e incremental.
+Documentação técnica do pacote **bootstrap-agents** / **@starfusion/orchestrator** (v0.1.0). Descreve como o instalador materializa `.orchestrator/` no projeto-alvo de forma determinística e incremental.
+
+Quickstart one-liner: [`quickstart-oneliner.md`](quickstart-oneliner.md)
 
 ---
 
 ## Visão geral
 
 ```text
-┌─────────────────────┐
-│ bootstrap-agents.bat │  encaminha %* sem lógica própria
-└──────────┬──────────┘
-           │
-           ▼
-┌──────────────────────────────┐
-│ Install-Orchestrator.ps1     │  roteador: install | verify | upgrade | ...
-└──────────┬───────────────────┘
-           │
-     ┌─────┴─────┬─────────────┬──────────────┐
-     ▼           ▼             ▼              ▼
- Detect-*   Copy/Apply    Generate-*    Validate-*
+┌──────────────────────┐  ┌─────────────────────┐  ┌──────────────────────┐
+│ npx / orchestrator   │  │ get.ps1 (gh api|iex)│  │ bootstrap-agents.bat │
+│ (@starfusion/…)      │  │ cache LOCALAPPDATA  │  │ wrapper fino local   │
+└──────────┬───────────┘  └──────────┬──────────┘  └──────────┬───────────┘
+           │                         │                         │
+           └─────────────┬───────────┴─────────────┬───────────┘
+                         ▼                         │
+           �──┬───────────┘
+           │                         │                         │
+           └─────────────┬───────────┴─────────────┬───────────┘
+                         ▼                         │
+           ┌──────────────────────────────┐        │
+           │ Install-Orchestrator.ps1     │◄───────┘
+           │ roteador: init|install|…     │
+           └──────────┬───────────────────┘
+                      │
+            ┌─────────┴────────┬──────────────┬──────────────┐
+            ▼                  ▼              ▼              ▼
+        Detect-*          Copy/Apply     Generate-*     Validate-*
 ```
 
 **Fonte da verdade do pacote:** `package/template/.orchestrator/`  
 **Fonte da verdade do workspace:** `<projeto>/.orchestrator/`  
-**Contrato de arquivos:** `package/manifest.json`
+**Contrato de arquivos:** `package/manifest.json`  
+**CLI npm:** `package.json` → bin `orchestrator` / `mao` → `bin/orchestrator.js`
 
 ---
 
-## Entrada: BAT fino
+## Entradas (três frentes, uma lógica)
+
+### 1. npm / npx (estilo OpenWolf)
+
+```bash
+npx --yes github:henrique-starfusion/bootstrap-agents#development init
+orchestrator init
+mao init
+```
+
+`bin/orchestrator.js`:
+
+1. Resolve a raiz do pacote npm (`dirname/..`)
+2. Usa o diretório atual como `-ProjectPath` (ou `--project`)
+3. Localiza `powershell.exe` / `pwsh`
+4. Invoca `scripts/Install-Orchestrator.ps1` com `-NonInteractive`
+
+### 2. get.ps1 (one-liner PowerShell)
+
+```powershell
+gh api -H "Accept: application/vnd.github.raw" `
+  "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=development" | iex
+```
+
+`get.ps1`:
+
+1. Se já estiver dentro de um pacote completo, usa `$PSScriptRoot`
+2. Senão, sincroniza cache em `%LOCALAPPDATA%\StarFusion\multiagent-orchestrator` via `gh` ou `git`
+3. Executa `Install-Orchestrator.ps1` no projeto atual
+
+### 3. BAT fino (clone local)
 
 `bootstrap-agents.bat` apenas:
 
 1. Fixa o diretório para a raiz do pacote (`%~dp0`)
 2. Invoca PowerShell com `-ExecutionPolicy Bypass`
-3. Executa `scripts/Install-Orchestrator.ps1` repassando todos os argumentos (`%*`)
+3. Executa `scripts/Install-Orchestrator.ps1` repassando `%*`
 4. Propaga `%ERRORLEVEL%`
 
-Não há parsing de flags no BAT — use sintaxe PowerShell (`-ProjectPath`, `-DryRun`, etc.).
+Não há parsing de flags no BAT — use sintaxe PowerShell (`-ProjectPath`, `-DryRun`, etc.) ou as flags `--*` do CLI Node.
 
 ---
 
@@ -46,6 +86,7 @@ Não há parsing de flags no BAT — use sintaxe PowerShell (`-ProjectPath`, `-D
 
 | Comando | Scripts invocados | Altera disco? |
 |---|---|---|
+| `init` | Alias de `install` | Sim (salvo `-DryRun`) |
 | `install` | Pipeline completo abaixo | Sim (salvo `-DryRun`) |
 | `verify` | Detect-Environment → Validate-Orchestrator → Validate-Hooks | Não |
 | `upgrade` | Update-Orchestrator.ps1 | Sim |
@@ -215,6 +256,7 @@ Para evoluir o pacote sem quebrar workspaces:
 
 ## Referências
 
+- [`quickstart-oneliner.md`](quickstart-oneliner.md) — instalação em uma linha
 - [`cli-reference.md`](cli-reference.md) — parâmetros e exemplos
 - [`legacy-migration.md`](legacy-migration.md) — `.claude/` → `.orchestrator/`
 - [`troubleshooting.md`](troubleshooting.md) — diagnóstico operacional

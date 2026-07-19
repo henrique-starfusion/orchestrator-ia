@@ -3,14 +3,18 @@
 > Este prompt descreve o fluxo antigo baseado em `.claude/` como fonte canônica.
 > **A fonte canônica atual é `.orchestrator/`.**
 >
-> Para instalação determinística, use o instalador:
+> Para instalação determinística (uma linha, na pasta do projeto):
 >
-> ```bat
-> bootstrap-agents.bat install -ProjectPath C:\caminho\do\projeto
+> ```bash
+> npx --yes github:henrique-starfusion/bootstrap-agents#development init
 > ```
 >
-> Consulte `README.md` e `docs/cli-reference.md`. Este arquivo permanece apenas
-> como referência histórica e não deve substituir o bootstrap versionado.
+> ```powershell
+> gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=development" | iex
+> ```
+>
+> Consulte `README.md`, `docs/quickstart-oneliner.md` e `docs/cli-reference.md`.
+> Este arquivo permanece apenas como referência histórica.
 
 # Inicialização de ambiente multiagente usando `.claude`
 

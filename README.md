@@ -310,12 +310,16 @@ Políticas padrão em `.orchestrator/config/policies.json` (score mínimo 0.9, m
 
 | Sintoma | Ação |
 |---|---|
+| `npx` / clone falha (repo privado) | `gh auth login` e credential helper do Git |
+| `gh api ... \| iex` 404 / credenciais | `gh auth status` e escopo `repo` |
+| `orchestrator` não encontrado | Confirme `npm bin -g` no PATH |
+| Cache PowerShell corrompido | Apague `%LOCALAPPDATA%\StarFusion\multiagent-orchestrator` |
 | `git nao encontrado` | Instale Git e adicione ao PATH |
 | `Lock de instalacao ja existe` | Remova `.orchestrator/runtime/install.lock` se nenhum install estiver ativo |
 | `Workspace mais novo que o pacote` | Atualize o pacote bootstrap ou use versão compatível |
-| Arquivos gerenciados ausentes | `bootstrap-agents.bat repair -ProjectPath ...` |
-| Validação falhou | `bootstrap-agents.bat verify -ProjectPath ...` e leia logs em `runtime/validations/` |
-| Agentes não detectados | Confirme CLI no PATH; rode `status` |
+| Arquivos gerenciados ausentes | `orchestrator repair` ou `bootstrap-agents.bat repair` |
+| Validação falhou | `orchestrator verify` e leia logs em `runtime/validations/` |
+| Agentes não detectados | Confirme CLI no PATH; rode `orchestrator status` |
 
 Guia completo: [`docs/troubleshooting.md`](docs/troubleshooting.md)
 
@@ -324,9 +328,11 @@ Guia completo: [`docs/troubleshooting.md`](docs/troubleshooting.md)
 ## Arquitetura resumida
 
 ```text
+npx / orchestrator / mao      → CLI Node (bin/orchestrator.js)
+get.ps1                       → one-liner PowerShell + cache local
 bootstrap-agents.bat          → wrapper fino (%* → PowerShell)
-scripts/Install-Orchestrator.ps1   → roteador de comandos
-scripts/Orchestrator.Common.ps1    → helpers compartilhados
+        └─► scripts/Install-Orchestrator.ps1   → roteador (init|install|…)
+            scripts/Orchestrator.Common.ps1    → helpers
 package/
 ├── manifest.json             → arquivos gerenciados (managed/merge/generated)
 ├── checksums.json            → integridade
@@ -335,7 +341,9 @@ package/
 └── migrations/               → scripts <from>-to-<to>.ps1
 ```
 
-Detalhes: [`docs/installer-architecture.md`](docs/installer-architecture.md) · CLI: [`docs/cli-reference.md`](docs/cli-reference.md)
+- Arquitetura: [`docs/installer-architecture.md`](docs/installer-architecture.md)
+- CLI: [`docs/cli-reference.md`](docs/cli-reference.md)
+- One-liner: [`docs/quickstart-oneliner.md`](docs/quickstart-oneliner.md)
 
 ---
 
@@ -364,12 +372,19 @@ Prioridade atual (v0.1): detecção de CLIs, bootstrap incremental versionado, s
 | Artefato | Função |
 |---|---|
 | `VERSION` | Versão do pacote bootstrap |
-| `bootstrap-agents.bat` | Entrada única para install/verify/upgrade/... |
+| `package.json` | Pacote npm `@starfusion/orchestrator` (bins `orchestrator`, `mao`) |
+| `bin/orchestrator.js` | CLI Node — one-liner / global |
+| `get.ps1` | One-liner PowerShell (cache + install no cwd) |
+| `bootstrap-agents.bat` | Wrapper fino local → PowerShell |
+| `install.ps1` | Atalho local para `Install-Orchestrator.ps1` |
 | `scripts/` | Implementação PowerShell do instalador |
 | `package/` | Template, manifest, checksums, migrações |
+| `tests/` | Suíte de testes em fixtures temporárias |
 | `docs/` | Documentação do instalador |
 | `LICENSE` | Todos os direitos reservados (StarFusion) |
 | `prompt_ambiente_multiagente.md` | Prompt legado (deprecado) |
+
+**Repositório:** https://github.com/henrique-starfusion/bootstrap-agents (branch `development`)
 
 ---
 

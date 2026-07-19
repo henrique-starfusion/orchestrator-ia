@@ -46,9 +46,18 @@ bootstrap-agents.bat <comando> [opções]
 
 Exemplos:
 
+```bash
+orchestrator init
+orchestrator verify --project C:\dev\meu-app
+```
+
 ```bat
 bootstrap-agents.bat install -ProjectPath C:\dev\meu-app
 bootstrap-agents.bat verify -Project C:\dev\meu-app
+```
+
+```powershell
+.\get.ps1 init -ProjectPath C:\dev\meu-app
 ```
 
 ---

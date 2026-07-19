@@ -1,10 +1,17 @@
 # Solução de problemas
 
-Guia operacional para falhas comuns do instalador **bootstrap-agents**.
+Guia operacional para falhas comuns do instalador **bootstrap-agents** / **@starfusion/orchestrator**.
+
+Quickstart: [`quickstart-oneliner.md`](quickstart-oneliner.md)
 
 ---
 
 ## Diagnóstico rápido
+
+```bash
+orchestrator status
+orchestrator verify
+```
 
 ```bat
 bootstrap-agents.bat status -ProjectPath C:\dev\projeto
@@ -17,6 +24,77 @@ Logs:
 ```text
 .orchestrator/runtime/validations/*.log
 .orchestrator/runtime/reports/installation-report.md
+```
+
+Cache do one-liner PowerShell:
+
+```text
+%LOCALAPPDATA%\StarFusion\multiagent-orchestrator
+```
+
+---
+
+## One-liner / CLI npm
+
+### `npx` pede autenticação ou falha no clone
+
+**Causa:** repositório privado sem credencial Git configurada.
+
+**Solução:**
+
+1. `gh auth login` (HTTPS ou SSH)
+2. Confirme `git ls-remote https://github.com/henrique-starfusion/bootstrap-agents.git`
+3. Repita: `npx --yes github:henrique-starfusion/bootstrap-agents#development init`
+
+---
+
+### `PowerShell nao encontrado` (CLI Node)
+
+**Causa:** `bin/orchestrator.js` não achou `powershell.exe` / `pwsh`.
+
+**Solução:** use Windows PowerShell 5.1+ ou instale PowerShell 7 e garanta que estejam no PATH.
+
+---
+
+### `gh api ... | iex` falha com 404 / Bad credentials
+
+**Causa:** sem login no GitHub CLI, branch inexistente ou token sem escopo `repo`.
+
+**Solução:**
+
+```powershell
+gh auth status
+gh auth refresh -s repo
+gh api repos/henrique-starfusion/bootstrap-agents --jq .full_name
+```
+
+---
+
+### Cache corrompido após `get.ps1`
+
+**Causa:** clone incompleto em `%LOCALAPPDATA%\StarFusion\multiagent-orchestrator`.
+
+**Solução:**
+
+```powershell
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\StarFusion\multiagent-orchestrator"
+# rode o one-liner novamente, ou:
+.\get.ps1 -ForceRefresh
+```
+
+---
+
+### `orchestrator` / `mao` não reconhecido após npm global
+
+**Causa:** pasta de bins do npm fora do PATH.
+
+**Solução:**
+
+```bash
+npm prefix -g
+npm bin -g
+# adicione o caminho de bin ao PATH e reabra o terminal
+npm install -g github:henrique-starfusion/bootstrap-agents#development
 ```
 
 ---
@@ -46,6 +124,8 @@ Logs:
 **Solução:**
 
 - Confirme clone/cópia completa do repositório bootstrap-agents
+- Se veio via npm/npx, reinstale o pacote (`npx` limpa cache com `--yes` / limpe npm cache se necessário)
+- Se veio via `get.ps1`, force refresh do cache (`-ForceRefresh`)
 - Verifique `package/manifest.json` e `package/template/.orchestrator/`
 - Não edite `checksums.json` manualmente sem regenerar
 

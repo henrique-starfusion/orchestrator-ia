@@ -8,7 +8,15 @@ Guia para workspaces que ainda usam `.claude/` como fonte canônica e precisam a
 
 Versões anteriores do bootstrap e o prompt `prompt_ambiente_multiagente.md` orientavam a criar infraestrutura em `.claude/`. A arquitetura atual define **`.orchestrator/` como única fonte canônica**; `.claude/` passa a ser apenas **adaptador fino** para Claude Code.
 
-O instalador detecta legado automaticamente durante `install`.
+O instalador detecta legado automaticamente durante `init` / `install` — inclusive quando você usa o one-liner:
+
+```bash
+npx --yes github:henrique-starfusion/bootstrap-agents#development init
+```
+
+```powershell
+gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=development" | iex
+```
 
 ---
 
