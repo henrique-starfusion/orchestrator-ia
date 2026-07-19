@@ -1,0 +1,10 @@
+{
+  "version": "0.1.0",
+  "name": "project-orchestrator",
+  "description": "Multi-agent orchestrator configuration",
+  "default_role": "orchestrator",
+  "runtime_dir": "runtime",
+  "memory_dir": "memory",
+  "skills_dir": "skills",
+  "agents_dir": "agents"
+}

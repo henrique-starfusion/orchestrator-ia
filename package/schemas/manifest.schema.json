@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.orchestrator.local/manifest.schema.json",
+  "title": "Orchestrator Package Manifest",
+  "type": "object",
+  "required": ["version", "files"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Manifest schema/version"
+    },
+    "package": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "destination", "mode"],
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "Path relative to package/ directory"
+          },
+          "destination": {
+            "type": "string",
+            "description": "Path relative to project root"
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["managed", "merge", "user-owned", "generated", "runtime"]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": true
+}

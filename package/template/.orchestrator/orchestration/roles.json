@@ -1,0 +1,25 @@
+{
+  "version": "0.1.0",
+  "roles": [
+    {
+      "id": "orchestrator",
+      "description": "Coordinates tasks, policies, and agent delegation"
+    },
+    {
+      "id": "planner",
+      "description": "Analyzes requests and produces executable plans"
+    },
+    {
+      "id": "executor",
+      "description": "Implements changes within assigned scope"
+    },
+    {
+      "id": "tester",
+      "description": "Runs tests and reports outcomes"
+    },
+    {
+      "id": "validator",
+      "description": "Independently validates deliverables against criteria"
+    }
+  ]
+}

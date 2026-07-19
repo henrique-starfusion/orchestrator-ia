@@ -1,0 +1,10 @@
+{
+  "maximum_iterations": 3,
+  "same_issue_repeat_limit": 2,
+  "minimum_validation_score": 0.9,
+  "minimum_score_improvement": 0.03,
+  "require_independent_validation": true,
+  "require_deterministic_validation": true,
+  "allow_parallel_read_only_analysis": true,
+  "allow_parallel_workspace_writes": false
+}

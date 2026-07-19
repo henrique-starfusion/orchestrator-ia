@@ -1,0 +1,342 @@
+﻿{
+    "version":  "0.1.0",
+    "package":  "orchestrator-bootstrap",
+    "description":  "Managed template files for .orchestrator installation",
+    "files":  [
+                  {
+                      "source":  "template/.orchestrator/README.md",
+                      "destination":  ".orchestrator/README.md",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/VERSION",
+                      "destination":  ".orchestrator/VERSION",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/agents/capabilities.json",
+                      "destination":  ".orchestrator/agents/capabilities.json",
+                      "mode":  "merge"
+                  },
+                  {
+                      "source":  "template/.orchestrator/agents/detected.json",
+                      "destination":  ".orchestrator/agents/detected.json",
+                      "mode":  "generated"
+                  },
+                  {
+                      "source":  "template/.orchestrator/agents/registry.json",
+                      "destination":  ".orchestrator/agents/registry.json",
+                      "mode":  "merge"
+                  },
+                  {
+                      "source":  "template/.orchestrator/agents/adapters/.gitkeep",
+                      "destination":  ".orchestrator/agents/adapters/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/agents/profiles/.gitkeep",
+                      "destination":  ".orchestrator/agents/profiles/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/config/orchestrator.json",
+                      "destination":  ".orchestrator/config/orchestrator.json",
+                      "mode":  "merge"
+                  },
+                  {
+                      "source":  "template/.orchestrator/config/policies.json",
+                      "destination":  ".orchestrator/config/policies.json",
+                      "mode":  "merge"
+                  },
+                  {
+                      "source":  "template/.orchestrator/config/routing.json",
+                      "destination":  ".orchestrator/config/routing.json",
+                      "mode":  "merge"
+                  },
+                  {
+                      "source":  "template/.orchestrator/config/tools.json",
+                      "destination":  ".orchestrator/config/tools.json",
+                      "mode":  "merge"
+                  },
+                  {
+                      "source":  "template/.orchestrator/config/validation.json",
+                      "destination":  ".orchestrator/config/validation.json",
+                      "mode":  "merge"
+                  },
+                  {
+                      "source":  "template/.orchestrator/hooks/active/.gitkeep",
+                      "destination":  ".orchestrator/hooks/active/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/hooks/disabled/.gitkeep",
+                      "destination":  ".orchestrator/hooks/disabled/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/hooks/tested/.gitkeep",
+                      "destination":  ".orchestrator/hooks/tested/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/mcp/registry.json",
+                      "destination":  ".orchestrator/mcp/registry.json",
+                      "mode":  "merge"
+                  },
+                  {
+                      "source":  "template/.orchestrator/mcp/audits/.gitkeep",
+                      "destination":  ".orchestrator/mcp/audits/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/mcp/configs/.gitkeep",
+                      "destination":  ".orchestrator/mcp/configs/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/mcp/disabled/.gitkeep",
+                      "destination":  ".orchestrator/mcp/disabled/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/memory/index.json",
+                      "destination":  ".orchestrator/memory/index.json",
+                      "mode":  "merge"
+                  },
+                  {
+                      "source":  "template/.orchestrator/memory/architecture/.gitkeep",
+                      "destination":  ".orchestrator/memory/architecture/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/memory/archive/.gitkeep",
+                      "destination":  ".orchestrator/memory/archive/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/memory/decisions/.gitkeep",
+                      "destination":  ".orchestrator/memory/decisions/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/memory/episodes/.gitkeep",
+                      "destination":  ".orchestrator/memory/episodes/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/memory/failures/.gitkeep",
+                      "destination":  ".orchestrator/memory/failures/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/memory/graph/.gitkeep",
+                      "destination":  ".orchestrator/memory/graph/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/memory/lessons/.gitkeep",
+                      "destination":  ".orchestrator/memory/lessons/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/memory/performance/.gitkeep",
+                      "destination":  ".orchestrator/memory/performance/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/memory/project/.gitkeep",
+                      "destination":  ".orchestrator/memory/project/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/memory/strategies/.gitkeep",
+                      "destination":  ".orchestrator/memory/strategies/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/memory/tasks/.gitkeep",
+                      "destination":  ".orchestrator/memory/tasks/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/orchestration/roles.json",
+                      "destination":  ".orchestrator/orchestration/roles.json",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/orchestration/schemas/.gitkeep",
+                      "destination":  ".orchestrator/orchestration/schemas/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/orchestration/templates/.gitkeep",
+                      "destination":  ".orchestrator/orchestration/templates/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/orchestration/workflows/.gitkeep",
+                      "destination":  ".orchestrator/orchestration/workflows/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/runtime/locks/.gitkeep",
+                      "destination":  ".orchestrator/runtime/locks/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/runtime/logs/.gitkeep",
+                      "destination":  ".orchestrator/runtime/logs/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/runtime/plans/.gitkeep",
+                      "destination":  ".orchestrator/runtime/plans/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/runtime/prompts/.gitkeep",
+                      "destination":  ".orchestrator/runtime/prompts/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/runtime/reports/.gitkeep",
+                      "destination":  ".orchestrator/runtime/reports/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/runtime/results/.gitkeep",
+                      "destination":  ".orchestrator/runtime/results/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/runtime/tasks/.gitkeep",
+                      "destination":  ".orchestrator/runtime/tasks/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/runtime/temporary/.gitkeep",
+                      "destination":  ".orchestrator/runtime/temporary/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/runtime/validations/.gitkeep",
+                      "destination":  ".orchestrator/runtime/validations/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/schemas/.gitkeep",
+                      "destination":  ".orchestrator/schemas/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/scripts/agents/.gitkeep",
+                      "destination":  ".orchestrator/scripts/agents/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/scripts/hooks/.gitkeep",
+                      "destination":  ".orchestrator/scripts/hooks/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/scripts/maintenance/.gitkeep",
+                      "destination":  ".orchestrator/scripts/maintenance/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/scripts/memory/.gitkeep",
+                      "destination":  ".orchestrator/scripts/memory/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/scripts/validation/.gitkeep",
+                      "destination":  ".orchestrator/scripts/validation/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/skills/registry.json",
+                      "destination":  ".orchestrator/skills/registry.json",
+                      "mode":  "merge"
+                  },
+                  {
+                      "source":  "template/.orchestrator/skills/analyze-project/SKILL.md",
+                      "destination":  ".orchestrator/skills/analyze-project/SKILL.md",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/skills/analyze-task/SKILL.md",
+                      "destination":  ".orchestrator/skills/analyze-task/SKILL.md",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/skills/call-agent/SKILL.md",
+                      "destination":  ".orchestrator/skills/call-agent/SKILL.md",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/skills/correction-loop/SKILL.md",
+                      "destination":  ".orchestrator/skills/correction-loop/SKILL.md",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/skills/external/.gitkeep",
+                      "destination":  ".orchestrator/skills/external/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/skills/orchestrate/SKILL.md",
+                      "destination":  ".orchestrator/skills/orchestrate/SKILL.md",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/skills/plan-task/SKILL.md",
+                      "destination":  ".orchestrator/skills/plan-task/SKILL.md",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/skills/quarantined/.gitkeep",
+                      "destination":  ".orchestrator/skills/quarantined/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/skills/run-tests/SKILL.md",
+                      "destination":  ".orchestrator/skills/run-tests/SKILL.md",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/skills/save-knowledge/SKILL.md",
+                      "destination":  ".orchestrator/skills/save-knowledge/SKILL.md",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/skills/select-agents/SKILL.md",
+                      "destination":  ".orchestrator/skills/select-agents/SKILL.md",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/skills/validate-result/SKILL.md",
+                      "destination":  ".orchestrator/skills/validate-result/SKILL.md",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/tools/registry.json",
+                      "destination":  ".orchestrator/tools/registry.json",
+                      "mode":  "generated"
+                  },
+                  {
+                      "source":  "template/.orchestrator/tools/graphify/.gitkeep",
+                      "destination":  ".orchestrator/tools/graphify/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/tools/openwolf/.gitkeep",
+                      "destination":  ".orchestrator/tools/openwolf/.gitkeep",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/tools/optional/.gitkeep",
+                      "destination":  ".orchestrator/tools/optional/.gitkeep",
+                      "mode":  "managed"
+                  }
+              ]
+}

@@ -1,0 +1,19 @@
+---
+description: Redirect Cursor agent behavior to the project orchestrator environment
+alwaysApply: true
+---
+
+# Orchestrator Environment
+
+This project uses `.orchestrator/` as the canonical multi-agent configuration source.
+
+When working in this repository:
+
+- Read policies from `.orchestrator/config/policies.json`
+- Use skills listed in `.orchestrator/skills/registry.json`
+- Persist durable knowledge under `.orchestrator/memory/`
+- Write runtime artifacts under `.orchestrator/runtime/`
+
+Do not create parallel agent configuration trees. Extend `.orchestrator/` instead.
+
+See `docs/agent-environment.md` for the full layout.

@@ -1,0 +1,57 @@
+{
+  "version": "0.1.0",
+  "skills": [
+    {
+      "id": "orchestrate",
+      "path": "orchestrate/SKILL.md",
+      "status": "active"
+    },
+    {
+      "id": "analyze-project",
+      "path": "analyze-project/SKILL.md",
+      "status": "active"
+    },
+    {
+      "id": "analyze-task",
+      "path": "analyze-task/SKILL.md",
+      "status": "active"
+    },
+    {
+      "id": "plan-task",
+      "path": "plan-task/SKILL.md",
+      "status": "active"
+    },
+    {
+      "id": "select-agents",
+      "path": "select-agents/SKILL.md",
+      "status": "active"
+    },
+    {
+      "id": "call-agent",
+      "path": "call-agent/SKILL.md",
+      "status": "active"
+    },
+    {
+      "id": "run-tests",
+      "path": "run-tests/SKILL.md",
+      "status": "active"
+    },
+    {
+      "id": "validate-result",
+      "path": "validate-result/SKILL.md",
+      "status": "active"
+    },
+    {
+      "id": "correction-loop",
+      "path": "correction-loop/SKILL.md",
+      "status": "active"
+    },
+    {
+      "id": "save-knowledge",
+      "path": "save-knowledge/SKILL.md",
+      "status": "active"
+    }
+  ],
+  "external_dir": "external",
+  "quarantined_dir": "quarantined"
+}

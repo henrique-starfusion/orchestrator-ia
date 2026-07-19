@@ -1,0 +1,6 @@
+{
+  "enabled": true,
+  "registry_path": "../tools/registry.json",
+  "allow_optional": true,
+  "sandbox_untrusted": true
+}

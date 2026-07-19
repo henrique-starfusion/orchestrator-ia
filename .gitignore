@@ -1,0 +1,36 @@
+# Workspace install artifacts at project root only (not package/template)
+/.orchestrator/
+/.claude/
+/.codex/
+/.cursor/
+/.gemini/
+/.kimi/
+/.opencode/
+/.openai/
+/.agents/
+/.agent/
+
+# Vendor adapter files at project root (generated)
+/CLAUDE.md
+/AGENTS.md
+/GEMINI.md
+/KIMI.md
+/CURSOR.md
+/CODEX.md
+/OPENAI.md
+/AI.md
+
+# Logs and OS noise
+*.log
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Editor / local
+*.swp
+*.tmp
+.vs/
+.idea/
+
+# Test leftovers
+orchestrator-tests-*/

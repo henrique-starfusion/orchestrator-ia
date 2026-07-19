@@ -1,0 +1,280 @@
+# Solução de problemas
+
+Guia operacional para falhas comuns do instalador **bootstrap-agents**.
+
+---
+
+## Diagnóstico rápido
+
+```bat
+bootstrap-agents.bat status -ProjectPath C:\dev\projeto
+bootstrap-agents.bat verify -ProjectPath C:\dev\projeto
+bootstrap-agents.bat analyze -ProjectPath C:\dev\projeto
+```
+
+Logs:
+
+```text
+.orchestrator/runtime/validations/*.log
+.orchestrator/runtime/reports/installation-report.md
+```
+
+---
+
+## Erros de preflight (Detect-Environment)
+
+### `PowerShell 5.1 ou superior e obrigatorio`
+
+**Causa:** versão antiga do PowerShell.
+
+**Solução:** use Windows PowerShell 5.1+ ou PowerShell 7+ (`powershell.exe` invocado pelo BAT).
+
+---
+
+### `git nao encontrado no PATH`
+
+**Causa:** Git não instalado ou fora do PATH.
+
+**Solução:** instale [Git for Windows](https://git-scm.com/) e reinicie o terminal.
+
+---
+
+### `Integridade do pacote`
+
+**Causa:** arquivos ausentes em `package/` (manifest, template, sources).
+
+**Solução:**
+
+- Confirme clone/cópia completa do repositório bootstrap-agents
+- Verifique `package/manifest.json` e `package/template/.orchestrator/`
+- Não edite `checksums.json` manualmente sem regenerar
+
+---
+
+### `Sem permissao de escrita no projeto`
+
+**Causa:** ACL, pasta somente leitura ou projeto em local protegido.
+
+**Solução:** execute em diretório gravável ou ajuste permissões NTFS.
+
+---
+
+### `Espaco livre insuficiente`
+
+**Causa:** menos de 50 MB livres no volume do projeto.
+
+**Solução:** libere espaço em disco.
+
+---
+
+### `Lock de instalacao ja existe`
+
+**Causa:** arquivo `.orchestrator/runtime/install.lock` presente.
+
+**Solução:**
+
+1. Confirme que nenhum `install` está em execução
+2. Se lock órfão, remova manualmente `install.lock`
+3. Reexecute o comando
+
+---
+
+## Erros de versão
+
+### `Workspace mais novo que o pacote` (exit 6)
+
+**Causa:** `.orchestrator/VERSION` > `VERSION` na raiz do pacote bootstrap.
+
+**Solução:**
+
+- Atualize o pacote bootstrap-agents para versão ≥ workspace
+- **Não** force downgrade sem backup
+
+---
+
+### `Comparacao de versao invalida` (upgrade)
+
+**Causa:** VERSION malformado (não semver).
+
+**Solução:** corrija `.orchestrator/VERSION` para formato `MAJOR.MINOR.PATCH` ou use `-Force` conscientemente.
+
+---
+
+## Erros de validação
+
+### `.orchestrator ausente`
+
+**Solução:**
+
+```bat
+bootstrap-agents.bat install -ProjectPath C:\dev\projeto
+```
+
+---
+
+### `Arquivo gerenciado ausente`
+
+**Causa:** remoção manual de arquivos do manifest (modo `managed`).
+
+**Solução:**
+
+```bat
+bootstrap-agents.bat repair -ProjectPath C:\dev\projeto
+```
+
+---
+
+### `JSON invalido` em config ou registry
+
+**Causa:** edição manual corrompeu JSON.
+
+**Solução:**
+
+1. Identifique o arquivo no log de validação
+2. Restaure de `.orchestrator/backups/` ou git
+3. Rode `repair` se necessário
+
+---
+
+## Agentes
+
+### Nenhum agente detectado
+
+**Causa:** CLIs não estão no PATH.
+
+**Solução:**
+
+1. Instale o CLI desejado (ex.: Claude Code, Codex)
+2. Abra novo terminal
+3. `bootstrap-agents.bat analyze -ProjectPath ...`
+
+Registro: `.orchestrator/agents/detected.json`
+
+---
+
+### Agente `installed_failed`
+
+**Causa:** binário encontrado, mas `--version` falhou ou timeout.
+
+**Solução:** teste manualmente no terminal (`claude --version`, etc.). Reinstale o CLI se corrompido.
+
+---
+
+### Adaptador não criado
+
+**Causa:** agente detectado sem template de adaptador (ex.: `aider`, `goose`).
+
+**Solução:** normal — só vendors mapeados recebem adaptador. Config canônica ainda funciona via `.orchestrator/`.
+
+---
+
+### `-UpdateAgents` falhou
+
+**Causa:** `claude update` / `codex update` / npm retornou erro.
+
+**Solução:** avisos não bloqueiam install. Atualize CLIs manualmente.
+
+---
+
+## Ferramentas opcionais
+
+### `OpenWolf nao encontrado` / `Graphify nao encontrado`
+
+**Esperado** se não instalados. Não bloqueia install.
+
+**Solução (opcional):** instale as ferramentas e reexecute install ou `analyze`.
+
+Use `-SkipTools` para suprimir a etapa.
+
+---
+
+### `uv tool upgrade graphifyy falhou`
+
+**Causa:** Graphify não instalado via uv ou nome de pacote indisponível.
+
+**Solução:** aviso apenas. Instale Graphify manualmente se necessário.
+
+---
+
+## MCP
+
+### Context7 não conecta
+
+**Causa:** registrado com `enabled: false` por padrão.
+
+**Solução:** edite `.orchestrator/mcp/registry.json`, defina `enabled: true` após configurar credenciais/ambiente.
+
+---
+
+## Migração legada
+
+### Conteúdo duplicado após migração
+
+**Causa:** `.claude/memory` importado para `legacy-import/` enquanto `.claude/` permanece.
+
+**Solução:** consolide manualmente em `.orchestrator/memory/` e documente decisões em `memory/decisions/`.
+
+Veja [`legacy-migration.md`](legacy-migration.md).
+
+---
+
+## Uninstall
+
+### Arquivos adaptadores permanecem
+
+**Esperado:** `uninstall` remove entradas do manifest em `.orchestrator/`, não `CLAUDE.md` ou `.cursor/` na raiz.
+
+**Solução:** remova adaptadores manualmente se desejar.
+
+---
+
+### `-Force` remove tudo
+
+**Causa:** `-Force` no uninstall apaga `.orchestrator/` inteiro.
+
+**Solução:** sempre revise backup em `.orchestrator/backups/*-pre-uninstall/` antes.
+
+---
+
+## Flags reservadas
+
+Estas flags **não executam ação** hoje — aparecem como limitação no relatório:
+
+| Flag | Status |
+|---|---|
+| `-LegacyCleanup` | Não implementado |
+| `-InstallMissingAgents` | Não implementado |
+| `-RunProjectTests` | Não implementado |
+
+Não indica falha do install.
+
+---
+
+## Simulação (DryRun)
+
+```bat
+bootstrap-agents.bat install -ProjectPath C:\dev\projeto -DryRun
+bootstrap-agents.bat upgrade -DryRun
+```
+
+Útil para preview sem lock nem escrita.
+
+---
+
+## Coleta de evidências para suporte
+
+Inclua:
+
+1. Saída completa do comando com erro
+2. `bootstrap-agents.bat status -ProjectPath ...`
+3. Último log em `.orchestrator/runtime/validations/`
+4. `installation-report.md`
+5. Versões: `VERSION` (pacote) e `.orchestrator/VERSION`
+
+---
+
+## Ver também
+
+- [`cli-reference.md`](cli-reference.md)
+- [`installer-architecture.md`](installer-architecture.md)
+- [`legacy-migration.md`](legacy-migration.md)

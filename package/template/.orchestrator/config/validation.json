@@ -1,0 +1,9 @@
+{
+  "enabled": true,
+  "validators": [],
+  "scoring": {
+    "pass_threshold": 0.9,
+    "weights": {}
+  },
+  "deterministic_checks": []
+}

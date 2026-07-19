@@ -1,0 +1,5 @@
+{
+  "default_strategy": "capability_match",
+  "fallback_agent": null,
+  "routes": []
+}

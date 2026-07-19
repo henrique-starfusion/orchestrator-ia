@@ -1,0 +1,349 @@
+# Bootstrap Agents — Orquestrador Multiagente
+
+Projeto desenvolvido e mantido pela **StarFusion**.
+
+- **Desenvolvedor:** Henrique Rodrigues
+- **Copyright © 2026 StarFusion Consultoria, Tecnologia e Soluções em Informática LTDA.** Todos os direitos reservados.
+
+Pacote portátil para instalar, validar e manter um **ambiente multiagente genérico** em qualquer repositório de software. O orquestrador não pertence a uma aplicação específica: projetos-alvo são apenas workspaces de execução.
+
+---
+
+## O que é o orquestrador multiagente
+
+O orquestrador é um **meta-agente de desenvolvimento** que recebe tarefas, analisa contexto, seleciona agentes CLI disponíveis, planeja execução, delega trabalho, testa resultados, valida evidências e persiste aprendizado.
+
+Fluxo resumido:
+
+```text
+entender → planejar → selecionar agentes → delegar → executar
+→ testar → validar → corrigir → concluir → aprender
+```
+
+Papéis padrão (`.orchestrator/orchestration/roles.json`):
+
+| Papel | Responsabilidade |
+|---|---|
+| Orquestrador | Estado, estratégia, limites, anti-recursão, consolidação |
+| Planejador | Riscos, subtarefas, critérios de aceitação |
+| Executor | Implementação e evidências |
+| Testador | Testes determinísticos e regressões |
+| Validador | Revisão independente de pedido, plano, diffs e critérios |
+
+---
+
+## Por que `.orchestrator/` é a fonte canônica
+
+Toda configuração compartilhada vive em **`.orchestrator/`** — políticas, skills, memória, registro de agentes, MCPs, ferramentas, hooks e artefatos de runtime.
+
+Pastas e arquivos específicos de cada CLI ou IDE são **adaptadores finos** que apenas redirecionam para `.orchestrator/`:
+
+| Adaptador | Exemplos |
+|---|---|
+| Claude Code | `.claude/`, `CLAUDE.md` |
+| Codex / OpenCode | `.codex/`, `AGENTS.md` |
+| Cursor | `.cursor/rules/`, `CURSOR.md` |
+| Gemini CLI | `.gemini/`, `GEMINI.md` |
+| Kimi CLI | `.kimi/`, `KIMI.md` |
+
+**Não crie árvores paralelas de configuração.** Estenda `.orchestrator/` e deixe os adaptadores apontarem para ela.
+
+Documentação detalhada do layout: `package/template/docs/agent-environment.md` (copiada para o projeto durante instalação, quando aplicável).
+
+---
+
+## Orquestrador, agentes e modelos
+
+| Conceito | O que é | Exemplo |
+|---|---|---|
+| **Orquestrador** | Camada de coordenação, políticas e memória do workspace | Config em `.orchestrator/config/` |
+| **Agente** | CLI ou IDE que executa tarefas delegadas | Claude Code, Codex, Cursor, Gemini |
+| **Modelo** | LLM usado por um agente em uma sessão | Definido pelo próprio agente/fornecedor |
+
+O bootstrap **detecta agentes** (binários no PATH), **gera adaptadores** e **registra capacidades** — não substitui a escolha de modelo feita dentro de cada CLI.
+
+---
+
+## CLIs suportados (detecção)
+
+O instalador verifica presença no PATH e registra em `.orchestrator/agents/detected.json`:
+
+`claude`, `codex`, `gemini`, `kimi`, `kimi-code`, `opencode`, `qwen`, `qwen-code`, `copilot`, `github-copilot`, `aider`, `goose`, `amp`, `kiro`, `cursor`, `continue`, `openhands`, `openclaw`, `droid`, `factory`
+
+Nenhum é obrigatório além do que você usar na prática. Adaptadores de template existem para: **Claude, Codex, Cursor, Gemini, Kimi e OpenCode**.
+
+---
+
+## Instalação
+
+### Pré-requisitos
+
+- Windows com **PowerShell 5.1+**
+- **git** no PATH
+- Permissão de escrita no projeto-alvo
+- Pelo menos **50 MB** livres no volume do projeto
+
+### Primeira instalação
+
+Na raiz deste pacote (ou com caminho absoluto):
+
+```bat
+bootstrap-agents.bat install -ProjectPath C:\caminho\do\projeto
+```
+
+Sem `-ProjectPath`, o diretório atual é usado como projeto-alvo.
+
+O arquivo `bootstrap-agents.bat` é um **wrapper fino** que encaminha `%*` para `scripts/Install-Orchestrator.ps1`.
+
+Equivalente direto em PowerShell:
+
+```powershell
+.\scripts\Install-Orchestrator.ps1 install -ProjectPath C:\caminho\do\projeto
+```
+
+Após instalação bem-sucedida, o workspace terá `.orchestrator/VERSION` alinhado à `VERSION` na raiz do pacote (atualmente **0.1.0**).
+
+---
+
+## Comandos
+
+| Comando | Descrição |
+|---|---|
+| `install` | Instala ou completa a estrutura `.orchestrator/` (padrão) |
+| `verify` | Preflight + validação; não altera arquivos gerenciados |
+| `upgrade` | Atualiza arquivos gerenciados quando o pacote é mais novo |
+| `repair` | Restaura arquivos gerenciados ausentes ou corrompidos |
+| `uninstall` | Remove arquivos gerenciados; faz backup prévio |
+| `status` | Exibe versões, agentes detectados e ferramentas |
+| `analyze` | Detect + validate (diagnóstico) |
+| `skills` | Lista skills registradas |
+
+Exemplos:
+
+```bat
+bootstrap-agents.bat verify -ProjectPath C:\meu-projeto
+bootstrap-agents.bat upgrade -ProjectPath C:\meu-projeto
+bootstrap-agents.bat status
+```
+
+### Comparação de versões
+
+| Situação | Comportamento |
+|---|---|
+| Sem `.orchestrator/VERSION` | `install` cria estrutura |
+| Workspace == pacote | `upgrade` informa que não há atualização |
+| Workspace < pacote | `upgrade` aplica template + manifest |
+| Workspace > pacote | **Recusado** (exit code 6) |
+
+---
+
+## Opções principais
+
+Parâmetros PowerShell aceitos via BAT (encaminhamento direto):
+
+| Opção | Efeito |
+|---|---|
+| `-ProjectPath` / `-Project` | Caminho do projeto-alvo |
+| `-DryRun` | Simula etapas sem alterar disco |
+| `-UpdateAgents` | Tenta `claude update`, `codex update`; com `-Force`, npm global |
+| `-SkipTools` | Pula detecção/registro de OpenWolf e Graphify |
+| `-RefreshTools` | Consulta/atualiza versões publicadas (avisos se falhar) |
+| `-ConfigureMcps` | Atualiza `.orchestrator/mcp/registry.json` (Context7 desabilitado) |
+| `-RunSmokeTest` | Executa probes de agentes (`--help`, somente leitura) |
+| `-SkipAgentProbes` | Pula probes (padrão no install sem smoke test) |
+| `-LegacyCleanup` | **Reservado** — registrado no relatório; limpeza opt-in futura |
+| `-Force` | Sobrescreve arquivos gerenciados / força migração e reparo |
+| `-InstallMissingAgents` | **Reservado** — não implementado |
+| `-RunProjectTests` | **Reservado** — runner genérico não incluído |
+| `-NonInteractive` | Reservado para fluxos automatizados |
+| `-PackageRoot` | Raiz do pacote bootstrap (padrão: pai de `scripts/`) |
+
+Exemplo completo:
+
+```bat
+bootstrap-agents.bat install -ProjectPath C:\meu-projeto -ConfigureMcps -UpdateAgents -RunSmokeTest
+```
+
+Simulação:
+
+```bat
+bootstrap-agents.bat install -ProjectPath C:\meu-projeto -DryRun
+```
+
+---
+
+## Detecção de agentes e atualizações opcionais
+
+1. **Detect-Agents** — varre PATH, grava `detected.json` e atualiza `registry.json`.
+2. **Generate-Adapters** — copia adaptadores finos só para agentes `available`.
+3. **Update-Agents** (opcional, `-UpdateAgents`) — atualiza CLIs conhecidos; falhas viram avisos.
+4. **Probe-Agents** — por padrão **ignorado** no install; use `-RunSmokeTest` para probes somente leitura.
+
+Relatório final: `.orchestrator/runtime/reports/installation-report.md`
+
+---
+
+## Adaptadores
+
+Gerados a partir de `package/template/adapters/` para vendors detectados:
+
+| Vendor | Conteúdo típico |
+|---|---|
+| `claude` | `.claude/README.md`, `CLAUDE.md` |
+| `codex` | `.codex/README.md`, `AGENTS.md` |
+| `cursor` | `.cursor/rules/orchestrator.mdc`, `CURSOR.md` |
+| `gemini` | `.gemini/README.md`, `GEMINI.md` |
+| `kimi` | `.kimi/README.md`, `KIMI.md` |
+| `opencode` | `.opencode/README.md`, `AGENTS.md` |
+
+Adaptadores existentes **não são sobrescritos** sem `-Force`.
+
+---
+
+## Memória (`.orchestrator/memory/`)
+
+Conhecimento durável do projeto — **nunca** a memória global do fornecedor como fonte da verdade.
+
+```text
+.orchestrator/memory/
+├── index.json
+├── architecture/
+├── decisions/
+├── episodes/
+├── failures/
+├── lessons/
+├── project/
+├── strategies/
+├── tasks/
+└── archive/
+```
+
+Use a skill `save-knowledge` e scripts sob `.orchestrator/scripts/memory/` para persistir aprendizado entre tarefas.
+
+---
+
+## Skills
+
+Skills de orquestração registradas em `.orchestrator/skills/registry.json`:
+
+- `orchestrate`, `analyze-project`, `analyze-task`, `plan-task`
+- `select-agents`, `call-agent`, `run-tests`, `validate-result`
+- `correction-loop`, `save-knowledge`
+
+Listar no workspace:
+
+```bat
+bootstrap-agents.bat skills -ProjectPath C:\meu-projeto
+```
+
+Skills externas: `.orchestrator/skills/external/` · Quarentena: `quarantined/`
+
+---
+
+## MCPs
+
+Registro em `.orchestrator/mcp/registry.json`. Com `-ConfigureMcps`, o instalador adiciona **Context7** como recomendado e **desabilitado por padrão** (transporte stdio via `npx`).
+
+Configs, auditorias e servidores desabilitados ficam em subpastas de `mcp/`. Ative MCPs explicitamente no registro — nunca durante install sem opt-in.
+
+---
+
+## Plugins opcionais (OpenWolf, Graphify)
+
+Ferramentas auxiliares detectadas em `Install-Tools.ps1`:
+
+- **OpenWolf** — comando `openwolf`
+- **Graphify** — comando `graphify`
+
+Ausência ou falha de instalação/atualização **nunca bloqueia** o install. Apenas avisos e registro em `.orchestrator/tools/registry.json`. Use `-SkipTools` para pular completamente.
+
+---
+
+## Princípios de segurança
+
+- Sem escrita paralela no mesmo workspace (`allow_parallel_workspace_writes: false`)
+- Paralelismo permitido só em análise somente leitura
+- Timeout em comandos externos; logs em `.orchestrator/runtime/validations/`
+- **Sem tokens ou segredos** no repositório
+- Hooks opcionais; falha de hook não deve bloquear agentes
+- Lock de instalação: `.orchestrator/runtime/install.lock`
+- Integridade do pacote verificada via `package/manifest.json` e `checksums.json`
+- Anti-recursão via variáveis de ambiente (`ORCHESTRATOR_CHILD_AGENT`, etc.)
+
+Políticas padrão em `.orchestrator/config/policies.json` (score mínimo 0.9, máximo 3 iterações, validação independente obrigatória).
+
+---
+
+## Solução de problemas (básico)
+
+| Sintoma | Ação |
+|---|---|
+| `git nao encontrado` | Instale Git e adicione ao PATH |
+| `Lock de instalacao ja existe` | Remova `.orchestrator/runtime/install.lock` se nenhum install estiver ativo |
+| `Workspace mais novo que o pacote` | Atualize o pacote bootstrap ou use versão compatível |
+| Arquivos gerenciados ausentes | `bootstrap-agents.bat repair -ProjectPath ...` |
+| Validação falhou | `bootstrap-agents.bat verify -ProjectPath ...` e leia logs em `runtime/validations/` |
+| Agentes não detectados | Confirme CLI no PATH; rode `status` |
+
+Guia completo: [`docs/troubleshooting.md`](docs/troubleshooting.md)
+
+---
+
+## Arquitetura resumida
+
+```text
+bootstrap-agents.bat          → wrapper fino (%* → PowerShell)
+scripts/Install-Orchestrator.ps1   → roteador de comandos
+scripts/Orchestrator.Common.ps1    → helpers compartilhados
+package/
+├── manifest.json             → arquivos gerenciados (managed/merge/generated)
+├── checksums.json            → integridade
+├── template/.orchestrator/   → árvore canônica
+├── template/adapters/        → adaptadores por vendor
+└── migrations/               → scripts <from>-to-<to>.ps1
+```
+
+Detalhes: [`docs/installer-architecture.md`](docs/installer-architecture.md) · CLI: [`docs/cli-reference.md`](docs/cli-reference.md)
+
+---
+
+## Migração legada `.claude/`
+
+Se existir `.claude/VERSION` sem `.orchestrator/VERSION`, o `install` executa `Migrate-LegacyClaude.ps1` (importa memória/regras para `legacy-import/`). Veja [`docs/legacy-migration.md`](docs/legacy-migration.md).
+
+O prompt `prompt_ambiente_multiagente.md` é **LEGADO** — não use para primeira instalação.
+
+---
+
+## Roadmap
+
+Fora do escopo da v0.1, evolução planejada:
+
+1. **Docker** — workers isolados por agente
+2. **API** — REST / SSE / WebSocket para orquestração remota
+3. **ACP** — integração com IDEs e protocolos de agente
+
+Prioridade atual (v0.1): detecção de CLIs, bootstrap incremental versionado, skills, memória local, validação e relatórios.
+
+---
+
+## Conteúdo deste repositório
+
+| Artefato | Função |
+|---|---|
+| `VERSION` | Versão do pacote bootstrap |
+| `bootstrap-agents.bat` | Entrada única para install/verify/upgrade/... |
+| `scripts/` | Implementação PowerShell do instalador |
+| `package/` | Template, manifest, checksums, migrações |
+| `docs/` | Documentação do instalador |
+| `LICENSE` | Todos os direitos reservados (StarFusion) |
+| `prompt_ambiente_multiagente.md` | Prompt legado (deprecado) |
+
+---
+
+## Atribuição
+
+Projeto desenvolvido e mantido pela **StarFusion**  
+Desenvolvedor: **Henrique Rodrigues**  
+
+**Copyright © 2026 StarFusion Consultoria, Tecnologia e Soluções em Informática LTDA.** Todos os direitos reservados.
