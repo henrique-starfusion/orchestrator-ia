@@ -1,0 +1,66 @@
+{
+  "version": "0.1.0",
+  "description": "Ferramentas, MCPs, plugins e skills instalados no perfil do usuario (globais), reutilizaveis em qualquer projeto.",
+  "npm_globals": [
+    {
+      "id": "openwolf",
+      "package": "openwolf",
+      "check_command": "openwolf",
+      "required": false
+    },
+    {
+      "id": "firecrawl-cli",
+      "package": "firecrawl-cli",
+      "check_command": "firecrawl",
+      "required": false
+    }
+  ],
+  "mcp_servers": [
+    {
+      "id": "context7",
+      "name": "Context7",
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"],
+      "clients": ["claude", "cursor"]
+    },
+    {
+      "id": "playwright",
+      "name": "Playwright",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"],
+      "clients": ["claude", "cursor", "codex"]
+    },
+    {
+      "id": "sequential-thinking",
+      "name": "Sequential Thinking",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking@latest"],
+      "clients": ["claude", "cursor"]
+    }
+  ],
+  "claude_plugins": [
+    "context7@claude-plugins-official",
+    "playwright@claude-plugins-official",
+    "superpowers@claude-plugins-official",
+    "skill-creator@claude-plugins-official",
+    "atlassian@claude-plugins-official",
+    "frontend-design@claude-plugins-official"
+  ],
+  "skill_packages": [
+    {
+      "id": "superpowers",
+      "source": "obra/superpowers",
+      "notes": "using-superpowers + workflow skills"
+    },
+    {
+      "id": "find-skills",
+      "source": "vercel-labs/skills",
+      "notes": "descoberta de skills"
+    },
+    {
+      "id": "firecrawl",
+      "source": "firecrawl/cli",
+      "notes": "hub Firecrawl + variantes CLI"
+    }
+  ]
+}

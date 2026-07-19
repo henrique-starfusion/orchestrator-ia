@@ -120,15 +120,31 @@ bootstrap-agents.bat update -ProjectPath C:\caminho\do\projeto
 
 O `update` sincroniza o pacote, aplica template/manifest de forma aditiva, redetecta agentes e valida. Use `-Force` / `--force` para sobrescrever arquivos gerenciados.
 
+### Ferramentas globais (vários projetos)
+
+No `init`/`update`, o pacote também configura no **perfil do usuário** (não só no projeto):
+
+- MCPs: Context7, Playwright, Sequential Thinking (Claude + Cursor)
+- Plugins Claude: context7, playwright, superpowers, skill-creator, atlassian, frontend-design
+- Skills globais (`~/.agents`): Superpowers, find-skills, Firecrawl
+- CLIs npm: `openwolf`, `firecrawl-cli`
+
+```bash
+orchestrator global-tools
+```
+
+Pular: `--skip-global-tools`. Detalhes: [`docs/global-tools.md`](docs/global-tools.md).
+
 ### O que acontece no `init`
 
 1. Obtém o pacote versionado (npm/npx ou cache git/`gh`)
 2. Copia o template para `.orchestrator/` (idempotente)
 3. Detecta agentes CLI no PATH
 4. Gera adaptadores mínimos (`CLAUDE.md`, `AGENTS.md`, etc.)
-5. Valida a instalação e grava relatório em `.orchestrator/runtime/reports/`
+5. Instala/configura ferramentas globais (MCPs, plugins, skills)
+6. Valida a instalação e grava relatório em `.orchestrator/runtime/reports/`
 
-Não usa agentes de IA para montar a estrutura. OpenWolf/Graphify/MCPs são opcionais e não bloqueiam.
+Não usa agentes de IA para montar a estrutura. OpenWolf/Graphify no projeto e tools globais não bloqueiam o bootstrap se falharem.
 
 ### Pré-requisitos
 
@@ -161,13 +177,14 @@ Após sucesso, o workspace terá `.orchestrator/VERSION` alinhado à `VERSION` d
 | `init` | Alias de `install` (compatível com OpenWolf/Graphify) |
 | `install` | Instala ou completa a estrutura `.orchestrator/` (padrão) |
 | `update` | Atualiza a estrutura `.orchestrator/` do projeto atual (recomendado) |
+| `global-tools` | Instala MCPs/plugins/skills/CLIs no perfil do usuário |
 | `verify` | Preflight + validação; não altera arquivos gerenciados |
 | `upgrade` | Alias de `update` (compatibilidade) |
 | `repair` | Restaura arquivos gerenciados ausentes ou corrompidos |
 | `uninstall` | Remove arquivos gerenciados; faz backup prévio |
 | `status` | Exibe versões, agentes detectados e ferramentas |
 | `analyze` | Detect + validate (diagnóstico) |
-| `skills` | Lista skills registradas |
+| `skills` | Lista skills registradas do workspace |
 
 Exemplos:
 

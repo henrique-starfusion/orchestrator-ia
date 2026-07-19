@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('init', 'install', 'verify', 'update', 'upgrade', 'repair', 'uninstall', 'status', 'analyze', 'skills')]
+    [ValidateSet('init', 'install', 'verify', 'update', 'upgrade', 'repair', 'uninstall', 'status', 'analyze', 'skills', 'global-tools')]
     [string]$Command = 'install',
 
     [Alias('Project')]
@@ -19,6 +19,7 @@ param(
     [switch]$RefreshTools,
     [switch]$InitTools,
     [switch]$SkipToolInit,
+    [switch]$SkipGlobalTools,
     [switch]$ConfigureMcps,
     [switch]$RunSmokeTest,
     [switch]$RunProjectTests,
@@ -89,6 +90,19 @@ if ($Command -eq 'upgrade') {
 
 try {
     switch ($Command) {
+        'global-tools' {
+            Write-Host '[INFO] Modo: global-tools'
+            $gtArgs = @{
+                ProjectPath = $projectRoot
+                PackageRoot = $packageRootResolved
+            }
+            if ($Force) { $gtArgs.Force = $true }
+            if ($DryRun) { $gtArgs.DryRun = $true }
+            if ($SkipGlobalTools) { $gtArgs.SkipGlobalTools = $true }
+            $code = Invoke-ChildScript -Name 'Install-GlobalTools.ps1' -Arguments $gtArgs
+            exit $code
+        }
+
         'verify' {
             Write-Host '[INFO] Modo: verify'
             $code = Invoke-ChildScript -Name 'Detect-Environment.ps1' -Arguments @{
@@ -161,6 +175,23 @@ try {
                 if ($doInitTools) { $toolsArgs.InitTools = $true }
                 if ($DryRun) { $toolsArgs.DryRun = $true }
                 Invoke-ChildScript -Name 'Install-Tools.ps1' -Arguments $toolsArgs | Out-Null
+            }
+
+            if (-not $SkipGlobalTools) {
+                $gtArgs = @{
+                    ProjectPath = $projectRoot
+                    PackageRoot = $packageRootResolved
+                }
+                if ($Force) { $gtArgs.Force = $true }
+                if ($DryRun) { $gtArgs.DryRun = $true }
+                Invoke-ChildScript -Name 'Install-GlobalTools.ps1' -Arguments $gtArgs | Out-Null
+
+                $mcpArgs = @{
+                    ProjectPath   = $projectRoot
+                    ConfigureMcps = $true
+                }
+                if ($Force) { $mcpArgs.Force = $true }
+                Invoke-ChildScript -Name 'Configure-Mcps.ps1' -Arguments $mcpArgs | Out-Null
             }
 
             if ($UpdateAgents) {
@@ -365,12 +396,23 @@ try {
         Invoke-ChildScript -Name 'Install-Tools.ps1' -Arguments $toolsArgs | Out-Null
     }
 
-    if ($ConfigureMcps) {
-        $mcpArgs = @{
-            ProjectPath   = $projectRoot
-            ConfigureMcps = $true
+    if (-not $SkipGlobalTools) {
+        $gtArgs = @{
+            ProjectPath = $projectRoot
+            PackageRoot = $packageRootResolved
         }
-        if ($Force) { $mcpArgs.Force = $true }
+        if ($Force) { $gtArgs.Force = $true }
+        if ($DryRun) { $gtArgs.DryRun = $true }
+        Invoke-ChildScript -Name 'Install-GlobalTools.ps1' -Arguments $gtArgs | Out-Null
+    }
+
+    # Sempre espelha MCPs recomendados no registry do workspace; -ConfigureMcps forca rewrite
+    $mcpArgs = @{
+        ProjectPath   = $projectRoot
+        ConfigureMcps = $true
+    }
+    if ($Force) { $mcpArgs.Force = $true }
+    if ($ConfigureMcps -or -not $SkipGlobalTools) {
         Invoke-ChildScript -Name 'Configure-Mcps.ps1' -Arguments $mcpArgs | Out-Null
     }
 

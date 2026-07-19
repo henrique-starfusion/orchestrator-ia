@@ -11,6 +11,7 @@
 /.opencode/
 /.openai/
 /.agents/
+/skills-lock.json
 /.agent/
 /.wolf/
 /graphify-out/

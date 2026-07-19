@@ -31,6 +31,7 @@ Instalação via npm/GitHub deve apontar para `#develop` (ou tag de release em `
 |---|---|
 | `package/template/.orchestrator/` | Template canônico versionado |
 | `package/template/adapters/` | Adaptadores por vendor |
+| `package/global-tools/catalog.json` | Catálogo de MCPs/plugins/skills globais |
 | `package/manifest.json` | Arquivos gerenciados |
 | `package/checksums.json` | Integridade |
 | `package/migrations/` | Migrations de versão |

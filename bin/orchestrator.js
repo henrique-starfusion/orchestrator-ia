@@ -26,6 +26,7 @@ Uso (na pasta do projeto):
   npx @starfusion/orchestrator init
   orchestrator init
   orchestrator update
+  orchestrator global-tools
   orchestrator install|verify|upgrade|repair|uninstall|status
 
 Opções encaminhadas ao instalador PowerShell:
@@ -33,14 +34,19 @@ Opções encaminhadas ao instalador PowerShell:
   --force
   --update-agents
   --skip-tools
+  --skip-global-tools
   --configure-mcps
   --run-smoke-test
   --project <caminho>     (padrão: diretório atual)
+
+global-tools instala no perfil do usuário (Claude/Cursor/skills/npm),
+reutilizável em vários projetos: Context7, Playwright, Superpowers, etc.
 
 Exemplos:
   cd C:\\meus-projetos\\app
   npx --yes github:henrique-starfusion/bootstrap-agents#develop init
   orchestrator update
+  orchestrator global-tools
 
   npm install -g @starfusion/orchestrator
   orchestrator init
@@ -75,7 +81,7 @@ function parseArgs(argv) {
   }
 
   const known = new Set([
-    'init', 'i', 'install', 'verify', 'update', 'upgrade', 'repair', 'uninstall', 'status', 'analyze', 'skills',
+    'init', 'i', 'install', 'verify', 'update', 'upgrade', 'repair', 'uninstall', 'status', 'analyze', 'skills', 'global-tools',
   ]);
 
   if (known.has(first) || !first.startsWith('-')) {
@@ -111,6 +117,7 @@ function parseArgs(argv) {
       '--refresh-tools': '-RefreshTools',
       '--init-tools': '-InitTools',
       '--skip-tool-init': '-SkipToolInit',
+      '--skip-global-tools': '-SkipGlobalTools',
       '--configure-mcps': '-ConfigureMcps',
       '--run-smoke-test': '-RunSmokeTest',
       '--run-project-tests': '-RunProjectTests',

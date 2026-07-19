@@ -255,6 +255,7 @@ Para evoluir o pacote sem quebrar workspaces:
 - [`cli-reference.md`](cli-reference.md) — parâmetros e exemplos
 - [`legacy-migration.md`](legacy-migration.md) — `.claude/` → `.orchestrator/`
 - [`repo-layout.md`](repo-layout.md) — organização deste repositório
+- [`global-tools.md`](global-tools.md) — MCPs/plugins/skills no perfil do usuário
 - [`legacy/README.md`](legacy/README.md) — material deprecado
 - [`troubleshooting.md`](troubleshooting.md) — diagnóstico operacional
 - `package/template/docs/agent-environment.md` — layout canônico no workspace

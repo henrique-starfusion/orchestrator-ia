@@ -64,6 +64,15 @@ bootstrap-agents.bat verify -Project C:\dev\meu-app
 
 ## Comandos
 
+### `global-tools`
+
+Instala/configura no **perfil do usuário** (Claude, Cursor, `~/.agents`, npm global): Context7, Playwright, Superpowers, etc. Veja [`global-tools.md`](global-tools.md).
+
+```bash
+orchestrator global-tools
+orchestrator init --skip-global-tools
+```
+
 ### `update`
 
 Atualiza a estrutura `.orchestrator/` do projeto atual (comando principal de manutenção).
@@ -88,6 +97,7 @@ Fluxo:
 3. `Update-Orchestrator.ps1` — migrations (se houver) + template + manifest
 4. Detect-Agents + Generate-Adapters
 5. Install-Tools (salvo `-SkipTools`)
+6. Install-GlobalTools (salvo `-SkipGlobalTools`) — MCPs/plugins/skills no perfil do usuário
 6. Validate + relatório (`Mode=update`)
 
 Versões iguais: sincroniza **somente o que falta** (aditivo).  

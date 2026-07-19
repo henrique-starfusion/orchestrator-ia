@@ -52,10 +52,10 @@ function Invoke-TestInstall {
     $installer = Join-Path (Get-TestScriptsRoot) 'Install-Orchestrator.ps1'
 
     if ($ExtraArgs.Count -gt 0) {
-        & $installer install -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive @ExtraArgs
+        & $installer install -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive -SkipGlobalTools @ExtraArgs
     }
     else {
-        & $installer install -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive
+        & $installer install -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive -SkipGlobalTools
     }
 
     if ($LASTEXITCODE -ne 0) {
@@ -78,16 +78,16 @@ function Invoke-TestOrchestratorCommand {
     $installer = Join-Path (Get-TestScriptsRoot) 'Install-Orchestrator.ps1'
 
     if ($Force -and $DryRun) {
-        & $installer $Command -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive -Force -DryRun
+        & $installer $Command -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive -SkipGlobalTools -Force -DryRun
     }
     elseif ($Force) {
-        & $installer $Command -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive -Force
+        & $installer $Command -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive -SkipGlobalTools -Force
     }
     elseif ($DryRun) {
-        & $installer $Command -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive -DryRun
+        & $installer $Command -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive -SkipGlobalTools -DryRun
     }
     else {
-        & $installer $Command -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive
+        & $installer $Command -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive -SkipGlobalTools
     }
 
     return $LASTEXITCODE
