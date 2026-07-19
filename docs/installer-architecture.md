@@ -9,25 +9,20 @@ Quickstart one-liner: [`quickstart-oneliner.md`](quickstart-oneliner.md)
 ## Visão geral
 
 ```text
-┌──────────────────────┐  ┌─────────────────────┐  ┌──────────────────────┐
-│ npx / orchestrator   │  │ get.ps1 (gh api|iex)│  │ bootstrap-agents.bat │
-│ (@starfusion/…)      │  │ cache LOCALAPPDATA  │  │ wrapper fino local   │
-└──────────┬───────────┘  └──────────┬──────────┘  └──────────┬───────────┘
-           │                         │                         │
-           └─────────────┬───────────┴─────────────┬───────────┘
-                         ▼                         │
-           �──┬───────────┘
-           │                         │                         │
-           └─────────────┬───────────┴─────────────┬───────────┘
-                         ▼                         │
-           ┌──────────────────────────────┐        │
-           │ Install-Orchestrator.ps1     │◄───────┘
-           │ roteador: init|install|…     │
-           └──────────┬───────────────────┘
-                      │
-            ┌─────────┴────────┬──────────────┬──────────────┐
-            ▼                  ▼              ▼              ▼
-        Detect-*          Copy/Apply     Generate-*     Validate-*
+  npx / orchestrator          get.ps1 (gh api|iex)       bootstrap-agents.bat
+  (@starfusion/orchestrator)  cache LOCALAPPDATA         wrapper fino local
+             \                        |                        /
+              \                       |                       /
+               \                      |                      /
+                +---------------------+---------------------+
+                                      |
+                                      v
+                        Install-Orchestrator.ps1
+                        (init | install | verify | ...)
+                                      |
+              +-----------+-----------+-----------+
+              |           |           |           |
+          Detect-*   Copy/Apply  Generate-*  Validate-*
 ```
 
 **Fonte da verdade do pacote:** `package/template/.orchestrator/`  
