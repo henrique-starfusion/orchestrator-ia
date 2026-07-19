@@ -74,7 +74,7 @@ Nenhum é obrigatório além do que você usar na prática. Adaptadores de templ
 
 ---
 
-## Instalação (uma linha — estilo OpenWolf / Graphify)
+## Instalação
 
 Na pasta do seu projeto:
 
@@ -101,6 +101,24 @@ gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootst
 ```
 
 Isso baixa o pacote para `%LOCALAPPDATA%\StarFusion\multiagent-orchestrator` (cache) e instala `.orchestrator/` no diretório atual.
+
+### Atualização
+
+Com o CLI já instalado, na pasta do projeto:
+
+```bash
+orchestrator update
+```
+
+Equivalente: `mao update`. Alias legado: `orchestrator upgrade`.
+
+Via clone local:
+
+```bat
+bootstrap-agents.bat update -ProjectPath C:\caminho\do\projeto
+```
+
+O `update` sincroniza o pacote, aplica template/manifest de forma aditiva, redetecta agentes e valida. Use `-Force` / `--force` para sobrescrever arquivos gerenciados.
 
 ### O que acontece no `init`
 
