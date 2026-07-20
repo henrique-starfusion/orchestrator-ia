@@ -28,7 +28,9 @@ try {
 
         $profile = Get-Content -LiteralPath $templatePath -Raw | ConvertFrom-Json
 
+        Assert-Test -Condition ($null -ne $profile.PSObject.Properties['id']) -Message ("id ausente em {0}.json" -f $id)
         Assert-Test -Condition ($profile.id -eq $id) -Message ("id divergente em {0}.json" -f $id)
+        Assert-Test -Condition ($null -ne $profile.PSObject.Properties['kind']) -Message ("kind ausente em {0}.json" -f $id)
         Assert-Test -Condition ($profile.kind -in @('cli', 'ide-hint')) -Message ("kind invalido em {0}.json" -f $id)
 
         if ($profile.kind -eq 'ide-hint') {
@@ -40,11 +42,15 @@ try {
         Assert-Test -Condition ($null -ne $profile.PSObject.Properties['verified']) -Message ("verified ausente em {0}.json" -f $id)
         Assert-Test -Condition ($null -ne $profile.PSObject.Properties['invoke']) -Message ("invoke ausente em {0}.json" -f $id)
         Assert-Test -Condition ($null -ne $profile.invoke.PSObject.Properties['subcommand']) -Message ("invoke.subcommand ausente em {0}.json" -f $id)
+        Assert-Test -Condition ($null -ne $profile.invoke.PSObject.Properties['prompt_via']) -Message ("invoke.prompt_via ausente em {0}.json" -f $id)
         Assert-Test -Condition ($profile.invoke.prompt_via -eq 'arg') -Message ("invoke.prompt_via != arg em {0}.json (v1 so suporta arg)" -f $id)
         Assert-Test -Condition ($null -ne $profile.invoke.PSObject.Properties['prompt_flag']) -Message ("invoke.prompt_flag ausente em {0}.json" -f $id)
         Assert-Test -Condition ($null -ne $profile.invoke.PSObject.Properties['sandbox_flags']) -Message ("invoke.sandbox_flags ausente em {0}.json" -f $id)
         Assert-Test -Condition ($null -ne $profile.PSObject.Properties['output']) -Message ("output ausente em {0}.json" -f $id)
+        Assert-Test -Condition ($null -ne $profile.PSObject.Properties['exit_codes']) -Message ("exit_codes ausente em {0}.json" -f $id)
+        Assert-Test -Condition ($null -ne $profile.exit_codes.PSObject.Properties['success']) -Message ("exit_codes.success ausente em {0}.json" -f $id)
         Assert-Test -Condition ($profile.exit_codes.success -eq 0) -Message ("exit_codes.success != 0 em {0}.json" -f $id)
+        Assert-Test -Condition ($null -ne $profile.PSObject.Properties['timeout_default_s']) -Message ("timeout_default_s ausente em {0}.json" -f $id)
         Assert-Test -Condition ([int]$profile.timeout_default_s -gt 0) -Message ("timeout_default_s invalido em {0}.json" -f $id)
     }
 
