@@ -42,3 +42,6 @@ Desktop.ini
 orchestrator-tests-*/
 # Gerado localmente pelo OpenWolf (workspace)
 /.cursor/rules/openwolf.mdc
+
+# Playwright MCP session artifacts
+.playwright-mcp/
