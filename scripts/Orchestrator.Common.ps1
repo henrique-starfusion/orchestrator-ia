@@ -583,6 +583,18 @@ function Test-PackageIntegrity {
     }
 }
 
+# Agentes classe IDE (Electron GUI): exec-probe boota a interface em vez de responder (bug-001).
+# Presenca via Get-Command basta; nunca executar --version/--help nesses binarios.
+$script:IdeAgents = @('cursor', 'kiro')
+
+function Test-IsIdeAgent {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+    return ($script:IdeAgents -contains $Name.ToLowerInvariant())
+}
+
 function Resolve-CommandExecutable {
     <#
     .SYNOPSIS

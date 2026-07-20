@@ -42,11 +42,14 @@ function Resolve-ClientName {
     if (Test-Path -LiteralPath $detectedPath) {
         $det = Get-JsonFileContent -Path $detectedPath
         $available = @()
-        if ($det.agents) {
+        if ($det.PSObject.Properties['agents'] -and $det.agents) {
             foreach ($a in @($det.agents)) {
-                if ($a.available -eq $true -or $a.status -eq 'available') {
-                    $available += [string]$a.id
-                    if ($a.name) { $available += [string]$a.name }
+                $isAvailable = $false
+                if ($a.PSObject.Properties['available'] -and $a.available -eq $true) { $isAvailable = $true }
+                if ($a.PSObject.Properties['status'] -and $a.status -eq 'available') { $isAvailable = $true }
+                if ($isAvailable) {
+                    if ($a.PSObject.Properties['id'] -and $a.id) { $available += [string]$a.id }
+                    if ($a.PSObject.Properties['name'] -and $a.name) { $available += [string]$a.name }
                 }
             }
         }
