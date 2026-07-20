@@ -34,6 +34,20 @@ orchestrator verify
 orchestrator update
 ```
 
+Atualizar o **CLI global** (pacote npm) e depois a estrutura do projeto:
+
+```bash
+npm install -g github:henrique-starfusion/bootstrap-agents#develop
+cd C:\caminho\do\seu\projeto
+orchestrator update
+```
+
+Ou só com npx (sem global):
+
+```bash
+npx --yes github:henrique-starfusion/bootstrap-agents#develop update
+```
+
 `update` sincroniza a estrutura `.orchestrator/` do projeto com o pacote (aditivo; use `--force` para reaplicar managed).
 
 > Repositório privado: o npm/npx usa suas credenciais Git (`gh auth` / credential helper).

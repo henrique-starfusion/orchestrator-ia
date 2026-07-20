@@ -104,7 +104,23 @@ Isso baixa o pacote para `%LOCALAPPDATA%\StarFusion\multiagent-orchestrator` (ca
 
 ### Atualização
 
-Com o CLI já instalado, na pasta do projeto:
+Há **dois níveis**: atualizar o CLI (pacote npm) e atualizar a estrutura `.orchestrator/` do projeto.
+
+#### 1) Atualizar o CLI via npm (global)
+
+```bash
+npm install -g github:henrique-starfusion/bootstrap-agents#develop
+```
+
+Sem instalar global — sempre a tip da branch `develop`:
+
+```bash
+npx --yes github:henrique-starfusion/bootstrap-agents#develop update
+```
+
+#### 2) Atualizar a estrutura do projeto
+
+Com o CLI já no PATH, na pasta do projeto:
 
 ```bash
 orchestrator update
@@ -116,6 +132,14 @@ Via clone local:
 
 ```bat
 bootstrap-agents.bat update -ProjectPath C:\caminho\do\projeto
+```
+
+Fluxo típico (CLI global + projeto):
+
+```bash
+npm install -g github:henrique-starfusion/bootstrap-agents#develop
+cd C:\caminho\do\seu\projeto
+orchestrator update
 ```
 
 O `update` sincroniza o pacote, aplica template/manifest de forma aditiva, redetecta agentes e valida. Use `-Force` / `--force` para sobrescrever arquivos gerenciados.
