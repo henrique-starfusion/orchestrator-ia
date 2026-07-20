@@ -56,8 +56,9 @@ foreach ($vendor in $vendorsToCopy) {
         $relative = $_.FullName.Substring($sourceDir.Length).TrimStart('\', '/')
 
         if ($_.Name -like '*.section.md') {
-            # convencao: X.section.md -> anexa em X.md na raiz do projeto, se o marcador (1a linha) nao existir
-            $targetName = $_.Name -replace '\.section\.md$', '.md'
+            # convencao: X.section.md -> anexa em X.md na raiz do projeto, se o marcador (1a linha) nao existir.
+            # Qualificador opcional para varias secoes no mesmo alvo: X.<vendor>.section.md -> X.md
+            $targetName = $_.Name -replace '(\.[A-Za-z0-9_-]+)?\.section\.md$', '.md'
             $destPath = Join-Path $projectRoot $targetName
             $sectionContent = Get-Content -LiteralPath $_.FullName -Raw
             $marker = ($sectionContent -split "`r?`n")[0].Trim()

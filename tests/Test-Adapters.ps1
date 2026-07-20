@@ -41,6 +41,10 @@ try {
         Assert-Test -Condition ($agentsContent -match 'orchestrator:call-agent') -Message 'secao call-agent ausente no AGENTS.md'
         $markerCount = ([regex]::Matches($agentsContent, 'orchestrator:call-agent')).Count
         Assert-Test -Condition ($markerCount -eq 1) -Message ('append nao idempotente: {0} marcadores em AGENTS.md' -f $markerCount)
+
+        # colisao codex/opencode: conteudo base de AMBOS os vendors precisa sobreviver no AGENTS.md
+        Assert-Test -Condition ($agentsContent -match 'orchestrator:vendor:codex') -Message 'conteudo base do codex perdido no AGENTS.md (colisao de vendors)'
+        Assert-Test -Condition ($agentsContent -match 'orchestrator:vendor:opencode') -Message 'conteudo base do opencode perdido no AGENTS.md (colisao de vendors)'
     }
 
     Write-Host ('PASS: {0}' -f $TestName) -ForegroundColor Green

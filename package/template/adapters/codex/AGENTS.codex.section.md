@@ -1,10 +1,9 @@
+<!-- orchestrator:vendor:codex -->
 # Orchestrator adapter for Codex CLI
-#
-# Canonical project configuration lives in `.orchestrator/`.
 
-Use `.orchestrator/` as the shared source for rules, skills, memory, and orchestration.
+Canonical project configuration lives in `.orchestrator/`. Use it as the shared source for rules, skills, memory, and orchestration.
 
-## Token economy + models
+## Token economy + models (Codex)
 
 - Follow `.orchestrator/config/models.json`.
 - Prefer caveman-style terse replies (skill/plugin when available).
