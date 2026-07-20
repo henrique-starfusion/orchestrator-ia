@@ -59,6 +59,35 @@ try {
     Assert-Test -Condition (Test-Path -LiteralPath $schemaPath) -Message 'agent-profile.schema.json ausente'
     $null = Get-Content -LiteralPath $schemaPath -Raw | ConvertFrom-Json
 
+    # --- golden: dispatch monta a linha certa por profile (DryRun, sem CLI no PATH) ---
+    $tempDir = New-TestProjectDirectory
+    try {
+        Invoke-TestInstall -ProjectPath $tempDir -PackageRoot $repoRoot
+
+        $invokeScript = Join-Path $repoRoot 'scripts\Invoke-RoutedAgent.ps1'
+
+        $goldens = @(
+            @{ Client = 'claude';   TaskClass = 'docs';  Pattern = '\[ETAPA\] claude --model sonnet -p PING' },
+            @{ Client = 'codex';    TaskClass = 'docs';  Pattern = '\[ETAPA\] codex exec -m gpt-5\.6-sol-medium PING' },
+            @{ Client = 'gemini';   TaskClass = 'docs';  Pattern = '\[ETAPA\] gemini -m gemini-3\.1-pro -p PING' },
+            @{ Client = 'opencode'; TaskClass = 'docs';  Pattern = '\[ETAPA\] opencode run --model default PING' }
+        )
+
+        foreach ($g in $goldens) {
+            $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $invokeScript `
+                -ProjectPath $tempDir -TaskClass $g.TaskClass -Client $g.Client -Prompt 'PING' -DryRun 2>&1 | Out-String
+            Assert-Test -Condition ($output -match $g.Pattern) -Message ("golden falhou para {0}: esperado /{1}/ em: {2}" -f $g.Client, $g.Pattern, $output)
+        }
+
+        # cursor (ide-hint) continua so imprimindo instrucao
+        $cursorOut = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $invokeScript `
+            -ProjectPath $tempDir -TaskClass 'docs' -Client 'cursor' -Prompt 'PING' -DryRun 2>&1 | Out-String
+        Assert-Test -Condition ($cursorOut -match 'model=') -Message 'cursor ide-hint nao imprimiu instrucao model='
+    }
+    finally {
+        Remove-TestProjectDirectory -Path $tempDir
+    }
+
     Write-Host ('PASS: {0}' -f $TestName) -ForegroundColor Green
     $exitCode = 0
 }

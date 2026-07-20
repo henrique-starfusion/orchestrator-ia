@@ -152,6 +152,7 @@
     },
     "gemini": {
       "cli": "gemini",
+      "model_flag": "-m",
       "models": {
         "fast": "gemini-flash-latest",
         "balanced": "gemini-3.1-pro",
@@ -169,6 +170,7 @@
     },
     "opencode": {
       "cli": "opencode",
+      "model_flag": "--model",
       "models": {
         "fast": "default-fast",
         "balanced": "default",
