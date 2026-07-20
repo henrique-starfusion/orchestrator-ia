@@ -1,0 +1,18 @@
+{
+  "id": "opencode",
+  "kind": "cli",
+  "verified": true,
+  "invoke": {
+    "subcommand": ["run"],
+    "prompt_via": "arg",
+    "prompt_flag": null,
+    "sandbox_flags": []
+  },
+  "output": {
+    "format": "text",
+    "json_flags": []
+  },
+  "exit_codes": { "success": 0 },
+  "timeout_default_s": 600,
+  "notes": "opencode run = modo nao-interativo; prompt posicional. model_flag --model vem de config/models.json."
+}

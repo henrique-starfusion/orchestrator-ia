@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Agent Profile",
+  "description": "Contrato declarativo de invocacao de um CLI de agente. Mecanica de invocacao (COMO chamar). O roteamento de modelo (QUAL modelo) permanece em config/models.json.",
+  "type": "object",
+  "required": ["id", "kind"],
+  "properties": {
+    "id": { "type": "string", "description": "Nome do agente; igual ao binario quando kind=cli" },
+    "kind": { "enum": ["cli", "ide-hint"] },
+    "verified": { "type": "boolean", "description": "true = testado neste host; false = extraido de docs" },
+    "hint": { "type": "string", "description": "Somente kind=ide-hint: instrucao de uso sem CLI" },
+    "invoke": {
+      "type": "object",
+      "required": ["subcommand", "prompt_via", "prompt_flag", "sandbox_flags"],
+      "properties": {
+        "subcommand": { "type": "array", "items": { "type": "string" }, "description": "Args fixos de modo nao-interativo (ex.: [\"exec\"])" },
+        "prompt_via": { "enum": ["arg"], "description": "v1: prompt sempre via argumento" },
+        "prompt_flag": { "type": ["string", "null"], "description": "Flag do prompt (ex.: \"-p\"); null = posicional" },
+        "sandbox_flags": { "type": "array", "items": { "type": "string" }, "description": "Flags opcionais de sandbox/permissao. NUNCA aplicadas por padrao." }
+      }
+    },
+    "output": {
+      "type": "object",
+      "properties": {
+        "format": { "enum": ["text", "json", "stream-json"] },
+        "json_flags": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "exit_codes": {
+      "type": "object",
+      "properties": { "success": { "type": "integer" } }
+    },
+    "timeout_default_s": { "type": "integer", "minimum": 1 },
+    "notes": { "type": "string" }
+  }
+}
