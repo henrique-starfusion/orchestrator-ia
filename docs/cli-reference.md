@@ -77,6 +77,20 @@ orchestrator init --skip-global-tools
 
 Atualiza a estrutura `.orchestrator/` do projeto atual (comando principal de manutenção).
 
+Antes, atualize o CLI se estiver instalado via npm global:
+
+```bash
+npm install -g github:henrique-starfusion/bootstrap-agents#develop
+```
+
+Ou rode o update direto com npx (baixa a tip de `develop`):
+
+```bash
+npx --yes github:henrique-starfusion/bootstrap-agents#develop update
+```
+
+Com o CLI no PATH:
+
 ```bash
 orchestrator update
 orchestrator update --force
