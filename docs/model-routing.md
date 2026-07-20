@@ -2,6 +2,17 @@
 
 O orquestrador não só delega agentes: ele **escolhe o modelo certo** e **comprime a prosa** (Caveman) para gastar menos tokens com o mesmo rigor técnico.
 
+## Armadilha Cursor (Grok em todos os subagentes)
+
+O `Task` do Cursor, **sem** `model=`, herda o modelo do chat pai. Isso parece orquestrador quebrado, mas e o default do IDE.
+
+```bash
+orchestrator route --task-class complex_analysis --client cursor
+# Task model="<slug retornado>"
+
+orchestrator dispatch --task-class docs --client claude --prompt "Atualize o README"
+```
+
 ## Fontes canônicas
 
 | Arquivo | Papel |

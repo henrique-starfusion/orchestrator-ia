@@ -179,6 +179,8 @@ Após sucesso, o workspace terá `.orchestrator/VERSION` alinhado à `VERSION` d
 | `install` | Instala ou completa a estrutura `.orchestrator/` (padrão) |
 | `update` | Atualiza a estrutura `.orchestrator/` do projeto atual (recomendado) |
 | `global-tools` | Instala MCPs/plugins/skills/CLIs no perfil do usuário |
+| `route` | Resolve `task_class` → modelo (JSON/texto) sem herdar o chat atual |
+| `dispatch` | Despacha prompt ao CLI (claude/codex) com o modelo roteado |
 | `verify` | Preflight + validação; não altera arquivos gerenciados |
 | `upgrade` | Alias de `update` (compatibilidade) |
 | `repair` | Restaura arquivos gerenciados ausentes ou corrompidos |

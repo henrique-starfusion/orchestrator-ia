@@ -2,13 +2,18 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('init', 'install', 'verify', 'update', 'upgrade', 'repair', 'uninstall', 'status', 'analyze', 'skills', 'global-tools')]
+    [ValidateSet('init', 'install', 'verify', 'update', 'upgrade', 'repair', 'uninstall', 'status', 'analyze', 'skills', 'global-tools', 'route', 'dispatch')]
     [string]$Command = 'install',
 
     [Alias('Project')]
     [string]$ProjectPath,
 
     [string]$PackageRoot,
+
+    [string]$TaskClass,
+    [string]$Prompt,
+    [ValidateSet('claude', 'codex', 'cursor', 'gemini', 'opencode', 'kimi', 'auto')]
+    [string]$Client = 'auto',
 
     [switch]$DryRun,
     [switch]$NonInteractive,
@@ -24,7 +29,9 @@ param(
     [switch]$RunSmokeTest,
     [switch]$RunProjectTests,
     [switch]$LegacyCleanup,
-    [switch]$Force
+    [switch]$Force,
+    [switch]$Json,
+    [switch]$PrintOnly
 )
 
 Set-StrictMode -Version Latest
@@ -101,6 +108,46 @@ try {
             if ($SkipGlobalTools) { $gtArgs.SkipGlobalTools = $true }
             $code = Invoke-ChildScript -Name 'Install-GlobalTools.ps1' -Arguments $gtArgs
             exit $code
+        }
+
+        'route' {
+            Write-Host '[INFO] Modo: route'
+            if ([string]::IsNullOrWhiteSpace($TaskClass)) {
+                Write-Host '[ERRO] route requer -TaskClass (ex.: docs, implementation, complex_analysis)'
+                exit 2
+            }
+            $routeScript = Join-Path $PSScriptRoot 'Resolve-ModelRoute.ps1'
+            $routeParams = @{
+                ProjectPath = $projectRoot
+                TaskClass   = $TaskClass
+                Client      = $Client
+            }
+            if ($Json) { $routeParams.Json = $true }
+            & $routeScript @routeParams
+            exit $LASTEXITCODE
+        }
+
+        'dispatch' {
+            Write-Host '[INFO] Modo: dispatch'
+            if ([string]::IsNullOrWhiteSpace($TaskClass)) {
+                Write-Host '[ERRO] dispatch requer -TaskClass'
+                exit 2
+            }
+            if ([string]::IsNullOrWhiteSpace($Prompt)) {
+                Write-Host '[ERRO] dispatch requer -Prompt'
+                exit 2
+            }
+            $dispatchScript = Join-Path $PSScriptRoot 'Invoke-RoutedAgent.ps1'
+            $dispatchParams = @{
+                ProjectPath = $projectRoot
+                TaskClass   = $TaskClass
+                Prompt      = $Prompt
+                Client      = $Client
+            }
+            if ($DryRun) { $dispatchParams.DryRun = $true }
+            if ($PrintOnly) { $dispatchParams.PrintOnly = $true }
+            & $dispatchScript @dispatchParams
+            exit $LASTEXITCODE
         }
 
         'verify' {

@@ -12,14 +12,22 @@ Invoke a selected agent with scoped context, the **resolved model**, and expecte
 - Assignment from `select-agents` includes `client`, `model`, `task_class`
 - Caveman intensity set (default `full`) unless user disabled
 
+## CRITICAL — Cursor Task
+
+If `client=cursor` (or you are inside Cursor):
+
+1. Run `orchestrator route --task-class <class> --client cursor`
+2. Launch `Task` with **`model="<slug>"` exactly** from the route output
+3. **Never omit `model=`** — Cursor inherits the parent model (e.g. Grok on every subagent)
+
 ## Invocation (by client)
 
 | Client | Pattern |
 |---|---|
-| Claude | `claude --model <alias\|id> ...` (aliases: haiku, sonnet, opus, fable) |
-| Codex | `codex -m <model> ...` |
-| Cursor | select model in IDE / Task `model=` slug from `models.json` |
-| Gemini / OpenCode / Kimi | use client map in `config/models.json` when CLI present |
+| Claude | `orchestrator dispatch --task-class <c> --client claude --prompt "..."` or `claude --model <alias>` |
+| Codex | `orchestrator dispatch --task-class <c> --client codex --prompt "..."` |
+| Cursor | Task tool with mandatory `model=` slug from `route` |
+| Gemini / OpenCode / Kimi | map in `config/models.json` when CLI present |
 
 Pass only scoped files and a tight brief. No full-repo paste.
 
@@ -27,4 +35,4 @@ Pass only scoped files and a tight brief. No full-repo paste.
 
 - Agent result in `runtime/results/`
 - Logs in `runtime/logs/`
-- `model-choice.json` next to the result
+- `*-model-choice.json` from `dispatch` / `route`

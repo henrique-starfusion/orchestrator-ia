@@ -1,24 +1,43 @@
 ---
-description: Economia de tokens (caveman) e roteamento de modelos por tarefa
+description: Economia de tokens (caveman) e roteamento OBRIGATORIO de modelos por tarefa
 alwaysApply: true
 ---
 
-# Token economy + model routing
+# Token economy + model routing (OBRIGATORIO)
 
-Canonical config: `.orchestrator/config/models.json` and `config/policies.json`.
+Canonical: `.orchestrator/config/models.json`
+
+## Por que o Grok aparece em tudo
+
+Se voce lancar `Task` **sem** `model=`, o Cursor **herda o modelo do pai**.
+Isso NAO e orquestracao. E proibido omitir `model=`.
+
+## Antes de qualquer subagente
+
+1. Classificar `task_class` (docs, implementation, complex_analysis, ...).
+2. Resolver modelo:
+   - `orchestrator route --task-class <class> --client cursor`
+   - ou tabela abaixo
+3. Chamar `Task` com `model="<slug exato>"`.
+
+## Tabela Cursor (slug obrigatorio)
+
+| Task class | model= |
+|---|---|
+| trivial / classify | `claude-4.5-haiku` |
+| docs / documentation | `claude-sonnet-5-thinking-high` |
+| implementation / code_review / tests | `claude-sonnet-5-thinking-high` |
+| refactor_simple / mechanical | `composer-2.5-fast` |
+| architecture / debugging_hard / security_review | `claude-opus-4-8-thinking-high` |
+| complex_analysis / long_agentic / orchestration_plan | `claude-fable-5-thinking-high` |
+
+## Regras duras
+
+- NUNCA lancar Task sem `model=`.
+- NUNCA usar o modelo do chat atual como default de subagente.
+- NUNCA usar Fable/Opus para docs ou typos.
+- Para Claude/Codex CLI: `orchestrator dispatch -TaskClass ... -Prompt "..."` (despacho real).
 
 ## Caveman
 
-Default **full**: terse replies, no filler. Keep code, paths, errors exact. Off only if user says stop caveman / normal mode.
-
-## Model by task class
-
-| Task class | Tier | Prefer (Cursor) |
-|---|---|---|
-| trivial / classify | fast | `claude-4.5-haiku` |
-| docs / documentation / implementation | balanced | `claude-sonnet-5-thinking-high` |
-| architecture / hard debug | deep | `claude-opus-4-8-thinking-high` |
-| complex_analysis / long_agentic / orchestration_plan | max | `claude-fable-5-thinking-high` |
-| mechanical edits | fast | `composer-2.5-fast` |
-
-Never use Fable/Opus for docs or typos. Escalate at most one tier after failed validation.
+Default **full**: prosa curta; codigo/erros exactos.

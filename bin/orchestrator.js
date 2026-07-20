@@ -5,9 +5,7 @@
  * CLI no estilo OpenWolf/Graphify:
  *   npx @starfusion/orchestrator init
  *   orchestrator init
- *   orchestrator verify|upgrade|repair|status|uninstall
- *
- * Baixa/usa o pacote npm (ou clone GitHub) e aplica no diretório atual.
+ *   orchestrator route|dispatch|update|verify|...
  */
 
 const { spawnSync } = require('child_process');
@@ -23,33 +21,19 @@ function printHelp() {
 @starfusion/orchestrator — Orquestrador Multiagente (StarFusion)
 
 Uso (na pasta do projeto):
-  npx @starfusion/orchestrator init
-  orchestrator init
-  orchestrator update
-  orchestrator global-tools
-  orchestrator install|verify|upgrade|repair|uninstall|status
+  orchestrator init|update|verify|status|analyze|global-tools
+  orchestrator route --task-class <class> [--client cursor|claude|codex|auto]
+  orchestrator dispatch --task-class <class> --prompt "..." [--client claude]
 
-Opções encaminhadas ao instalador PowerShell:
-  --dry-run
-  --force
-  --update-agents
-  --skip-tools
-  --skip-global-tools
-  --configure-mcps
-  --run-smoke-test
-  --project <caminho>     (padrão: diretório atual)
-
-global-tools instala no perfil do usuário (Claude/Cursor/skills/npm),
-reutilizável em vários projetos: Context7, Playwright, Superpowers, etc.
+Roteamento de modelos (obrigatorio para subagentes Cursor):
+  Task SEM model= herda o modelo do pai (ex.: Grok em tudo) — isso e bug de uso.
+  Use: orchestrator route --task-class complex_analysis --client cursor
+  Depois: Task com model="<slug retornado>"
 
 Exemplos:
-  cd C:\\meus-projetos\\app
-  npx --yes github:henrique-starfusion/bootstrap-agents#develop init
-  orchestrator update
-  orchestrator global-tools
-
-  npm install -g @starfusion/orchestrator
-  orchestrator init
+  orchestrator route --task-class docs --client cursor --json
+  orchestrator route --task-class complex_analysis --client claude
+  orchestrator dispatch --task-class docs --client claude --prompt "Atualize o README"
 `.trim();
   console.log(help);
 }
@@ -81,7 +65,8 @@ function parseArgs(argv) {
   }
 
   const known = new Set([
-    'init', 'i', 'install', 'verify', 'update', 'upgrade', 'repair', 'uninstall', 'status', 'analyze', 'skills', 'global-tools',
+    'init', 'i', 'install', 'verify', 'update', 'upgrade', 'repair', 'uninstall',
+    'status', 'analyze', 'skills', 'global-tools', 'route', 'dispatch',
   ]);
 
   if (known.has(first) || !first.startsWith('-')) {
@@ -105,7 +90,37 @@ function parseArgs(argv) {
       continue;
     }
 
-    // Map common flags to PowerShell switches
+    const valueFlags = {
+      '--task-class': '-TaskClass',
+      '-TaskClass': '-TaskClass',
+      '--prompt': '-Prompt',
+      '-Prompt': '-Prompt',
+      '--client': '-Client',
+      '-Client': '-Client',
+    };
+
+    if (valueFlags[a]) {
+      const val = args[i + 1];
+      if (val !== undefined) {
+        out.passthrough.push(valueFlags[a], val);
+        i += 1;
+      }
+      continue;
+    }
+
+    if (a.startsWith('--task-class=')) {
+      out.passthrough.push('-TaskClass', a.slice('--task-class='.length));
+      continue;
+    }
+    if (a.startsWith('--prompt=')) {
+      out.passthrough.push('-Prompt', a.slice('--prompt='.length));
+      continue;
+    }
+    if (a.startsWith('--client=')) {
+      out.passthrough.push('-Client', a.slice('--client='.length));
+      continue;
+    }
+
     const flagMap = {
       '--dry-run': '-DryRun',
       '--force': '-Force',
@@ -123,6 +138,8 @@ function parseArgs(argv) {
       '--run-project-tests': '-RunProjectTests',
       '--legacy-cleanup': '-LegacyCleanup',
       '--verbose': '-Verbose',
+      '--json': '-Json',
+      '--print-only': '-PrintOnly',
     };
 
     if (flagMap[a]) {
@@ -130,7 +147,6 @@ function parseArgs(argv) {
       continue;
     }
 
-    // Allow native PowerShell-style flags too
     if (a.startsWith('-')) {
       out.passthrough.push(a);
       continue;
@@ -166,7 +182,6 @@ function main() {
 
   if (!fs.existsSync(installScript)) {
     console.error('[ERRO] Pacote incompleto: scripts/Install-Orchestrator.ps1 ausente.');
-    console.error(`       Esperado em: ${installScript}`);
     process.exit(1);
   }
 
@@ -177,7 +192,7 @@ function main() {
 
   const shell = findPowerShell();
   if (!shell) {
-    console.error('[ERRO] PowerShell nao encontrado. Instale Windows PowerShell 5.1+ ou PowerShell 7+.');
+    console.error('[ERRO] PowerShell nao encontrado.');
     process.exit(4);
   }
 
