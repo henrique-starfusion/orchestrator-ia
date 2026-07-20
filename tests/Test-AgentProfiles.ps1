@@ -69,7 +69,7 @@ try {
         $goldens = @(
             @{ Client = 'claude';   TaskClass = 'docs';  Pattern = '\[ETAPA\] claude --model sonnet -p PING' },
             @{ Client = 'codex';    TaskClass = 'docs';  Pattern = '\[ETAPA\] codex exec -m gpt-5\.6-sol-medium PING' },
-            @{ Client = 'gemini';   TaskClass = 'docs';  Pattern = '\[ETAPA\] gemini -m gemini-3\.1-pro -p PING' },
+            @{ Client = 'gemini';   TaskClass = 'docs';  Pattern = '\[ETAPA\] gemini -m gemini-3\.1-pro -p PING'; ExpectAviso = $true },
             @{ Client = 'opencode'; TaskClass = 'docs';  Pattern = '\[ETAPA\] opencode run --model default PING' }
         )
 
@@ -77,6 +77,9 @@ try {
             $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $invokeScript `
                 -ProjectPath $tempDir -TaskClass $g.TaskClass -Client $g.Client -Prompt 'PING' -DryRun 2>&1 | Out-String
             Assert-Test -Condition ($output -match $g.Pattern) -Message ("golden falhou para {0}: esperado /{1}/ em: {2}" -f $g.Client, $g.Pattern, $output)
+            if ($g.ContainsKey('ExpectAviso') -and $g.ExpectAviso) {
+                Assert-Test -Condition ($output -match '\[AVISO\]') -Message ("golden {0}: esperado [AVISO] (verified=false) na saida" -f $g.Client)
+            }
         }
 
         # cursor (ide-hint) continua so imprimindo instrucao

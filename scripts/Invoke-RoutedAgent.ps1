@@ -21,6 +21,10 @@ $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'Orchestrator.Common.ps1')
 
+if (-not [string]::IsNullOrWhiteSpace($env:ORCHESTRATOR_CHILD_AGENT)) {
+    throw '[ERRO] ORCHESTRATOR_CHILD_AGENT presente: agente filho nao pode delegar (anti-recursao).'
+}
+
 $projectRoot = Get-ProjectRoot -ProjectPath $ProjectPath
 $resolveScript = Join-Path $PSScriptRoot 'Resolve-ModelRoute.ps1'
 
@@ -53,6 +57,14 @@ if ($profile.kind -eq 'ide-hint') {
 
 if ($profile.PSObject.Properties['verified'] -and $profile.verified -ne $true) {
     Write-Host ("[AVISO] profile '{0}' verified=false (extraido de docs, nao testado neste host)" -f $profile.id)
+}
+
+if ($profile.kind -eq 'cli') {
+    $hasModelFlag = $false
+    if ($route.PSObject.Properties['model_flag'] -and -not [string]::IsNullOrWhiteSpace([string]$route.model_flag)) { $hasModelFlag = $true }
+    if (-not $hasModelFlag) {
+        Write-Host ("[AVISO] cliente '{0}' sem model_flag em config/models.json: despacho seguira sem selecao de modelo (rode 'orchestrator update' ou adicione a chave)" -f [string]$route.client)
+    }
 }
 
 $args = @()
@@ -89,7 +101,14 @@ if ($profile.PSObject.Properties['timeout_default_s'] -and [int]$profile.timeout
     $timeoutS = [int]$profile.timeout_default_s
 }
 
-$result = Invoke-ExternalCommand -FilePath $cmd.Source -ArgumentList $args -TimeoutSeconds $timeoutS -WorkingDirectory $projectRoot
+$previousChildFlag = $env:ORCHESTRATOR_CHILD_AGENT
+$env:ORCHESTRATOR_CHILD_AGENT = '1'
+try {
+    $result = Invoke-ExternalCommand -FilePath $cmd.Source -ArgumentList $args -TimeoutSeconds $timeoutS -WorkingDirectory $projectRoot
+}
+finally {
+    $env:ORCHESTRATOR_CHILD_AGENT = $previousChildFlag
+}
 $outPath = Join-Path $runtimeDir ("{0}-{1}-result.txt" -f $stamp, $TaskClass)
 @($result.stdout, $result.stderr) | Set-Content -LiteralPath $outPath -Encoding UTF8
 Write-Host ("[OK] exit={0} result={1}" -f $result.exit_code, $outPath)
