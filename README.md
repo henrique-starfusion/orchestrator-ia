@@ -345,6 +345,10 @@ bootstrap-agents.bat skills -ProjectPath C:\meu-projeto
 
 Skills externas: `.orchestrator/skills/external/` · Quarentena: `quarantined/`
 
+### Perfis de invocação por CLI
+
+Cada agente tem um perfil declarativo em `.orchestrator/agents/profiles/<cli>.json` (mecânica de invocação: subcomando não-interativo, flag de prompt, saída, timeout). **CLI novo = JSON novo, zero código** — o dispatch e a skill `call-agent` leem o perfil. Schema: `package/schemas/agent-profile.schema.json`. Agentes classe IDE (cursor, kiro) são detectados por presença no PATH, sem sonda de execução.
+
 ---
 
 ## MCPs

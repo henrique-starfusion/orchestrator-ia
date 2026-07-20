@@ -241,6 +241,17 @@ bootstrap-agents.bat skills -ProjectPath C:\dev\meu-app
 
 Exit 1 se o registro estiver ausente.
 
+### `route` / `dispatch`
+
+Resolvem `task_class` → modelo e despacham prompt ao CLI do agente:
+
+```bash
+orchestrator route --task-class docs --client claude --json
+orchestrator dispatch --task-class docs --client claude --prompt "Atualize o README"
+```
+
+O despacho monta a linha de comando a partir do perfil declarativo `.orchestrator/agents/profiles/<client>.json` (subcomando não-interativo, flag de prompt, timeout); sem o perfil, o comando falha instruindo `orchestrator update`. `--dry-run` imprime a linha planejada sem executar — funciona mesmo com o CLI ausente do PATH. Perfis `verified: false` geram `[AVISO]`. Cliente `cursor` é `ide-hint`: imprime a instrução `Task model="<slug>"` em vez de executar.
+
 ---
 
 ## Opções globais (install)
