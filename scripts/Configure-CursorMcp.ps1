@@ -43,9 +43,31 @@ if ($CursorTransport -eq 'http') {
     $servers['multiagent-orchestrator'] = [pscustomobject]@{ url = $CursorMcpUrl }
 }
 else {
-    $servers['multiagent-orchestrator'] = [pscustomobject]@{
-        command = 'orchestrator'
-        args    = @('mcp', 'serve', '--transport', 'stdio')
+    # Preferir node + caminho absoluto do pacote: no Windows, `orchestrator.cmd`
+    # global pode apontar para versao antiga sem subcomando mcp.
+    $cliJs = $null
+    if (-not [string]::IsNullOrWhiteSpace($PackageRoot)) {
+        $candidate = Join-Path $PackageRoot 'bin\orchestrator.js'
+        if (Test-Path -LiteralPath $candidate) {
+            $cliJs = (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($cliJs)) {
+        $servers['multiagent-orchestrator'] = [pscustomobject]@{
+            command = 'orchestrator'
+            args    = @('mcp', 'serve', '--transport', 'stdio')
+        }
+    }
+    else {
+        $nodeCmd = 'node'
+        $nodeProbe = Get-Command node -ErrorAction SilentlyContinue
+        if ($null -ne $nodeProbe -and -not [string]::IsNullOrWhiteSpace($nodeProbe.Source)) {
+            $nodeCmd = $nodeProbe.Source
+        }
+        $servers['multiagent-orchestrator'] = [pscustomobject]@{
+            command = $nodeCmd
+            args    = @($cliJs, 'mcp', 'serve', '--transport', 'stdio')
+        }
     }
 }
 
