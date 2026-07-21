@@ -36,6 +36,8 @@ Instalação via npm/GitHub deve apontar para `#develop` (ou tag de release em `
 | `package/checksums.json` | Integridade |
 | `package/migrations/` | Migrations de versão |
 
+Documentação completa do produto: [`orquestrador-completo.md`](orquestrador-completo.md).
+
 ## Runtime do instalador
 
 | Pasta | Papel |
