@@ -344,9 +344,9 @@ function Ensure-SkillPackage {
         return
     }
 
-    # Executa a partir do HOME para evitar instalar skills no projeto atual
-    $home = $env:USERPROFILE
-    $result = Invoke-ExternalCommand -FilePath $npx.Source -ArgumentList @('--yes', 'skills', 'add', $Source, '-g') -TimeoutSeconds 300 -WorkingDirectory $home
+    # Executa a partir do HOME para evitar instalar skills no projeto atual ($HOME e read-only no PS)
+    $userHome = $env:USERPROFILE
+    $result = Invoke-ExternalCommand -FilePath $npx.Source -ArgumentList @('--yes', 'skills', 'add', $Source, '-g') -TimeoutSeconds 300 -WorkingDirectory $userHome
     if ($result.exit_code -eq 0) {
         Write-Host "[OK] Skills: $Source"
         Add-ReportItem -Bucket 'skills' -Item @{ id = $Id; status = 'installed'; source = $Source }
