@@ -25,8 +25,11 @@ When spawning a child, set `ORCHESTRATOR_CHILD_AGENT=1` in its environment.
    - `invoke.sandbox_flags` → NEVER apply unless the user explicitly asked.
    - `verified: false` → flags came from docs, not tested on this host; expect quirks.
 4. **Assemble**: `<cli> <subcommand...> <model_flag> <alias|model> [prompt_flag] "<scoped prompt>"`
-5. **Execute** with the profile's `timeout_default_s`. Pass only scoped files and a tight brief — no full-repo paste. Caveman intensity `full` unless the user disabled it.
-6. **Persist**: result goes to `runtime/results/`, model choice next to it. Exit code != `exit_codes.success` → treat as failure, consider `correction-loop`.
+5. **Execute AND watch (mandatory)**: run `orchestrator dispatch` in the FOREGROUND. It streams the child's output live (`  > ` stdout, `  ! ` stderr), prints a heartbeat every 30s, and kills the process at `timeout_default_s` preserving partial output. Never fire-and-forget:
+   - If your harness forces background execution, poll that task until it ends and read its final output. Silence is NOT success.
+   - Success = process ended AND `<stamp>-<task_class>-status.json` says `"status": "completed"`. Missing status file, `failed`, or `timeout` = failure — investigate, never assume.
+   Pass only scoped files and a tight brief — no full-repo paste. Caveman intensity `full` unless the user disabled it.
+6. **Persist**: result goes to `runtime/results/`, model choice and status next to it. `status != completed` → treat as failure, consider `correction-loop`.
 
 Shortcut for steps 2-6: `orchestrator dispatch --task-class <class> --client <c> --prompt "..."`.
 
@@ -50,3 +53,4 @@ Shortcut for steps 2-6: `orchestrator dispatch --task-class <class> --client <c>
 
 - Agent result: `runtime/results/<stamp>-<task_class>-result.txt`
 - Model choice: `runtime/results/<stamp>-<task_class>-model-choice.json`
+- Execution status: `runtime/results/<stamp>-<task_class>-status.json` (`completed|failed|timeout`, exit_code, duration_s) — the durable failure record; check it before trusting any result.

@@ -224,7 +224,7 @@
                   },
                   {
                       "path":  "template/.orchestrator/skills/call-agent/SKILL.md",
-                      "sha256":  "75625a4604455f0ab9e32a2be35150d8b7641c914f7344a36a4f88c32fc661b6"
+                      "sha256":  "a181d8ac5a1317e60d2b1822a46a3ba30c8de2951f8a294370a22b79c9dbf48e"
                   },
                   {
                       "path":  "template/.orchestrator/skills/correction-loop/SKILL.md",
