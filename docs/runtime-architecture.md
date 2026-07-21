@@ -25,6 +25,13 @@ Ver [`task-lifecycle.md`](task-lifecycle.md).
 
 Código em `runtime/src/orchestrator_runtime/`. CLI Node encaminha `run`/`task` via `python -m orchestrator_runtime`.
 
+## MCP (0.3.0)
+
+Transporte Cursor → Runtime: pacote `orchestrator_runtime.mcp` (`multiagent-orchestrator`).
+Não duplica `TaskService`; apenas expõe tools/resources.
+
+Ver [`mcp-integration.md`](mcp-integration.md).
+
 ## Fora do núcleo
 
-OpenWolf, Graphify, Caveman, MCPs e skills externas são opt-in e **não** são necessários para o runtime.
+OpenWolf, Graphify, Caveman, MCPs globais de terceiros e skills externas são opt-in e **não** são necessários para o runtime.

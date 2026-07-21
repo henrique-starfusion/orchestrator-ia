@@ -37,7 +37,7 @@ Instalação via npm/GitHub deve apontar para `#develop` (ou tag de release em `
 | `package/migrations/` | Migrations de versão |
 | `runtime/` | Runtime Python multiagente (SQLite) |
 
-Documentação completa: [`orquestrador-completo.md`](orquestrador-completo.md) · [`runtime-architecture.md`](runtime-architecture.md).
+Documentação completa: [`orquestrador.md`](orquestrador.md) · [`runtime-architecture.md`](runtime-architecture.md) · [`mcp-integration.md`](mcp-integration.md).
 
 ## Runtime do instalador
 

@@ -18,7 +18,11 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 task_app = typer.Typer(help="Gerenciamento de tarefas")
+mcp_app = typer.Typer(help="Servidor MCP multiagent-orchestrator")
+cursor_app = typer.Typer(help="Integração Cursor (front controller)")
 app.add_typer(task_app, name="task")
+app.add_typer(mcp_app, name="mcp")
+app.add_typer(cursor_app, name="cursor")
 
 
 def _print_json(data) -> None:
@@ -201,6 +205,140 @@ def task_artifacts(
 ) -> None:
     service = build_service(project, verbose=False)
     _print_json(service.artifacts(task_id))
+
+
+@mcp_app.command("serve")
+def mcp_serve(
+    transport: str = typer.Option("stdio", "--transport"),
+    host: str = typer.Option("127.0.0.1", "--host"),
+    port: int = typer.Option(8765, "--port"),
+    project: Optional[Path] = typer.Option(None, "--project"),
+    fake_agents: bool = typer.Option(False, "--fake-agents"),
+) -> None:
+    from orchestrator_runtime.mcp.server import serve
+
+    serve(
+        transport=transport,
+        host=host,
+        port=port,
+        workspace=project,
+        fake_agents=fake_agents or None,
+    )
+
+
+@mcp_app.command("status")
+def mcp_status(
+    project: Optional[Path] = typer.Option(None, "--project"),
+    json_out: bool = typer.Option(True, "--json/--text"),
+) -> None:
+    from orchestrator_runtime.mcp.tools import OrchestratorMcpTools
+
+    tools = OrchestratorMcpTools(default_workspace=project or Path.cwd(), verbose=False)
+    data = tools.health()
+    if json_out:
+        _print_json(data)
+    else:
+        typer.echo(data.get("status"))
+
+
+@mcp_app.command("doctor")
+def mcp_doctor(
+    project: Optional[Path] = typer.Option(None, "--project"),
+) -> None:
+    from orchestrator_runtime.mcp.server import doctor
+
+    _print_json(doctor(project))
+
+
+@cursor_app.command("configure")
+def cursor_configure(
+    project: Optional[Path] = typer.Option(None, "--project"),
+    transport: str = typer.Option("stdio", "--transport"),
+    url: Optional[str] = typer.Option(None, "--url"),
+    command: str = typer.Option("orchestrator", "--command"),
+) -> None:
+    from orchestrator_runtime.mcp.cursor_config import write_cursor_mcp_config
+
+    root = (project or Path.cwd()).resolve()
+    path = write_cursor_mcp_config(
+        root, transport=transport, command=command, url=url
+    )
+    # ensure rule exists from template copy if present in package adapters
+    rule_dst = root / ".cursor" / "rules" / "multiagent-orchestrator.mdc"
+    if not rule_dst.is_file():
+        rule_dst.parent.mkdir(parents=True, exist_ok=True)
+        rule_dst.write_text(
+            """---
+description: Integração do chat do Cursor com o Orquestrador Multiagente
+alwaysApply: true
+---
+
+Você é o agente principal da conversa no Cursor.
+
+Analise cada solicitação e escolha entre:
+
+1. responder diretamente;
+2. delegar um papel específico;
+3. executar o workflow completo.
+
+Use `orchestrator_delegate` para tarefas pontuais.
+
+Use `orchestrator_run` para tarefas que exigem planejamento, alterações,
+testes, validação, correção, persistência ou múltiplos agentes.
+
+Não simule respostas de agentes CLI.
+
+Não afirme que Claude, Codex, Gemini, Kimi ou outro agente executou algo
+sem uma chamada real ao Orchestrator.
+
+Não use o mesmo agente como único executor e validador quando outro estiver
+disponível.
+
+Exija critérios de aceitação, testes determinísticos e evidências.
+
+Aguarde o resultado real ou consulte `orchestrator_status` e
+`orchestrator_result`.
+
+Toda tarefa deve revisar e atualizar a documentação afetada antes da
+conclusão.
+
+Quando o runtime estiver indisponível, informe claramente e não simule a
+orquestração.
+""",
+            encoding="utf-8",
+        )
+    typer.echo(f"[OK] Cursor MCP config: {path}")
+    typer.echo(f"[OK] Cursor rule: {rule_dst}")
+
+
+@cursor_app.command("verify")
+def cursor_verify(
+    project: Optional[Path] = typer.Option(None, "--project"),
+) -> None:
+    root = (project or Path.cwd()).resolve()
+    mcp_path = root / ".cursor" / "mcp.json"
+    rule_path = root / ".cursor" / "rules" / "multiagent-orchestrator.mdc"
+    ok = mcp_path.is_file() and rule_path.is_file()
+    _print_json(
+        {
+            "ok": ok,
+            "mcp_json": str(mcp_path),
+            "mcp_exists": mcp_path.is_file(),
+            "rule": str(rule_path),
+            "rule_exists": rule_path.is_file(),
+        }
+    )
+    raise typer.Exit(0 if ok else 1)
+
+
+@cursor_app.command("print-config")
+def cursor_print_config(
+    transport: str = typer.Option("stdio", "--transport"),
+    url: Optional[str] = typer.Option(None, "--url"),
+) -> None:
+    from orchestrator_runtime.mcp.cursor_config import print_config
+
+    _print_json(print_config(transport=transport, url=url))
 
 
 if __name__ == "__main__":

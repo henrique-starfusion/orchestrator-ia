@@ -7,7 +7,7 @@ Projeto desenvolvido e mantido pela **StarFusion**.
 
 Pacote portátil para instalar, validar e manter um **ambiente multiagente genérico** e um **runtime persistente** em qualquer repositório. O orquestrador não pertence a uma aplicação específica: projetos-alvo são workspaces de execução.
 
-**Versão atual:** 0.2.0 — ver [`CHANGELOG.md`](CHANGELOG.md).
+**Versão atual:** 0.3.0 — ver [`CHANGELOG.md`](CHANGELOG.md).
 
 ---
 
@@ -22,8 +22,9 @@ Duas camadas:
 
 ```bash
 orchestrator install                 # nucleo do workspace
-orchestrator run --prompt "..."      # tarefa real
-orchestrator task status <id>
+orchestrator cursor configure        # MCP + rule no Cursor
+orchestrator mcp serve               # tools MCP para o chat
+orchestrator run --prompt "..."      # tarefa real (CLI)
 ```
 
 Fluxo do runtime:
@@ -33,9 +34,9 @@ receber → analisar → memória → planejar → selecionar → executar
 → testar → validar → corrigir → documentação → consolidar
 ```
 
-Cursor é **cliente IDE** (não worker). MVP: Claude planeja/valida, Codex executa, runtime testa.
+Cursor é **cliente IDE** (front controller via MCP; não worker). MVP: Claude planeja/valida, Codex executa, runtime testa.
 
-Documentação: [`docs/runtime-architecture.md`](docs/runtime-architecture.md) · [`docs/orquestrador-completo.md`](docs/orquestrador-completo.md)
+Documentação: [`docs/mcp-integration.md`](docs/mcp-integration.md) · [`docs/orquestrador.md`](docs/orquestrador.md)
 
 ---
 
@@ -452,7 +453,7 @@ package/
 └── migrations/               → scripts <from>-to-<to>.ps1
 ```
 
-- Funcionamento completo: [`docs/orquestrador-completo.md`](docs/orquestrador-completo.md)
+- Funcionamento completo: [`docs/orquestrador.md`](docs/orquestrador.md)
 - Arquitetura: [`docs/installer-architecture.md`](docs/installer-architecture.md)
 - CLI: [`docs/cli-reference.md`](docs/cli-reference.md)
 - One-liner: [`docs/quickstart-oneliner.md`](docs/quickstart-oneliner.md)
@@ -493,7 +494,7 @@ Prioridade atual (v0.1): detecção de CLIs, bootstrap incremental versionado, s
 | `package/` | Template, manifest, checksums, migrações |
 | `tests/` | Suíte de testes em fixtures temporárias |
 | `docs/` | Documentação do produto |
-| `docs/orquestrador-completo.md` | Guia completo de funcionamento |
+| `docs/orquestrador.md` | Guia completo de funcionamento |
 | `docs/legacy/` | Prompt e material deprecados |
 | `docs/repo-layout.md` | Organização deste repositório |
 | `LICENSE` | Todos os direitos reservados (StarFusion) |

@@ -2,7 +2,7 @@
 
 Documentação técnica do pacote **bootstrap-agents** / **@starfusion/orchestrator** (v0.2.0). Descreve o instalador e aponta para o runtime.
 
-Runtime: [`runtime-architecture.md`](runtime-architecture.md) · Guia completo: [`orquestrador-completo.md`](orquestrador-completo.md)
+Runtime: [`runtime-architecture.md`](runtime-architecture.md) · Guia completo: [`orquestrador.md`](orquestrador.md)
 
 Quickstart one-liner: [`quickstart-oneliner.md`](quickstart-oneliner.md)
 
@@ -253,7 +253,7 @@ Para evoluir o pacote sem quebrar workspaces:
 
 ## Referências
 
-- [`orquestrador-completo.md`](orquestrador-completo.md) — funcionamento completo (skills, MCP, tools, routing)
+- [`orquestrador.md`](orquestrador.md) — funcionamento completo (skills, MCP, tools, routing)
 - [`quickstart-oneliner.md`](quickstart-oneliner.md) — instalação em uma linha
 - [`cli-reference.md`](cli-reference.md) — parâmetros e exemplos
 - [`legacy-migration.md`](legacy-migration.md) — `.claude/` → `.orchestrator/`

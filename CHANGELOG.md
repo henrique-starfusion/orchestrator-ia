@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.0 — 2026-07-21
+
+### Added
+
+- Servidor MCP **`multiagent-orchestrator`** (`orchestrator mcp serve`)
+- Tools: health, analyze, delegate, run, status, events, result, cancel, resume, message, agents, memory_search
+- Resources `orchestrator://…` e prompts MCP reutilizáveis
+- Comandos `orchestrator cursor configure|verify|print-config`
+- Rule Cursor `multiagent-orchestrator.mdc` (front controller)
+- Merge seguro de `.cursor/mcp.json` (stdio/http)
+- Flags instalador: `--configure-cursor-mcp`, `--cursor-transport`, `--skip-cursor`
+- Docs: `mcp-integration.md`, `cursor-front-controller.md`, `human-approval-flow.md`, `mcp-tool-reference.md`, `api.md`, `security.md`
+
+### Changed
+
+- Cursor permanece cliente IDE; chat (qualquer modelo) é front controller via MCP
+- Manager/Rules continua escolhendo CLIs no workflow (`routing=automatic`)
+
 ## 0.2.0 — 2026-07-21
 
 ### Added

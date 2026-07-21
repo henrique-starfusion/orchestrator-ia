@@ -27,6 +27,12 @@ param(
     [switch]$SkipGlobalTools,
     [switch]$InstallGlobalTools,
     [switch]$ConfigureMcps,
+    [switch]$ConfigureCursor,
+    [switch]$ConfigureCursorMcp,
+    [ValidateSet('stdio', 'http')]
+    [string]$CursorTransport = 'stdio',
+    [string]$CursorMcpUrl = 'http://127.0.0.1:8765/mcp',
+    [switch]$SkipCursor,
     [switch]$RunSmokeTest,
     [switch]$RunProjectTests,
     [switch]$LegacyCleanup,
@@ -279,6 +285,17 @@ try {
                 if ($detectedObj.PSObject.Properties['agents']) {
                     $reportData.agents = @($detectedObj.agents)
                 }
+            }
+
+            if (-not $SkipCursor -and ($ConfigureCursor -or $ConfigureCursorMcp)) {
+                $cursorArgs = @{
+                    ProjectPath     = $projectRoot
+                    PackageRoot     = $packageRootResolved
+                    CursorTransport = $CursorTransport
+                    CursorMcpUrl    = $CursorMcpUrl
+                }
+                if ($Force) { $cursorArgs.Force = $true }
+                Invoke-ChildScript -Name 'Configure-CursorMcp.ps1' -Arguments $cursorArgs | Out-Null
             }
 
             Invoke-ChildScript -Name 'Write-InstallationReport.ps1' -Arguments @{
@@ -541,6 +558,17 @@ try {
 
     if ($LegacyCleanup) {
         $reportData.limitations += 'LegacyCleanup solicitado, mas limpeza legada opt-in ainda nao implementada neste instalador.'
+    }
+
+    if (-not $SkipCursor -and ($ConfigureCursor -or $ConfigureCursorMcp)) {
+        $cursorArgs = @{
+            ProjectPath     = $projectRoot
+            PackageRoot     = $packageRootResolved
+            CursorTransport = $CursorTransport
+            CursorMcpUrl    = $CursorMcpUrl
+        }
+        if ($Force) { $cursorArgs.Force = $true }
+        Invoke-ChildScript -Name 'Configure-CursorMcp.ps1' -Arguments $cursorArgs | Out-Null
     }
 
     Invoke-ChildScript -Name 'Write-InstallationReport.ps1' -Arguments @{

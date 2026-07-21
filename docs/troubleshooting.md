@@ -11,7 +11,18 @@ Quickstart: [`quickstart-oneliner.md`](quickstart-oneliner.md)
 ```bash
 orchestrator status
 orchestrator verify
+orchestrator mcp doctor
+orchestrator cursor verify
 ```
+
+### MCP / Cursor
+
+| Sintoma | Ação |
+|---|---|
+| Tools MCP ausentes no chat | `orchestrator cursor configure` e reiniciar Cursor |
+| `mcp` Python ausente | `pip install -e runtime/` (inclui `mcp>=1.6,<2`) |
+| Runtime unavailable | `orchestrator install` no projeto; checar `.orchestrator/` |
+| HTTP bind recusado | use `127.0.0.1` ou `ORCHESTRATOR_MCP_ALLOW_REMOTE=1` |
 
 ```bat
 bootstrap-agents.bat status -ProjectPath C:\dev\projeto

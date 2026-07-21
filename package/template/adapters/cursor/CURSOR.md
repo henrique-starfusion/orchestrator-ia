@@ -4,13 +4,16 @@
 #
 # Cursor is an IDE **client** of the runtime — not a CLI worker.
 
-## Runtime (preferred)
+## Runtime + MCP (preferred)
 
 ```bash
+orchestrator cursor configure
+orchestrator mcp serve --transport stdio
 orchestrator run --prompt "<atividade>"
 orchestrator task status <id>
-orchestrator task list
 ```
+
+No chat, use MCP tools `orchestrator_run` / `orchestrator_delegate` (any model can be front controller).
 
 Do **not** select Cursor as planner/executor/tester/validator.
 Do **not** rely on `Task model=` for the main multi-agent workflow.

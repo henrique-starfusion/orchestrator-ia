@@ -1,7 +1,7 @@
 {
   "name": "@starfusion/orchestrator",
-  "version": "0.2.0",
-  "description": "Instalador e runtime persistente do Orquestrador Multiagente (StarFusion). Fonte canônica .orchestrator/",
+  "version": "0.3.0",
+  "description": "Instalador, runtime e MCP Cursor do Orquestrador Multiagente (StarFusion). Fonte canônica .orchestrator/",
   "license": "UNLICENSED",
   "author": "Henrique Rodrigues <StarFusion Consultoria, Tecnologia e Soluções em Informática LTDA.>",
   "homepage": "https://github.com/henrique-starfusion/bootstrap-agents",

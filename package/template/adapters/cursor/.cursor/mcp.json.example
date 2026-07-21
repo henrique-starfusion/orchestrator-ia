@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "multiagent-orchestrator": {
+      "command": "orchestrator",
+      "args": ["mcp", "serve", "--transport", "stdio"]
+    }
+  }
+}

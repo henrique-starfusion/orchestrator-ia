@@ -1,14 +1,14 @@
-# Orquestrador Multiagente — funcionamento completo
+# Orquestrador Multiagente
 
-Documento de referência do produto **`@starfusion/orchestrator`** (pacote `bootstrap-agents`, versão **0.2.0**).
+Documento de referência do produto **`@starfusion/orchestrator`** (pacote `bootstrap-agents`, versão **0.3.0**).
 
 Organização: **StarFusion** · Desenvolvedor: **Henrique Rodrigues**
 
 Este arquivo descreve **o que o orquestrador faz**, **como faz**, e **todas as skills, MCPs, plugins e ferramentas** envolvidas.
 
-**Legado vs atual:** até 0.1.x o ciclo multiagente era principalmente *soft* (skills/rules). Em **0.2.0** o **runtime persistente** implementa o ciclo em código (SQLite + gates). Skills continuam orientando agentes IDE.
+**Legado vs atual:** até 0.1.x o ciclo era *soft* (skills). Em **0.2.0** chegou o runtime SQLite. Em **0.3.0** o chat do Cursor integra-se via MCP (`multiagent-orchestrator`) como front controller.
 
-**Índice:** [1 O que é](#1-o-que-é) · [Runtime](runtime-architecture.md) · [Task lifecycle](task-lifecycle.md) · [Cursor](cursor-integration.md) · [Docs policy](documentation-policy.md)
+**Índice:** [1 O que é](#1-o-que-é) · [Runtime](runtime-architecture.md) · [MCP](mcp-integration.md) · [Cursor](cursor-front-controller.md) · [Docs policy](documentation-policy.md)
 
 ---
 

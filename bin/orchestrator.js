@@ -29,8 +29,12 @@ Runtime (persistente):
   orchestrator run --prompt "..."
   orchestrator task create|run|status|list|cancel|resume|logs|artifacts
 
+MCP / Cursor (front controller):
+  orchestrator mcp serve [--transport stdio|http]
+  orchestrator cursor configure|verify|print-config
+
 Exemplos:
-  orchestrator install --skip-global-tools
+  orchestrator cursor configure
   orchestrator run --prompt "Crie modulo soma com testes e docs"
   orchestrator task status <id>
 `.trim();
@@ -75,7 +79,7 @@ function parseArgs(argv) {
   const known = new Set([
     'init', 'i', 'install', 'verify', 'update', 'upgrade', 'repair', 'uninstall',
     'status', 'analyze', 'skills', 'global-tools', 'route', 'dispatch',
-    'run', 'task', 'tools',
+    'run', 'task', 'tools', 'mcp', 'cursor',
   ]);
 
   if (known.has(first) || !first.startsWith('-')) {
@@ -84,7 +88,8 @@ function parseArgs(argv) {
   }
 
   // Runtime: preserve remaining args almost as-is
-  if (out.command === 'run' || out.command === 'task' || out.command === 'tools') {
+  if (out.command === 'run' || out.command === 'task' || out.command === 'tools'
+      || out.command === 'mcp' || out.command === 'cursor') {
     out.runtimeArgs = args;
     // still extract --project for logging
     for (let i = 0; i < args.length; i += 1) {
@@ -123,6 +128,8 @@ function parseArgs(argv) {
       '-Prompt': '-Prompt',
       '--client': '-Client',
       '-Client': '-Client',
+      '--cursor-transport': '-CursorTransport',
+      '--cursor-mcp-url': '-CursorMcpUrl',
     };
 
     if (valueFlags[a]) {
@@ -162,6 +169,9 @@ function parseArgs(argv) {
       '--global-tools': '-InstallGlobalTools',
       '--install-global-tools': '-InstallGlobalTools',
       '--configure-mcps': '-ConfigureMcps',
+      '--configure-cursor': '-ConfigureCursor',
+      '--configure-cursor-mcp': '-ConfigureCursorMcp',
+      '--skip-cursor': '-SkipCursor',
       '--run-smoke-test': '-RunSmokeTest',
       '--run-project-tests': '-RunProjectTests',
       '--legacy-cleanup': '-LegacyCleanup',
@@ -230,6 +240,10 @@ function runRuntime(parsed) {
     args.push('run', ...parsed.runtimeArgs);
   } else if (parsed.command === 'task') {
     args.push('task', ...parsed.runtimeArgs);
+  } else if (parsed.command === 'mcp') {
+    args.push('mcp', ...parsed.runtimeArgs);
+  } else if (parsed.command === 'cursor') {
+    args.push('cursor', ...parsed.runtimeArgs);
   } else if (parsed.command === 'tools') {
     // tools install <id> → still PowerShell global-tools for now unless id given
     console.error('[INFO] Use: orchestrator global-tools   ou   orchestrator install --init-tools');
@@ -308,7 +322,13 @@ function main() {
     process.exit(0);
   }
 
-  if (isRuntimeCommand(parsed.command) || parsed.command === 'run' || parsed.command === 'task') {
+  if (
+    isRuntimeCommand(parsed.command)
+    || parsed.command === 'run'
+    || parsed.command === 'task'
+    || parsed.command === 'mcp'
+    || parsed.command === 'cursor'
+  ) {
     runRuntime(parsed);
     return;
   }

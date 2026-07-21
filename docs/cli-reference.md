@@ -12,6 +12,26 @@ A partir de **0.2.0**, a CLI tem duas camadas:
 |---|---|---|
 | Installer | `install`, `update`, `verify`, `repair`, `uninstall`, `status`, `route`, `dispatch`, `global-tools` | PowerShell |
 | Runtime | `run`, `task *` | Python (`orchestrator_runtime`) |
+| MCP / Cursor | `mcp serve\|status\|doctor`, `cursor configure\|verify\|print-config` | Python |
+
+---
+
+## MCP / Cursor
+
+```bash
+orchestrator mcp serve --transport stdio
+orchestrator mcp serve --transport http --host 127.0.0.1 --port 8765
+orchestrator mcp doctor
+orchestrator cursor configure
+orchestrator cursor verify
+orchestrator cursor print-config
+```
+
+Installer (opt-in):
+
+```bash
+orchestrator update --configure-cursor-mcp --cursor-transport stdio
+```
 
 ---
 
