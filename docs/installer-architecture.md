@@ -1,6 +1,6 @@
 # Arquitetura do instalador
 
-Documentação técnica do pacote **bootstrap-agents** / **@starfusion/orchestrator** (v0.2.0). Descreve o instalador e aponta para o runtime.
+Documentação técnica do pacote **bootstrap-agents** / **@starfusion/orchestrator** (v0.4.0). Descreve o instalador e aponta para o runtime.
 
 Runtime: [`runtime-architecture.md`](runtime-architecture.md) · Guia completo: [`orquestrador.md`](orquestrador.md)
 
@@ -92,6 +92,7 @@ Não há parsing de flags no BAT — use sintaxe PowerShell (`-ProjectPath`, `-D
 | `status` | Leitura local | Não |
 | `analyze` | Detect-Environment, Detect-Agents, Validate-Orchestrator | Parcial |
 | `skills` | Lê skills/registry.json | Não |
+| `legacy` | Detect/Backup/Migrate/Remove/Restore | Sim (conforme ação) |
 
 ### Pipeline do `install`
 
@@ -99,21 +100,25 @@ Não há parsing de flags no BAT — use sintaxe PowerShell (`-ProjectPath`, `-D
 1. Compare-SemVer (workspace vs pacote) → recusa se workspace > pacote
 2. Detect-Environment.ps1          (preflight)
 3. New-InstallationLock            (runtime/install.lock)
-4. Migrate-LegacyClaude.ps1        (se .claude/VERSION e sem .orchestrator/VERSION)
-5. Copy-TemplateTree               (package/template/.orchestrator → projeto)
-6. Apply-Manifest                  (modos managed/merge/generated)
-7. Sync-WorkspaceVersion           (se VERSION ausente)
-8. Detect-Agents.ps1
-9. Generate-Adapters.ps1
-10. Install-Tools.ps1               (salvo -SkipTools)
-11. Configure-Mcps.ps1              (se -ConfigureMcps)
-12. Validate-Orchestrator.ps1
-13. Validate-Hooks.ps1
-14. Update-Agents.ps1               (se -UpdateAgents)
-15. Probe-Agents.ps1                (skip por padrão; -RunSmokeTest ativa)
-16. Write-InstallationReport.ps1
-17. Remove-InstallationLock         (finally)
+4. Legacy cleanup (pre): detect → backup → migrate   (salvo -SkipLegacyCleanup)
+5. Migrate-LegacyClaude.ps1        (wrapper compat, se necessário)
+6. Copy-TemplateTree               (package/template/.orchestrator → projeto)
+7. Apply-Manifest                  (modos managed/merge/generated)
+8. Sync-WorkspaceVersion           (se VERSION ausente)
+9. Detect-Agents.ps1
+10. Generate-Adapters.ps1
+11. Install-Tools.ps1               (salvo -SkipTools)
+12. Configure-Mcps.ps1              (se -ConfigureMcps)
+13. Validate-Orchestrator.ps1
+14. Validate-Hooks.ps1
+15. Legacy cleanup (pos): remove safe → validate
+16. Update-Agents.ps1               (se -UpdateAgents)
+17. Probe-Agents.ps1                (skip por padrão; -RunSmokeTest ativa)
+18. Write-InstallationReport.ps1    (inclui seção Legacy cleanup)
+19. Remove-InstallationLock         (finally)
 ```
+
+Detalhes: [`legacy-cleanup.md`](legacy-cleanup.md).
 
 ---
 

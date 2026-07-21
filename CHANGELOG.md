@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.0 — 2026-07-21
+
+### Added
+
+- Limpeza automática de configurações legadas no `install` / `update` (modo `safe` por padrão)
+- Scripts: `Detect|Backup|Migrate|Remove|Validate-LegacyConfigurations`, `Invoke-LegacyCleanupPipeline`, `Restore-LegacyBackup`
+- Flags: `--skip-legacy-cleanup`, `--legacy-cleanup-mode safe|aggressive|report-only`, `--keep-legacy-backup`
+- Comandos: `orchestrator legacy scan|cleanup|status|restore`
+- Relatórios: `legacy-cleanup-report.md`, inventário, state em `runtime/legacy-cleanup-state.json`
+- Migration `0.3.1-to-0.4.0`
+- Testes de detecção, backup, safe/aggressive/report-only, restore, idempotência e preservação
+
+### Changed
+
+- `Migrate-LegacyClaude.ps1` virou wrapper do pipeline genérico
+- CLI Node prefere `python` a `py` no Windows (evita builds free-threaded quebrados)
+
 ## 0.3.1 — 2026-07-21
 
 ### Removed / archived

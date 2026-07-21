@@ -24,6 +24,7 @@ Installer:
   orchestrator init|update|verify|repair|uninstall|status|analyze
   orchestrator global-tools          # opt-in: MCPs/plugins/skills no perfil
   orchestrator route|dispatch        # roteamento / despacho unico
+  orchestrator legacy scan|cleanup|status|restore
 
 Runtime (persistente):
   orchestrator run --prompt "..."
@@ -34,9 +35,10 @@ MCP / Cursor (front controller):
   orchestrator cursor configure|verify|print-config
 
 Exemplos:
+  orchestrator init
+  orchestrator legacy cleanup --legacy-cleanup-mode safe
   orchestrator cursor configure
   orchestrator run --prompt "Crie modulo soma com testes e docs"
-  orchestrator task status <id>
 `.trim();
   console.log(help);
 }
@@ -78,13 +80,19 @@ function parseArgs(argv) {
 
   const known = new Set([
     'init', 'i', 'install', 'verify', 'update', 'upgrade', 'repair', 'uninstall',
-    'status', 'analyze', 'skills', 'global-tools', 'route', 'dispatch',
+    'status', 'analyze', 'skills', 'global-tools', 'route', 'dispatch', 'legacy',
     'run', 'task', 'tools', 'mcp', 'cursor',
   ]);
 
   if (known.has(first) || !first.startsWith('-')) {
     out.command = mapCommand(first);
     args.shift();
+  }
+
+  // legacy <scan|cleanup|status|restore>
+  if (out.command === 'legacy' && args.length > 0 && !args[0].startsWith('-')) {
+    const action = args.shift();
+    out.passthrough.push('-LegacyAction', action);
   }
 
   // Runtime: preserve remaining args almost as-is
@@ -130,6 +138,9 @@ function parseArgs(argv) {
       '-Client': '-Client',
       '--cursor-transport': '-CursorTransport',
       '--cursor-mcp-url': '-CursorMcpUrl',
+      '--legacy-cleanup-mode': '-LegacyCleanupMode',
+      '--backup': '-LegacyBackupId',
+      '--legacy-backup': '-LegacyBackupId',
     };
 
     if (valueFlags[a]) {
@@ -175,6 +186,8 @@ function parseArgs(argv) {
       '--run-smoke-test': '-RunSmokeTest',
       '--run-project-tests': '-RunProjectTests',
       '--legacy-cleanup': '-LegacyCleanup',
+      '--skip-legacy-cleanup': '-SkipLegacyCleanup',
+      '--keep-legacy-backup': '-KeepLegacyBackup',
       '--verbose': '-Verbose',
       '--json': '-Json',
       '--print-only': '-PrintOnly',
@@ -212,8 +225,10 @@ function findPowerShell() {
 }
 
 function findPython() {
+  // Prefer `python`/`python3` before Windows `py`: the launcher may default to a
+  // free-threaded build (e.g. 3.14t) that breaks wheels like pydantic_core.
   const candidates = process.platform === 'win32'
-    ? ['py', 'python', 'python3']
+    ? ['python', 'python3', 'py']
     : ['python3', 'python'];
   for (const name of candidates) {
     const args = name === 'py' ? ['-3', '--version'] : ['--version'];

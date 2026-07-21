@@ -64,6 +64,12 @@ if ($lim) {
     $limitations = @($lim)
 }
 
+$legacySummary = 'n/a'
+$legacy = Get-ReportValue -Source $data -Name 'legacy'
+if ($legacy) {
+    $legacySummary = ($legacy | ConvertTo-Json -Depth 6 -Compress)
+}
+
 $lines = @(
     '# Installation Report',
     '',
@@ -88,6 +94,12 @@ $lines = @(
     '',
     "```json",
     $toolsSummary,
+    '```',
+    '',
+    '## Legacy cleanup',
+    '',
+    '```json',
+    $legacySummary,
     '```',
     '',
     '## Limitations',

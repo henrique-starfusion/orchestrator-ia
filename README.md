@@ -7,7 +7,7 @@ Projeto desenvolvido e mantido pela **StarFusion**.
 
 Pacote portátil para instalar, validar e manter um **ambiente multiagente genérico** e um **runtime persistente** em qualquer repositório. O orquestrador não pertence a uma aplicação específica: projetos-alvo são workspaces de execução.
 
-**Versão atual:** 0.3.0 — ver [`CHANGELOG.md`](CHANGELOG.md).
+**Versão atual:** 0.4.0 — ver [`CHANGELOG.md`](CHANGELOG.md).
 
 ---
 
@@ -266,7 +266,7 @@ Parâmetros PowerShell aceitos via BAT (encaminhamento direto):
 | `-ConfigureMcps` | Atualiza `.orchestrator/mcp/registry.json` (Context7 desabilitado) |
 | `-RunSmokeTest` | Executa probes de agentes (`--help`, somente leitura) |
 | `-SkipAgentProbes` | Pula probes (padrão no install sem smoke test) |
-| `-LegacyCleanup` | **Reservado** — registrado no relatório; limpeza opt-in futura |
+| Limpeza de legado | **Padrão `safe`** em install/update — ver [`docs/legacy-cleanup.md`](docs/legacy-cleanup.md) |
 | `-Force` | Sobrescreve arquivos gerenciados / força migração e reparo |
 | `-InstallMissingAgents` | **Reservado** — não implementado |
 | `-RunProjectTests` | **Reservado** — runner genérico não incluído |

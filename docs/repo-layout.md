@@ -48,6 +48,7 @@ Documentação completa: [`orquestrador.md`](orquestrador.md) · [`runtime-archi
 | `runtime/tests/` | Testes do runtime (pytest) |
 | `docs/` | Documentação do produto |
 | `docs/legacy/` | Material deprecado (não usar no fluxo atual) |
+| `docs/legacy-cleanup.md` | Limpeza automática de legado no install/update |
 | `.cursor/rules/` | Regras Cursor versionadas deste pacote |
 
 ## Gerado no workspace (gitignored)

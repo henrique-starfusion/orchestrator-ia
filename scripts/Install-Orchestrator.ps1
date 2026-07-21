@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('init', 'install', 'verify', 'update', 'upgrade', 'repair', 'uninstall', 'status', 'analyze', 'skills', 'global-tools', 'route', 'dispatch')]
+    [ValidateSet('init', 'install', 'verify', 'update', 'upgrade', 'repair', 'uninstall', 'status', 'analyze', 'skills', 'global-tools', 'route', 'dispatch', 'legacy')]
     [string]$Command = 'install',
 
     [Alias('Project')]
@@ -36,6 +36,13 @@ param(
     [switch]$RunSmokeTest,
     [switch]$RunProjectTests,
     [switch]$LegacyCleanup,
+    [switch]$SkipLegacyCleanup,
+    [ValidateSet('safe', 'aggressive', 'report-only')]
+    [string]$LegacyCleanupMode = 'safe',
+    [switch]$KeepLegacyBackup,
+    [string]$LegacyBackupId,
+    [ValidateSet('scan', 'cleanup', 'status', 'restore')]
+    [string]$LegacyAction = 'scan',
     [switch]$Force,
     [switch]$Json,
     [switch]$PrintOnly
@@ -157,6 +164,64 @@ try {
             exit $LASTEXITCODE
         }
 
+        'legacy' {
+            Write-Host ('[INFO] Modo: legacy ({0})' -f $LegacyAction)
+            switch ($LegacyAction) {
+                'scan' {
+                    $invPath = Join-Path (Get-OrchestratorRoot -ProjectPath $projectRoot) 'runtime\reports\legacy-inventory.json'
+                    Ensure-Directory -Path (Split-Path -Parent $invPath) | Out-Null
+                    $scanArgs = @{ ProjectPath = $projectRoot; OutputPath = $invPath }
+                    if ($Json) { $scanArgs.Json = $true }
+                    & (Join-Path $PSScriptRoot 'Detect-LegacyConfigurations.ps1') @scanArgs
+                    exit $LASTEXITCODE
+                }
+                'status' {
+                    $state = $null
+                    $statePath = Join-Path (Get-OrchestratorRoot -ProjectPath $projectRoot) 'runtime\legacy-cleanup-state.json'
+                    if (Test-Path -LiteralPath $statePath) {
+                        Get-Content -LiteralPath $statePath -Raw -Encoding UTF8 | Write-Output
+                    }
+                    else {
+                        Write-Host '[INFO] Nenhum legacy-cleanup-state.json ainda.'
+                    }
+                    $reportPath = Join-Path (Get-OrchestratorRoot -ProjectPath $projectRoot) 'runtime\reports\legacy-cleanup-report.md'
+                    if (Test-Path -LiteralPath $reportPath) {
+                        Write-Host ('[INFO] Relatorio: {0}' -f $reportPath)
+                    }
+                    exit 0
+                }
+                'restore' {
+                    if ([string]::IsNullOrWhiteSpace($LegacyBackupId)) {
+                        Write-Host '[ERRO] legacy restore requer -LegacyBackupId (ou --backup).'
+                        exit 2
+                    }
+                    $restoreArgs = @{
+                        ProjectPath = $projectRoot
+                        BackupId    = $LegacyBackupId
+                    }
+                    if ($Force) { $restoreArgs.Force = $true }
+                    if ($DryRun) { $restoreArgs.DryRun = $true }
+                    & (Join-Path $PSScriptRoot 'Restore-LegacyBackup.ps1') @restoreArgs
+                    exit $LASTEXITCODE
+                }
+                'cleanup' {
+                    $pipeArgs = @{
+                        ProjectPath        = $projectRoot
+                        PackageRoot        = $packageRootResolved
+                        Mode               = $LegacyCleanupMode
+                        InstallValidated   = $true
+                        AdaptersValidated  = $true
+                    }
+                    if ($SkipLegacyCleanup) { $pipeArgs.SkipLegacyCleanup = $true }
+                    if ($KeepLegacyBackup) { $pipeArgs.KeepLegacyBackup = $true }
+                    if ($Force) { $pipeArgs.Force = $true }
+                    if ($DryRun) { $pipeArgs.DryRun = $true }
+                    & (Join-Path $PSScriptRoot 'Invoke-LegacyCleanupPipeline.ps1') @pipeArgs
+                    exit $LASTEXITCODE
+                }
+            }
+        }
+
         'verify' {
             Write-Host '[INFO] Modo: verify'
             $code = Invoke-ChildScript -Name 'Detect-Environment.ps1' -Arguments @{
@@ -211,6 +276,20 @@ try {
             & (Join-Path $PSScriptRoot 'Update-Orchestrator.ps1') @updateParams
             $updateExit = $LASTEXITCODE
             if ($updateExit -ne 0) { exit $updateExit }
+
+            # Legacy: detectar/backup/migrar antes do refresh final de adapters
+            $legacyPipeEarly = @{
+                ProjectPath = $projectRoot
+                PackageRoot = $packageRootResolved
+                Mode        = $LegacyCleanupMode
+                SkipRemove  = $true
+            }
+            if ($SkipLegacyCleanup) { $legacyPipeEarly.SkipLegacyCleanup = $true }
+            if ($KeepLegacyBackup) { $legacyPipeEarly.KeepLegacyBackup = $true }
+            if ($Force) { $legacyPipeEarly.Force = $true }
+            if ($DryRun) { $legacyPipeEarly.DryRun = $true }
+            & (Join-Path $PSScriptRoot 'Invoke-LegacyCleanupPipeline.ps1') @legacyPipeEarly
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
             # Refresh de deteccao/adaptadores apos sync estrutural
             Invoke-ChildScript -Name 'Detect-Agents.ps1' -Arguments @{ ProjectPath = $projectRoot } | Out-Null
@@ -273,11 +352,33 @@ try {
             }
             if ($code -ne 0) { exit $code }
 
+            # Legacy: remocao segura apos install/adapters validos
+            if (-not $SkipLegacyCleanup -and $LegacyCleanupMode -ne 'report-only') {
+                Write-Host '[ETAPA] Legacy cleanup (pos-validacao / remocao)'
+                $invPath = Join-Path (Get-OrchestratorRoot -ProjectPath $projectRoot) 'runtime\reports\legacy-inventory.json'
+                $removeArgs = @{
+                    ProjectPath        = $projectRoot
+                    InventoryPath      = $invPath
+                    Mode               = $LegacyCleanupMode
+                    BackupValidated    = $true
+                    MigrationCompleted = $true
+                    InstallValidated   = $true
+                    AdaptersValidated  = $true
+                }
+                if ($Force) { $removeArgs.Force = $true }
+                if ($DryRun) { $removeArgs.DryRun = $true }
+                & (Join-Path $PSScriptRoot 'Remove-LegacyConfigurations.ps1') @removeArgs
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+                & (Join-Path $PSScriptRoot 'Validate-LegacyCleanup.ps1') -ProjectPath $projectRoot -InventoryPath $invPath -Mode $LegacyCleanupMode
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            }
+
             $reportData = @{
                 agents      = @()
                 adapters    = @()
                 tools       = @()
                 limitations = @()
+                legacy      = @{}
             }
             $detectedPath = Join-Path (Get-OrchestratorRoot -ProjectPath $projectRoot) 'agents\detected.json'
             if (Test-Path -LiteralPath $detectedPath) {
@@ -285,6 +386,10 @@ try {
                 if ($detectedObj.PSObject.Properties['agents']) {
                     $reportData.agents = @($detectedObj.agents)
                 }
+            }
+            $legacyReportJson = Join-Path (Get-OrchestratorRoot -ProjectPath $projectRoot) 'runtime\reports\legacy-cleanup-report.json'
+            if (Test-Path -LiteralPath $legacyReportJson) {
+                $reportData.legacy = Get-JsonFileContent -Path $legacyReportJson
             }
 
             if (-not $SkipCursor -and ($ConfigureCursor -or $ConfigureCursorMcp)) {
@@ -421,10 +526,33 @@ try {
         $lockCreated = $true
     }
 
-    $legacyVersion = Join-Path $projectRoot '.claude\VERSION'
     $orchestratorVersion = Join-Path (Get-OrchestratorRoot -ProjectPath $projectRoot) 'VERSION'
+
+    # Garante raiz .orchestrator para backups/relatorios de legado antes do template
+    if (-not $DryRun) {
+        Ensure-Directory -Path (Get-OrchestratorRoot -ProjectPath $projectRoot) | Out-Null
+        Ensure-Directory -Path (Join-Path (Get-OrchestratorRoot -ProjectPath $projectRoot) 'runtime\reports') | Out-Null
+    }
+
+    # Pipeline legado (detect/backup/migrate); remocao ocorre apos validacao
+    Write-Host '[ETAPA] Legacy cleanup (pre-install)'
+    $legacyPipeEarly = @{
+        ProjectPath = $projectRoot
+        PackageRoot = $packageRootResolved
+        Mode        = $LegacyCleanupMode
+        SkipRemove  = $true
+    }
+    if ($SkipLegacyCleanup) { $legacyPipeEarly.SkipLegacyCleanup = $true }
+    if ($KeepLegacyBackup) { $legacyPipeEarly.KeepLegacyBackup = $true }
+    if ($Force) { $legacyPipeEarly.Force = $true }
+    if ($DryRun) { $legacyPipeEarly.DryRun = $true }
+    & (Join-Path $PSScriptRoot 'Invoke-LegacyCleanupPipeline.ps1') @legacyPipeEarly
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    # Compat: wrapper Claude se .claude/VERSION e ainda sem VERSION canônica
+    $legacyVersion = Join-Path $projectRoot '.claude\VERSION'
     if ((Test-Path -LiteralPath $legacyVersion) -and -not (Test-Path -LiteralPath $orchestratorVersion)) {
-        Write-Host '[ETAPA] Migracao legada .claude -> .orchestrator'
+        Write-Host '[ETAPA] Migracao legada .claude (wrapper)'
         $migrationArgs = @{ ProjectPath = $projectRoot }
         if ($Force) { $migrationArgs.Force = $true }
         if ($DryRun) { $migrationArgs.DryRun = $true }
@@ -505,6 +633,61 @@ try {
     $code = Invoke-ChildScript -Name 'Validate-Hooks.ps1' -Arguments @{ ProjectPath = $projectRoot }
     if ($code -ne 0) { exit $code }
 
+    # Remocao segura de legado apos install + adapters validos
+    if (-not $SkipLegacyCleanup -and $LegacyCleanupMode -ne 'report-only') {
+        Write-Host '[ETAPA] Legacy cleanup (pos-validacao / remocao)'
+        $invPath = Join-Path (Get-OrchestratorRoot -ProjectPath $projectRoot) 'runtime\reports\legacy-inventory.json'
+        $removeArgs = @{
+            ProjectPath         = $projectRoot
+            InventoryPath       = $invPath
+            Mode                = $LegacyCleanupMode
+            BackupValidated     = $true
+            MigrationCompleted  = $true
+            InstallValidated    = $true
+            AdaptersValidated   = $true
+        }
+        if ($Force) { $removeArgs.Force = $true }
+        if ($DryRun) { $removeArgs.DryRun = $true }
+        & (Join-Path $PSScriptRoot 'Remove-LegacyConfigurations.ps1') @removeArgs
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        & (Join-Path $PSScriptRoot 'Validate-LegacyCleanup.ps1') -ProjectPath $projectRoot -InventoryPath $invPath -Mode $LegacyCleanupMode
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+        # Atualiza relatorio final com remocoes efetivas
+        $removedPath = Join-Path (Get-OrchestratorRoot -ProjectPath $projectRoot) 'runtime\reports\legacy-removed.json'
+        $reportJson = Join-Path (Get-OrchestratorRoot -ProjectPath $projectRoot) 'runtime\reports\legacy-cleanup-report.json'
+        if ((Test-Path -LiteralPath $removedPath) -and (Test-Path -LiteralPath $reportJson)) {
+            $rep = Get-JsonFileContent -Path $reportJson
+            $rem = Get-JsonFileContent -Path $removedPath
+            $repHash = @{
+                mode           = $LegacyCleanupMode
+                skipped        = $false
+                detected       = $(if ($rep.PSObject.Properties['detected']) { $rep.detected } else { 0 })
+                migrated       = $(if ($rep.PSObject.Properties['migrated']) { @($rep.migrated) } else { @() })
+                removed        = $(if ($rem.PSObject.Properties['removed']) { @($rem.removed) } else { @() })
+                preserved      = $(if ($rep.PSObject.Properties['preserved']) { @($rep.preserved) } else { @() })
+                unknown        = $(if ($rep.PSObject.Properties['unknown']) { @($rep.unknown) } else { @() })
+                backup         = $(if ($rep.PSObject.Properties['backup']) { $rep.backup } else { $null })
+                validation_ok  = $true
+                manual_actions = @()
+            }
+            Set-Content -LiteralPath $reportJson -Value ($repHash | ConvertTo-Json -Depth 6) -Encoding UTF8
+            $md = @(
+                '# Legacy cleanup report',
+                '',
+                ("**Generated:** {0}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')),
+                ("**Mode:** {0}" -f $LegacyCleanupMode),
+                ("**Detected:** {0}" -f $repHash.detected),
+                ("**Migrated:** {0}" -f ($repHash.migrated -join ', ')),
+                ("**Removed:** {0}" -f ($repHash.removed -join ', ')),
+                ("**Preserved:** {0}" -f ($repHash.preserved -join ', ')),
+                ("**Backup:** {0}" -f $repHash.backup),
+                '**Validation:** True'
+            )
+            Set-Content -LiteralPath (Join-Path (Get-OrchestratorRoot -ProjectPath $projectRoot) 'runtime\reports\legacy-cleanup-report.md') -Value ($md -join [Environment]::NewLine) -Encoding UTF8
+        }
+    }
+
     if ($UpdateAgents) {
         $updateArgs = @{
             ProjectPath  = $projectRoot
@@ -541,6 +724,7 @@ try {
         adapters    = @()
         tools       = @()
         limitations = @()
+        legacy      = @{}
     }
 
     $detectedPath = Join-Path (Get-OrchestratorRoot -ProjectPath $projectRoot) 'agents\detected.json'
@@ -557,7 +741,17 @@ try {
     }
 
     if ($LegacyCleanup) {
-        $reportData.limitations += 'LegacyCleanup solicitado, mas limpeza legada opt-in ainda nao implementada neste instalador.'
+        # Flag legada: cleanup agora e default; manter compat sem limitation
+        Write-Host '[INFO] -LegacyCleanup e default desde 0.4.0 (use -SkipLegacyCleanup para pular).'
+    }
+
+    if ($SkipLegacyCleanup) {
+        $reportData.limitations += 'Legacy cleanup pulado (-SkipLegacyCleanup).'
+    }
+
+    $legacyReportJson = Join-Path (Get-OrchestratorRoot -ProjectPath $projectRoot) 'runtime\reports\legacy-cleanup-report.json'
+    if (Test-Path -LiteralPath $legacyReportJson) {
+        $reportData.legacy = Get-JsonFileContent -Path $legacyReportJson
     }
 
     if (-not $SkipCursor -and ($ConfigureCursor -or $ConfigureCursorMcp)) {

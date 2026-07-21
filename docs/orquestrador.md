@@ -1,12 +1,12 @@
 # Orquestrador Multiagente
 
-Documento de referência do produto **`@starfusion/orchestrator`** (pacote `bootstrap-agents`, versão **0.3.1**).
+Documento de referência do produto **`@starfusion/orchestrator`** (pacote `bootstrap-agents`, versão **0.4.0**).
 
 Organização: **StarFusion** · Desenvolvedor: **Henrique Rodrigues**
 
 Este arquivo descreve **o que o orquestrador faz**, **como faz**, e **todas as skills, MCPs, plugins e ferramentas** envolvidas.
 
-**Legado vs atual:** até 0.1.x o ciclo era *soft* (skills). Em **0.2.0** chegou o runtime SQLite. Em **0.3.0** o chat do Cursor integra-se via MCP (`multiagent-orchestrator`) como front controller. Em **0.3.1** limpeza de legado (prompts/specs arquivados; caveman e OpenWolf/Graphify opt-in).
+**Legado vs atual:** até 0.1.x o ciclo era *soft* (skills). Em **0.2.0** chegou o runtime SQLite. Em **0.3.0** o chat do Cursor integra-se via MCP. Em **0.4.0** o install/update limpa configurações legadas (modo `safe`) — ver [`legacy-cleanup.md`](legacy-cleanup.md).
 
 **Índice:** [1 O que é](#1-o-que-é) · [Runtime](runtime-architecture.md) · [MCP](mcp-integration.md) · [Cursor](cursor-front-controller.md) · [Docs policy](documentation-policy.md)
 

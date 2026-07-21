@@ -338,7 +338,10 @@ A execução é sempre acompanhada: a saída do agente filho é transmitida ao v
 
 | Parâmetro | Descrição |
 |---|---|
-| `-LegacyCleanup` | **Não implementado** — limitação registrada no relatório |
+| `-SkipLegacyCleanup` | Pula limpeza de legado (padrão: limpeza `safe` ativa) |
+| `-LegacyCleanupMode` | `safe` \| `aggressive` \| `report-only` |
+| `-KeepLegacyBackup` | Mantém backup de legado (sempre criado sob `.orchestrator/backups/`) |
+| `legacy scan\|cleanup\|status\|restore` | Comandos dedicados de legado |
 | `-RunProjectTests` | **Não implementado** — limitação registrada no relatório |
 
 ---

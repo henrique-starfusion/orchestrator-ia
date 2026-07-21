@@ -327,17 +327,16 @@ Veja [`legacy-migration.md`](legacy-migration.md).
 
 ---
 
-## Flags reservadas
+## Limpeza de legado e flags
 
-Estas flags **não executam ação** hoje — aparecem como limitação no relatório:
+Limpeza automática: [`legacy-cleanup.md`](legacy-cleanup.md).
 
-| Flag | Status |
+| Flag / comando | Status |
 |---|---|
-| `-LegacyCleanup` | Não implementado |
+| `--skip-legacy-cleanup` / `--legacy-cleanup-mode` | Implementado (0.4.0+) |
+| `orchestrator legacy restore --backup <id>` | Implementado |
 | `-InstallMissingAgents` | Não implementado |
 | `-RunProjectTests` | Não implementado |
-
-Não indica falha do install.
 
 ---
 
