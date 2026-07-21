@@ -295,7 +295,7 @@ orchestrator route --task-class docs --client claude --json
 orchestrator dispatch --task-class docs --client claude --prompt "Atualize o README"
 ```
 
-O despacho monta a linha de comando a partir do perfil declarativo `.orchestrator/agents/profiles/<client>.json` (subcomando não-interativo, flag de prompt, timeout); sem o perfil, o comando falha instruindo `orchestrator update`. `--dry-run` imprime a linha planejada sem executar — funciona mesmo com o CLI ausente do PATH. Perfis `verified: false` geram `[AVISO]`. Cliente `cursor` é `ide-hint`: imprime a instrução `Task model="<slug>"` em vez de executar.
+O despacho monta a linha de comando a partir do perfil declarativo `.orchestrator/agents/profiles/<client>.json` (subcomando não-interativo, flag de prompt, timeout); sem o perfil, o comando falha instruindo `orchestrator update`. `--dry-run` imprime a linha planejada sem executar — funciona mesmo com o CLI ausente do PATH. Perfis `verified: false` geram `[AVISO]`. Cliente `cursor` é `ide-client`: não executa CLI; orienta uso de `orchestrator run` / MCP (`dispatch --client cursor` está deprecado).
 
 A execução é sempre acompanhada: a saída do agente filho é transmitida ao vivo no console (`  > ` stdout, `  ! ` stderr), com heartbeat `[INFO]` a cada 30s. Ao atingir `timeout_default_s` do perfil o processo é finalizado e a saída parcial é preservada. Além de `result.txt` e `model-choice.json`, todo despacho grava `runtime/results/<stamp>-<task_class>-status.json` com `status` (`completed|failed|timeout`), `exit_code` e `duration_s` — registro durável para outras sessões verificarem falha. Falha imprime `[ERRO]` e retorna exit code ≠ 0; nunca rode dispatch em segundo plano sem acompanhar até o fim.
 

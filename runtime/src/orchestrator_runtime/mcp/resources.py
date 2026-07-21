@@ -6,7 +6,6 @@ import json
 from typing import Any
 
 from orchestrator_runtime.mcp.tools import OrchestratorMcpTools
-from orchestrator_runtime.agents.process import redact
 
 
 def _json(data: Any) -> str:

@@ -464,7 +464,7 @@ package/
 
 Se existir `.claude/VERSION` sem `.orchestrator/VERSION`, o `install` executa `Migrate-LegacyClaude.ps1` (importa memória/regras para `legacy-import/`). Veja [`docs/legacy-migration.md`](docs/legacy-migration.md).
 
-O prompt antigo está em [`docs/legacy/prompt_ambiente_multiagente.md`](docs/legacy/prompt_ambiente_multiagente.md) — **não use** para instalação.
+O prompt antigo está arquivado em [`docs/archive/prompts/`](docs/archive/prompts/) — **não use** para instalação.
 
 ---
 

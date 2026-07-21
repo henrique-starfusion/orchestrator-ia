@@ -86,7 +86,8 @@ try {
         $cursorOut = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $invokeScript `
             -ProjectPath $tempDir -TaskClass 'docs' -Client 'cursor' -Prompt 'PING' -DryRun 2>&1 | Out-String
         Assert-Test -Condition ($cursorOut -match 'orchestrator run' -or $cursorOut -match 'model=') -Message 'cursor ide-client nao imprimiu orientacao de runtime/model='
-        Assert-Test -Condition ($cursorOut -match 'DEPRECADO' -or $cursorOut -match 'nao e worker') -Message 'cursor ide-client deveria sinalizar deprecacao/nao-worker'    }
+        Assert-Test -Condition ($cursorOut -match 'DEPRECADO' -or $cursorOut -match 'nao e worker') -Message 'cursor ide-client deveria sinalizar deprecacao/nao-worker'
+    }
     finally {
         Remove-TestProjectDirectory -Path $tempDir
     }

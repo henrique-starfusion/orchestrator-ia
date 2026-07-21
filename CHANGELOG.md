@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.1 — 2026-07-21
+
+### Removed / archived
+
+- Prompt bootstrap legado movido para `docs/archive/prompts/`
+- Specs/planos Superpowers movidos para `docs/archive/superpowers/`
+- Stub morto `runtime/.../routing/registry.py` (não referenciado)
+
+### Changed
+
+- Caveman/documentação: opcional (não obrigatório); Cursor preferindo MCP a `Task`
+- Skill `economize-tokens` e rule `token-economy.mdc` alinhadas ao runtime
+- `.gitignore` ampliado (runtime DB, `.wolf/`, `.ai/`, caches, secrets)
+- Teste anti-legado `Test-NoLegacyArtifacts.ps1`
+
+### Preserved
+
+- `dispatch`, migrations, adapters, `Backup-Orchestrator.ps1` (utilitário manual)
+- OpenWolf/Graphify como opt-in
+
 ## 0.3.0 — 2026-07-21
 
 ### Added

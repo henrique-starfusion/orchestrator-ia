@@ -19,7 +19,7 @@ When spawning a child, set `ORCHESTRATOR_CHILD_AGENT=1` in its environment.
    `orchestrator route --task-class <class> --client <claude|codex|gemini|opencode|kimi|cursor|auto> --json`
    Returns `client`, `model`, `alias`, `model_flag`, `tier`.
 3. **Read the profile** `agents/profiles/<client>.json`:
-   - `kind: "ide-hint"` → no CLI; follow `hint` (Cursor: `Task model="<slug>"`, mandatory).
+   - `kind: "ide-client"` / `ide-hint` → sem CLI worker (Cursor: use MCP `orchestrator_run` / `orchestrator_delegate`; `Task model=` só como fallback legado).
    - `invoke.subcommand` → fixed non-interactive args.
    - `invoke.prompt_flag` → prompt flag; `null` means positional prompt.
    - `invoke.sandbox_flags` → NEVER apply unless the user explicitly asked.

@@ -8,7 +8,7 @@
 
 **Tech Stack:** PowerShell 5.1 (scripts + tests), JSON (profiles/schema/manifest), Markdown (skill + stubs).
 
-**Spec:** `docs/superpowers/specs/2026-07-20-call-agent-skill-profiles-design.md`
+**Spec:** `docs/archive/superpowers/specs/2026-07-20-call-agent-skill-profiles-design.md`
 
 ## Global Constraints
 

@@ -14,7 +14,13 @@
 /skills-lock.json
 /.agent/
 /.wolf/
+/.graphify/
+/.codegraph/
 /graphify-out/
+/.ai/
+/.ai-bootstrap/
+/.ai-backups/
+/.superpowers/
 
 # Vendor adapter files at project root (generated)
 /CLAUDE.md
@@ -26,8 +32,14 @@
 /OPENAI.md
 /AI.md
 
+# Secrets / env
+.env
+.env.*
+!.env.example
+
 # Logs and OS noise
 *.log
+logs/
 Thumbs.db
 Desktop.ini
 .DS_Store
@@ -40,18 +52,28 @@ Desktop.ini
 
 # Test leftovers
 orchestrator-tests-*/
+temporary/
 # Gerado localmente pelo OpenWolf (workspace)
 /.cursor/rules/openwolf.mdc
 
 # Playwright MCP session artifacts
 .playwright-mcp/
 
-# Python runtime
+# Python runtime / caches
 **/__pycache__/
 **/*.py[cod]
 runtime/.pytest_cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 *.egg-info/
 .venv/
+venv/
 *.db
-
-
+*.sqlite
+*.sqlite3
+coverage.xml
+htmlcov/
+dist/
+build/
+node_modules/

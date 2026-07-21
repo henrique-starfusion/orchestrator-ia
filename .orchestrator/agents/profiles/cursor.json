@@ -1,6 +1,10 @@
 {
   "id": "cursor",
-  "kind": "ide-hint",
-  "hint": "Sem CLI de despacho. No Cursor use Task com model=\"<slug>\" obrigatorio; obtenha o slug com: orchestrator route --task-class <classe> --client cursor --json",
-  "notes": "Task sem model= herda o modelo do pai (bug de uso conhecido). Slugs em config/models.json clients.cursor.models."
+  "kind": "ide-client",
+  "executable": false,
+  "worker_roles": [],
+  "supports_task_submission": true,
+  "supports_human_approval": true,
+  "hint": "Cursor e cliente do runtime, nao worker. Use: orchestrator run --prompt \"...\". Fallback legado Task model=\"<slug>\" via orchestrator route --client cursor. Nao selecione cursor como planner/executor/tester/validator.",
+  "notes": "dispatch --client cursor esta deprecado. Subagentes Task model= nao fazem parte do workflow principal do runtime."
 }

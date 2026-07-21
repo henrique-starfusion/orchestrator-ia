@@ -1,12 +1,12 @@
 # Orquestrador Multiagente
 
-Documento de referência do produto **`@starfusion/orchestrator`** (pacote `bootstrap-agents`, versão **0.3.0**).
+Documento de referência do produto **`@starfusion/orchestrator`** (pacote `bootstrap-agents`, versão **0.3.1**).
 
 Organização: **StarFusion** · Desenvolvedor: **Henrique Rodrigues**
 
 Este arquivo descreve **o que o orquestrador faz**, **como faz**, e **todas as skills, MCPs, plugins e ferramentas** envolvidas.
 
-**Legado vs atual:** até 0.1.x o ciclo era *soft* (skills). Em **0.2.0** chegou o runtime SQLite. Em **0.3.0** o chat do Cursor integra-se via MCP (`multiagent-orchestrator`) como front controller.
+**Legado vs atual:** até 0.1.x o ciclo era *soft* (skills). Em **0.2.0** chegou o runtime SQLite. Em **0.3.0** o chat do Cursor integra-se via MCP (`multiagent-orchestrator`) como front controller. Em **0.3.1** limpeza de legado (prompts/specs arquivados; caveman e OpenWolf/Graphify opt-in).
 
 **Índice:** [1 O que é](#1-o-que-é) · [Runtime](runtime-architecture.md) · [MCP](mcp-integration.md) · [Cursor](cursor-front-controller.md) · [Docs policy](documentation-policy.md)
 
@@ -21,7 +21,7 @@ Instalador e mantenedor de um **ambiente multiagente genérico** em qualquer rep
 1. Instalar de forma **determinística** (PowerShell + templates), sem depender de IA para montar pastas.
 2. Manter a estrutura **por versão** (`update` incremental).
 3. Configurar **ferramentas globais** (MCPs, plugins, skills, CLIs) no perfil do usuário, reutilizáveis em vários projetos.
-4. Orientar **roteamento de modelos** (custo × capacidade) e **economia de tokens** (caveman).
+4. Orientar **roteamento de modelos** (custo × capacidade) e **economia de tokens** (caveman opcional).
 5. Fornecer skills de orquestração (analisar → planejar → delegar → validar → aprender).
 
 ### Fluxo conceitual do ciclo multiagente
@@ -241,7 +241,7 @@ Registradas em `.orchestrator/skills/registry.json` e instaladas a partir do tem
 
 | Skill | O que faz |
 |---|---|
-| `economize-tokens` | Liga caveman + roteamento cost-aware em todo ciclo |
+| `economize-tokens` | Roteamento cost-aware; caveman opcional |
 | `orchestrate` | Coordena o pipeline multiagente |
 | `analyze-project` | Inspeciona estrutura e convenções do repo |
 | `analyze-task` | Decompõe o pedido e define `task_class` |
@@ -411,7 +411,7 @@ Declaram **como** chamar cada CLI (mecânica). Modelo por tarefa fica em `config
 | `opencode` | `cli` | sim | `opencode run --model <model> "…"` |
 | `gemini` | `cli` | não* | `gemini -m <model> -p "…"` |
 | `kimi` | `cli` | não* | `kimi …` (flags best-effort) |
-| `cursor` | `ide-hint` | — | sem CLI; hint para `Task model="<slug>"` |
+| `cursor` | `ide-client` | — | front controller via MCP; não é worker |
 
 \* `verified: false` = flags extraídas de docs, não testadas neste host.
 

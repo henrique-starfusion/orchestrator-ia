@@ -6,7 +6,7 @@ Guia para workspaces que ainda usam `.claude/` como fonte canônica e precisam a
 
 ## Contexto
 
-Versões anteriores do bootstrap e o prompt `docs/legacy/prompt_ambiente_multiagente.md` orientavam a criar infraestrutura em `.claude/`. A arquitetura atual define **`.orchestrator/` como única fonte canônica**; `.claude/` passa a ser apenas **adaptador fino** para Claude Code.
+Versões anteriores do bootstrap e o prompt arquivado em `docs/archive/prompts/prompt_ambiente_multiagente.md` orientavam a criar infraestrutura em `.claude/`. A arquitetura atual define **`.orchestrator/` como única fonte canônica**; `.claude/` passa a ser apenas **adaptador fino** para Claude Code.
 
 O instalador detecta legado automaticamente durante `init` / `install` — inclusive quando você usa o one-liner:
 
@@ -154,7 +154,7 @@ Limpeza manual: mova conteúdo útil para `.orchestrator/` ou para backup extern
 | Primeira instalação | Prompt manual | `bootstrap-agents.bat install` |
 | Memória | `.claude/memory/` | `.orchestrator/memory/` |
 | Skills | `.claude/skills/` | `.orchestrator/skills/` |
-| Prompt de bootstrap | `docs/legacy/prompt_ambiente_multiagente.md` | **Deprecado** |
+| Prompt de bootstrap | `docs/archive/prompts/prompt_ambiente_multiagente.md` | **Arquivado** |
 
 ---
 

@@ -60,4 +60,5 @@ Documentação completa: [`orquestrador.md`](orquestrador.md) · [`runtime-archi
 
 ## O que NÃO usar
 
-- `docs/legacy/prompt_ambiente_multiagente.md` — prompt antigo baseado em `.claude/`
+- `docs/archive/prompts/` — prompts bootstrap antigos (não executáveis)
+- `docs/archive/superpowers/` — specs/planos já incorporados
