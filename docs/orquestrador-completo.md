@@ -1,12 +1,14 @@
 # Orquestrador Multiagente — funcionamento completo
 
-Documento de referência do produto **`@starfusion/orchestrator`** (pacote `bootstrap-agents`, versão **0.1.0**).
+Documento de referência do produto **`@starfusion/orchestrator`** (pacote `bootstrap-agents`, versão **0.2.0**).
 
 Organização: **StarFusion** · Desenvolvedor: **Henrique Rodrigues**
 
 Este arquivo descreve **o que o orquestrador faz**, **como faz**, e **todas as skills, MCPs, plugins e ferramentas** envolvidas.
 
-**Índice:** [1 O que é](#1-o-que-é) · [2 Arquitetura](#2-arquitetura) · [3 Instalar](#3-como-instalar-e-atualizar) · [4 CLI](#4-comandos-da-cli) · [5 Pipeline](#5-pipeline-de-install--init) · [6 Layout](#6-layout-de-orchestrator-template) · [7 Skills](#7-skills-do-orquestrador-workspace) · [8 Tools projeto](#8-ferramentas-de-projeto-openwolf--graphify) · [9 Tools globais](#9-ferramentas-globais-perfil-do-usuário) · [10 MCP](#10-mcp-no-workspace-vs-global) · [11 Modelos](#11-roteamento-de-modelos-e-economia-de-tokens) · [12 Agentes/profiles](#12-detecção-de-agentes-adaptadores-e-profiles) · [13 Políticas](#13-políticas-e-validação) · [14 Scripts](#14-scripts-powershell-mapa) · [15 Soft/hard](#15-o-que-é-automático-vs-política-soft)
+**Legado vs atual:** até 0.1.x o ciclo multiagente era principalmente *soft* (skills/rules). Em **0.2.0** o **runtime persistente** implementa o ciclo em código (SQLite + gates). Skills continuam orientando agentes IDE.
+
+**Índice:** [1 O que é](#1-o-que-é) · [Runtime](runtime-architecture.md) · [Task lifecycle](task-lifecycle.md) · [Cursor](cursor-integration.md) · [Docs policy](documentation-policy.md)
 
 ---
 
@@ -138,7 +140,9 @@ npx --yes github:henrique-starfusion/bootstrap-agents#develop update
 | `skills` | Lista skills do registry do workspace |
 | `global-tools` | Só instala/configura no **perfil do usuário** |
 | `route` | Resolve `task_class` → modelo (`--client`, `--json`) |
-| `dispatch` | Despacha prompt ao CLI com modelo roteado + profile (`claude`, `codex`, `gemini`, `opencode`, `kimi`; `cursor` = hint IDE) |
+| `dispatch` | Despacho único CLI (legado; Cursor deprecado) |
+| `run` | **Runtime:** cria e executa tarefa completa |
+| `task *` | **Runtime:** create/run/status/list/cancel/resume/logs/artifacts |
 
 ### Flags importantes
 
@@ -499,27 +503,28 @@ Testes: `tests/Run-AllTests.ps1` (fixtures temporárias; usam `-SkipGlobalTools`
 
 ## 15. O que é automático vs política (soft)
 
-### Hard (código / instalador)
+### Hard (código)
 
+- Runtime + SQLite + state machine + gates (testes, validação, documentação)
+- Cursor não é worker
+- Global-tools / OpenWolf / Graphify opt-in
 - Install, update, verify, repair, uninstall, locks, SemVer
-- Template + manifest
-- Detect agents, adapters, tools, global-tools, MCP registry
 - `route` / `dispatch` com resolução de modelo
-- Validação estrutural e relatório
+- Validação estrutural e relatório do instalador
 
 ### Soft (agente deve obedecer)
 
-- Caveman na prosa
-- Sempre passar `model=` no Task do Cursor
-- Scores / correction-loop / validators de domínio
+- Skills como orientação quando o runtime não estiver disponível
+- Sempre passar `model=` no Task do Cursor **se** usar fallback legado
 - Não usar Fable/Opus para docs/trivial (policies + rules)
 
-### Reservado / ainda leve em v0.1
+### Reservado / ainda leve em v0.2
 
-- Migrations `.ps1` automáticas (pasta pronta; poucos/nenhum script)
-- `-InstallMissingAgents`, `-RunProjectTests`, `-LegacyCleanup`
-- Runtime completo de orquestração de tarefas (skills guiam; workers Docker / API REST no roadmap)
+- Workers Docker (interface preparada; não exigidos no MVP)
+- LocalLlmManager completo (hook existe; fallback Rules)
+- `orchestrator tools install <id>` granular (use `global-tools` / `--init-tools`)
 - Deep-merge JSON no mode `merge`
+- Smoke opt-in com CLIs reais (CI usa `--fake-agents`)
 
 ---
 
@@ -527,6 +532,11 @@ Testes: `tests/Run-AllTests.ps1` (fixtures temporárias; usam `-SkipGlobalTools`
 
 | Doc | Conteúdo |
 |---|---|
+| [`runtime-architecture.md`](runtime-architecture.md) | Runtime persistente |
+| [`task-lifecycle.md`](task-lifecycle.md) | Estados da tarefa |
+| [`agent-adapters.md`](agent-adapters.md) | Adapters CLI |
+| [`cursor-integration.md`](cursor-integration.md) | Cursor como cliente |
+| [`documentation-policy.md`](documentation-policy.md) | Gate documental |
 | [`../README.md`](../README.md) | Visão geral e instalação |
 | [`cli-reference.md`](cli-reference.md) | Referência de comandos/flags |
 | [`installer-architecture.md`](installer-architecture.md) | Arquitetura do instalador |
@@ -542,4 +552,4 @@ Testes: `tests/Run-AllTests.ps1` (fixtures temporárias; usam `-SkipGlobalTools`
 
 ## 17. Resumo em uma frase
 
-O orquestrador **instala e mantém** `.orchestrator/` + adaptadores, **configura** MCPs/plugins/skills/CLIs no perfil do usuário, **inicializa** OpenWolf/Graphify no projeto, e **define** (via config + skills + `route`/`dispatch`) qual modelo/agente usar — com economia de tokens — para o ciclo multiagente em qualquer repositório.
+O orquestrador **instala e mantém** `.orchestrator/` + adaptadores, **executa** o ciclo multiagente no runtime Python (SQLite + gates), **configura** (opt-in) MCPs/plugins/skills/CLIs no perfil do usuário, e **define** (via config + `route`/`dispatch`/runtime) qual modelo/agente usar — com evidências persistentes — em qualquer repositório.

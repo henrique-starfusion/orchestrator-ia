@@ -48,11 +48,15 @@ if (-not (Test-Path -LiteralPath $profilePath)) {
 }
 $profile = Get-JsonFileContent -Path $profilePath
 
-if ($profile.kind -eq 'ide-hint') {
-    Write-Host ("[INFO] Cliente {0}: sem CLI de despacho." -f $profile.id)
-    Write-Host ("       {0}" -f [string]$profile.hint)
+if ($profile.kind -eq 'ide-hint' -or $profile.kind -eq 'ide-client') {
+    Write-Host ("[AVISO] Cliente {0}: nao e worker do runtime." -f $profile.id)
+    if ($profile.PSObject.Properties['hint']) {
+        Write-Host ("       {0}" -f [string]$profile.hint)
+    }
+    Write-Host '[INFO] Use: orchestrator run --prompt "..."   ou   orchestrator task status <id>'
     Write-Host ("[OK] model-choice gravado: {0}" -f $choicePath)
-    exit 0
+    Write-Host '[DEPRECADO] dispatch --client cursor; prefira o runtime persistente.'
+    exit 2
 }
 
 if ($profile.PSObject.Properties['verified'] -and $profile.verified -ne $true) {

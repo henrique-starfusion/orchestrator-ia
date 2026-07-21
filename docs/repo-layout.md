@@ -35,15 +35,17 @@ Instalação via npm/GitHub deve apontar para `#develop` (ou tag de release em `
 | `package/manifest.json` | Arquivos gerenciados |
 | `package/checksums.json` | Integridade |
 | `package/migrations/` | Migrations de versão |
+| `runtime/` | Runtime Python multiagente (SQLite) |
 
-Documentação completa do produto: [`orquestrador-completo.md`](orquestrador-completo.md).
+Documentação completa: [`orquestrador-completo.md`](orquestrador-completo.md) · [`runtime-architecture.md`](runtime-architecture.md).
 
 ## Runtime do instalador
 
 | Pasta | Papel |
 |---|---|
 | `scripts/` | Lógica PowerShell (install/update/verify/…) |
-| `tests/` | Testes em fixtures temporárias |
+| `tests/` | Testes do instalador em fixtures temporárias |
+| `runtime/tests/` | Testes do runtime (pytest) |
 | `docs/` | Documentação do produto |
 | `docs/legacy/` | Material deprecado (não usar no fluxo atual) |
 | `.cursor/rules/` | Regras Cursor versionadas deste pacote |

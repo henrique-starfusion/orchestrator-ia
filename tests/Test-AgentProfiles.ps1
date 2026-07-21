@@ -31,9 +31,9 @@ try {
         Assert-Test -Condition ($null -ne $profile.PSObject.Properties['id']) -Message ("id ausente em {0}.json" -f $id)
         Assert-Test -Condition ($profile.id -eq $id) -Message ("id divergente em {0}.json" -f $id)
         Assert-Test -Condition ($null -ne $profile.PSObject.Properties['kind']) -Message ("kind ausente em {0}.json" -f $id)
-        Assert-Test -Condition ($profile.kind -in @('cli', 'ide-hint')) -Message ("kind invalido em {0}.json" -f $id)
+        Assert-Test -Condition ($profile.kind -in @('cli', 'ide-hint', 'ide-client')) -Message ("kind invalido em {0}.json" -f $id)
 
-        if ($profile.kind -eq 'ide-hint') {
+        if ($profile.kind -in @('ide-hint', 'ide-client')) {
             Assert-Test -Condition ($null -ne $profile.PSObject.Properties['hint'] -and -not [string]::IsNullOrWhiteSpace([string]$profile.hint)) -Message ("hint ausente em {0}.json" -f $id)
             continue
         }
@@ -82,11 +82,11 @@ try {
             }
         }
 
-        # cursor (ide-hint) continua so imprimindo instrucao
+        # cursor (ide-client): orienta runtime; nao executa CLI
         $cursorOut = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $invokeScript `
             -ProjectPath $tempDir -TaskClass 'docs' -Client 'cursor' -Prompt 'PING' -DryRun 2>&1 | Out-String
-        Assert-Test -Condition ($cursorOut -match 'model=') -Message 'cursor ide-hint nao imprimiu instrucao model='
-    }
+        Assert-Test -Condition ($cursorOut -match 'orchestrator run' -or $cursorOut -match 'model=') -Message 'cursor ide-client nao imprimiu orientacao de runtime/model='
+        Assert-Test -Condition ($cursorOut -match 'DEPRECADO' -or $cursorOut -match 'nao e worker') -Message 'cursor ide-client deveria sinalizar deprecacao/nao-worker'    }
     finally {
         Remove-TestProjectDirectory -Path $tempDir
     }

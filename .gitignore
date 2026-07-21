@@ -45,3 +45,13 @@ orchestrator-tests-*/
 
 # Playwright MCP session artifacts
 .playwright-mcp/
+
+# Python runtime
+**/__pycache__/
+**/*.py[cod]
+runtime/.pytest_cache/
+*.egg-info/
+.venv/
+*.db
+
+

@@ -1,12 +1,37 @@
 # Referência da CLI
 
-Três formas de entrada (mesma lógica):
+Três formas de entrada:
 
-1. **One-liner npm:** `npx @starfusion/orchestrator init` / `orchestrator init`
-2. **One-liner PowerShell:** `get.ps1` (via `gh api ... | iex` ou local)
-3. **Wrapper local:** `bootstrap-agents.bat` → `scripts/Install-Orchestrator.ps1`
+1. **npm:** `npx @starfusion/orchestrator` / `orchestrator` / `mao`
+2. **PowerShell:** `get.ps1`
+3. **Wrapper local:** `bootstrap-agents.bat`
 
-**Sintaxe PowerShell:** 5.1+. O BAT e o bin Node encaminham argumentos ao instalador.
+A partir de **0.2.0**, a CLI tem duas camadas:
+
+| Camada | Comandos | Backend |
+|---|---|---|
+| Installer | `install`, `update`, `verify`, `repair`, `uninstall`, `status`, `route`, `dispatch`, `global-tools` | PowerShell |
+| Runtime | `run`, `task *` | Python (`orchestrator_runtime`) |
+
+---
+
+## Runtime
+
+```bash
+orchestrator run --prompt "Crie modulo soma com testes e docs"
+orchestrator task create --prompt "..."
+orchestrator task run <id>
+orchestrator task status <id>
+orchestrator task list
+orchestrator task cancel <id>
+orchestrator task resume <id>
+orchestrator task logs <id>
+orchestrator task artifacts <id>
+```
+
+Opções comuns: `--project`, `--profile`, `--max-iterations`, `--timeout`, `--planner`, `--executor`, `--validator`, `--manager-provider`, `--fake-agents` (CI), `--json`, `--dry-run`.
+
+Requer Python 3.11+.
 
 ---
 

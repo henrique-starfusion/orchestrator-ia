@@ -25,6 +25,7 @@ param(
     [switch]$InitTools,
     [switch]$SkipToolInit,
     [switch]$SkipGlobalTools,
+    [switch]$InstallGlobalTools,
     [switch]$ConfigureMcps,
     [switch]$RunSmokeTest,
     [switch]$RunProjectTests,
@@ -215,16 +216,20 @@ try {
             if (-not $SkipTools) {
                 $toolsArgs = @{ ProjectPath = $projectRoot }
                 if ($RefreshTools) { $toolsArgs.RefreshTools = $true }
-                # update: inicializa tools por padrao (exceto -SkipToolInit)
-                $doInitTools = $true
+                # Nucleo primeiro: init de OpenWolf/Graphify so com -InitTools (opt-in)
+                $doInitTools = $false
+                if ($InitTools) { $doInitTools = $true }
                 if ($SkipToolInit) { $doInitTools = $false }
-                if ($PSBoundParameters.ContainsKey('InitTools')) { $doInitTools = $InitTools.IsPresent }
                 if ($doInitTools) { $toolsArgs.InitTools = $true }
                 if ($DryRun) { $toolsArgs.DryRun = $true }
                 Invoke-ChildScript -Name 'Install-Tools.ps1' -Arguments $toolsArgs | Out-Null
             }
 
-            if (-not $SkipGlobalTools) {
+            # Global tools opt-in: -InstallGlobalTools (ou comando global-tools)
+            $doGlobalTools = $false
+            if ($InstallGlobalTools) { $doGlobalTools = $true }
+            if ($SkipGlobalTools) { $doGlobalTools = $false }
+            if ($doGlobalTools) {
                 $gtArgs = @{
                     ProjectPath = $projectRoot
                     PackageRoot = $packageRootResolved
@@ -233,6 +238,14 @@ try {
                 if ($DryRun) { $gtArgs.DryRun = $true }
                 Invoke-ChildScript -Name 'Install-GlobalTools.ps1' -Arguments $gtArgs | Out-Null
 
+                $mcpArgs = @{
+                    ProjectPath   = $projectRoot
+                    ConfigureMcps = $true
+                }
+                if ($Force) { $mcpArgs.Force = $true }
+                Invoke-ChildScript -Name 'Configure-Mcps.ps1' -Arguments $mcpArgs | Out-Null
+            }
+            elseif ($ConfigureMcps) {
                 $mcpArgs = @{
                     ProjectPath   = $projectRoot
                     ConfigureMcps = $true
@@ -434,16 +447,19 @@ try {
     if (-not $SkipTools) {
         $toolsArgs = @{ ProjectPath = $projectRoot }
         if ($RefreshTools) { $toolsArgs.RefreshTools = $true }
-        # install/init: inicializa OpenWolf/Graphify por padrao
-        $doInitTools = $true
+        # Nucleo primeiro: init de OpenWolf/Graphify so com -InitTools (opt-in)
+        $doInitTools = $false
+        if ($InitTools) { $doInitTools = $true }
         if ($SkipToolInit) { $doInitTools = $false }
-        if ($PSBoundParameters.ContainsKey('InitTools')) { $doInitTools = $InitTools.IsPresent }
         if ($doInitTools) { $toolsArgs.InitTools = $true }
         if ($DryRun) { $toolsArgs.DryRun = $true }
         Invoke-ChildScript -Name 'Install-Tools.ps1' -Arguments $toolsArgs | Out-Null
     }
 
-    if (-not $SkipGlobalTools) {
+    $doGlobalTools = $false
+    if ($InstallGlobalTools) { $doGlobalTools = $true }
+    if ($SkipGlobalTools) { $doGlobalTools = $false }
+    if ($doGlobalTools) {
         $gtArgs = @{
             ProjectPath = $projectRoot
             PackageRoot = $packageRootResolved
@@ -453,13 +469,13 @@ try {
         Invoke-ChildScript -Name 'Install-GlobalTools.ps1' -Arguments $gtArgs | Out-Null
     }
 
-    # Sempre espelha MCPs recomendados no registry do workspace; -ConfigureMcps forca rewrite
+    # Espelho MCP no workspace somente com -ConfigureMcps ou junto de global-tools
     $mcpArgs = @{
         ProjectPath   = $projectRoot
         ConfigureMcps = $true
     }
     if ($Force) { $mcpArgs.Force = $true }
-    if ($ConfigureMcps -or -not $SkipGlobalTools) {
+    if ($ConfigureMcps -or $doGlobalTools) {
         Invoke-ChildScript -Name 'Configure-Mcps.ps1' -Arguments $mcpArgs | Out-Null
     }
 

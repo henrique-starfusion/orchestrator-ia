@@ -5,13 +5,27 @@
 
 Read project rules and skills from `.orchestrator/`.
 
+## Runtime
+
+Prefer the persistent runtime:
+
+```bash
+orchestrator run --prompt "<atividade>"
+```
+
+MVP roles: Claude plans/validates; Codex executes; runtime runs tests.
+
+## Documentation gate
+
+Ao final de cada tarefa, revisar e atualizar a documentação afetada antes da conclusão.
+
 ## Token economy + models
 
 - Follow `.orchestrator/config/models.json` and `config/policies.json`.
-- Default communication: **caveman** (`full`) — terse, no fluff; code/errors exact.
+- Caveman disabled in runtime artifacts; optional for chat presentation.
 - Pick model by task class (aliases):
-  - trivial/classify → `haiku` (`claude-haiku-4-5`)
-  - docs/implementation/review → `sonnet` (`claude-sonnet-5`)
-  - architecture/hard debug → `opus` (`claude-opus-4-8`)
-  - complex analysis / long agentic / orchestration plan → `fable` (`claude-fable-5`)
+  - trivial/classify → `haiku`
+  - docs/implementation/review → `sonnet`
+  - architecture/hard debug → `opus`
+  - complex analysis / long agentic → `fable`
 - Invoke: `claude --model <alias> ...`. Never use Fable for docs or typos.

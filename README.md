@@ -5,30 +5,37 @@ Projeto desenvolvido e mantido pela **StarFusion**.
 - **Desenvolvedor:** Henrique Rodrigues
 - **Copyright © 2026 StarFusion Consultoria, Tecnologia e Soluções em Informática LTDA.** Todos os direitos reservados.
 
-Pacote portátil para instalar, validar e manter um **ambiente multiagente genérico** em qualquer repositório de software. O orquestrador não pertence a uma aplicação específica: projetos-alvo são apenas workspaces de execução.
+Pacote portátil para instalar, validar e manter um **ambiente multiagente genérico** e um **runtime persistente** em qualquer repositório. O orquestrador não pertence a uma aplicação específica: projetos-alvo são workspaces de execução.
+
+**Versão atual:** 0.2.0 — ver [`CHANGELOG.md`](CHANGELOG.md).
 
 ---
 
 ## O que é o orquestrador multiagente
 
-O orquestrador é um **meta-agente de desenvolvimento** que recebe tarefas, analisa contexto, seleciona agentes CLI disponíveis, planeja execução, delega trabalho, testa resultados, valida evidências e persiste aprendizado.
+Duas camadas:
 
-Fluxo resumido:
+| Camada | Papel | Status |
+|---|---|---|
+| **Installer** | Instala/atualiza `.orchestrator/`, detecta agentes, adaptadores | implementado |
+| **Runtime** | Executa o ciclo multiagente com SQLite, gates e evidências | implementado (MVP) |
 
-```text
-entender → planejar → selecionar agentes → delegar → executar
-→ testar → validar → corrigir → concluir → aprender
+```bash
+orchestrator install                 # nucleo do workspace
+orchestrator run --prompt "..."      # tarefa real
+orchestrator task status <id>
 ```
 
-Papéis padrão (`.orchestrator/orchestration/roles.json`):
+Fluxo do runtime:
 
-| Papel | Responsabilidade |
-|---|---|
-| Orquestrador | Estado, estratégia, limites, anti-recursão, consolidação |
-| Planejador | Riscos, subtarefas, critérios de aceitação |
-| Executor | Implementação e evidências |
-| Testador | Testes determinísticos e regressões |
-| Validador | Revisão independente de pedido, plano, diffs e critérios |
+```text
+receber → analisar → memória → planejar → selecionar → executar
+→ testar → validar → corrigir → documentação → consolidar
+```
+
+Cursor é **cliente IDE** (não worker). MVP: Claude planeja/valida, Codex executa, runtime testa.
+
+Documentação: [`docs/runtime-architecture.md`](docs/runtime-architecture.md) · [`docs/orquestrador-completo.md`](docs/orquestrador-completo.md)
 
 ---
 

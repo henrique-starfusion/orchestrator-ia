@@ -1,6 +1,8 @@
 # Arquitetura do instalador
 
-Documentação técnica do pacote **bootstrap-agents** / **@starfusion/orchestrator** (v0.1.0). Descreve como o instalador materializa `.orchestrator/` no projeto-alvo de forma determinística e incremental.
+Documentação técnica do pacote **bootstrap-agents** / **@starfusion/orchestrator** (v0.2.0). Descreve o instalador e aponta para o runtime.
+
+Runtime: [`runtime-architecture.md`](runtime-architecture.md) · Guia completo: [`orquestrador-completo.md`](orquestrador-completo.md)
 
 Quickstart one-liner: [`quickstart-oneliner.md`](quickstart-oneliner.md)
 

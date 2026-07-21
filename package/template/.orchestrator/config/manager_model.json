@@ -1,0 +1,8 @@
+{
+  "provider": "rules",
+  "enabled": false,
+  "base_url": "http://localhost:8000/v1",
+  "model": "",
+  "api_key_env": "ORCHESTRATOR_MANAGER_API_KEY",
+  "notes": "Provider openai-compatible e opcional. Default: RulesManager deterministico."
+}

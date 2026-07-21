@@ -1,7 +1,7 @@
 {
   "name": "@starfusion/orchestrator",
-  "version": "0.1.0",
-  "description": "Instalador versionado do Orquestrador Multiagente (StarFusion). Fonte canônica .orchestrator/",
+  "version": "0.2.0",
+  "description": "Instalador e runtime persistente do Orquestrador Multiagente (StarFusion). Fonte canônica .orchestrator/",
   "license": "UNLICENSED",
   "author": "Henrique Rodrigues <StarFusion Consultoria, Tecnologia e Soluções em Informática LTDA.>",
   "homepage": "https://github.com/henrique-starfusion/bootstrap-agents",
@@ -20,10 +20,12 @@
     "bin/",
     "scripts/",
     "package/",
+    "runtime/",
     "docs/",
     "VERSION",
     "LICENSE",
     "README.md",
+    "CHANGELOG.md",
     "bootstrap-agents.bat",
     "install.ps1",
     "get.ps1"
@@ -41,7 +43,9 @@
     "bootstrap"
   ],
   "scripts": {
-    "test": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/Run-AllTests.ps1"
+    "test": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/Run-AllTests.ps1",
+    "test:runtime": "python -m pytest -q runtime/tests",
+    "test:all": "npm test && npm run test:runtime"
   },
   "preferGlobal": true
 }

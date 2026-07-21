@@ -84,6 +84,11 @@
                       "mode":  "merge"
                   },
                   {
+                      "source":  "template/.orchestrator/config/manager_model.json",
+                      "destination":  ".orchestrator/config/manager_model.json",
+                      "mode":  "merge"
+                  },
+                  {
                       "source":  "template/.orchestrator/config/routing.json",
                       "destination":  ".orchestrator/config/routing.json",
                       "mode":  "merge"

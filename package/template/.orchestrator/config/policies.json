@@ -3,13 +3,20 @@
   "same_issue_repeat_limit": 2,
   "minimum_validation_score": 0.9,
   "minimum_score_improvement": 0.03,
+  "maximum_duration_seconds": 3600,
   "require_independent_validation": true,
   "require_deterministic_validation": true,
+  "require_documentation_review": true,
   "allow_parallel_read_only_analysis": true,
   "allow_parallel_workspace_writes": false,
+  "documentation_policy": {
+    "required_before_completion": true,
+    "message": "Ao final de cada tarefa, revisar e atualizar a documentacao afetada antes da conclusao."
+  },
   "token_economy": {
     "enabled": true,
-    "caveman_default": "full",
+    "caveman_enabled": false,
+    "caveman_default": "off",
     "model_routing": "config/models.json",
     "forbid_max_tier_for": ["trivial", "classify", "docs", "documentation"],
     "require_task_class_before_call_agent": true
