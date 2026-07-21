@@ -73,6 +73,11 @@
       "notes": "hub Firecrawl + variantes CLI"
     },
     {
+      "id": "terraform-skill",
+      "source": "antonbabenko/terraform-skill",
+      "notes": "Terraform/OpenTofu best practices (Anton Babenko, 2.2k stars, ativo). Instala via npx skills add; alternativa gerenciada: marketplace antonbabenko/agent-plugins"
+    },
+    {
       "id": "caveman",
       "source": "juliusbrussee/caveman",
       "notes": "modo caveman — ~75% menos tokens de prosa"
