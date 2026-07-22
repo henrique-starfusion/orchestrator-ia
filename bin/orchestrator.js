@@ -138,6 +138,7 @@ function parseArgs(argv) {
       '-Client': '-Client',
       '--cursor-transport': '-CursorTransport',
       '--cursor-mcp-url': '-CursorMcpUrl',
+      '--cursor-mcp-scope': '-CursorMcpScope',
       '--legacy-cleanup-mode': '-LegacyCleanupMode',
       '--backup': '-LegacyBackupId',
       '--legacy-backup': '-LegacyBackupId',

@@ -32,6 +32,8 @@ param(
     [ValidateSet('stdio', 'http')]
     [string]$CursorTransport = 'stdio',
     [string]$CursorMcpUrl = 'http://127.0.0.1:8765/mcp',
+    [ValidateSet('project', 'user', 'both')]
+    [string]$CursorMcpScope = 'both',
     [switch]$SkipCursor,
     [switch]$RunSmokeTest,
     [switch]$RunProjectTests,
@@ -398,6 +400,7 @@ try {
                     PackageRoot     = $packageRootResolved
                     CursorTransport = $CursorTransport
                     CursorMcpUrl    = $CursorMcpUrl
+                    CursorMcpScope  = $CursorMcpScope
                 }
                 if ($Force) { $cursorArgs.Force = $true }
                 Invoke-ChildScript -Name 'Configure-CursorMcp.ps1' -Arguments $cursorArgs | Out-Null
@@ -760,6 +763,7 @@ try {
             PackageRoot     = $packageRootResolved
             CursorTransport = $CursorTransport
             CursorMcpUrl    = $CursorMcpUrl
+            CursorMcpScope  = $CursorMcpScope
         }
         if ($Force) { $cursorArgs.Force = $true }
         Invoke-ChildScript -Name 'Configure-CursorMcp.ps1' -Arguments $cursorArgs | Out-Null
