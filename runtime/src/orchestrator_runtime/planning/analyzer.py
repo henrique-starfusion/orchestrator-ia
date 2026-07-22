@@ -94,10 +94,21 @@ _SOMA_MODULE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Remove cláusulas negadas ("não criar módulo soma") antes do match positivo
+_NEGATED_CLAUSE_RE = re.compile(
+    r"\b(n[aã]o|not|never|nunca|sem)\b[^.!?;:\n—–-]{0,100}",
+    re.IGNORECASE,
+)
+
 
 def wants_soma_module(prompt: str) -> bool:
-    """True só para intent de módulo/função soma|sum — não substring em resume/summary."""
-    return bool(_SOMA_MODULE_RE.search(prompt or ""))
+    """True só para intent positivo de módulo/função soma|sum.
+
+    Ignora substring em resume/summary e menções sob negação
+    (ex.: "não criar módulo soma").
+    """
+    cleaned = _NEGATED_CLAUSE_RE.sub(" ", prompt or "")
+    return bool(_SOMA_MODULE_RE.search(cleaned))
 
 
 class CriteriaBuilder:

@@ -18,6 +18,10 @@ def test_wants_soma_module_intent():
     )
     assert not wants_soma_module("write a summary of the architecture")
     assert not wants_soma_module("assumptions and resume the task")
+    assert not wants_soma_module(
+        "validar critérios com resume/cancel — não criar módulo soma"
+    )
+    assert not wants_soma_module("do not create module soma please")
 
 
 def test_criteria_builder_skips_resume_false_positive():
