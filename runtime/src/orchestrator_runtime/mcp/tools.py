@@ -141,7 +141,9 @@ class OrchestratorMcpTools:
             status = "degraded"
             warnings.append("no CLI workers available")
         from orchestrator_runtime import __version__ as runtime_version
+        from orchestrator_runtime.diagnostics import code_fingerprint
 
+        fp = code_fingerprint()
         return {
             "status": status,
             "runtime": {
@@ -149,6 +151,9 @@ class OrchestratorMcpTools:
                 "project_path": str(service.config.project_path),
                 "db_path": str(service.config.db_path),
                 "db_exists": service.config.db_path.is_file(),
+                "code_fingerprint": fp["sha256_16"],
+                "features": fp["features"],
+                "module_path": fp["module_path"],
             },
             "manager_model": {
                 "provider": mgr.provider,
@@ -156,6 +161,10 @@ class OrchestratorMcpTools:
             },
             "agents": agents,
             "warnings": warnings,
+            "message": (
+                f"healthy={status} version={runtime_version} "
+                f"fingerprint={fp['sha256_16']}"
+            ),
         }
 
     def analyze(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -186,6 +195,12 @@ class OrchestratorMcpTools:
                 warnings.append("validator_equals_executor")
             elif roles.get("validator") and roles.get("executor"):
                 warnings.append("independent_validation_ok")
+            if (
+                roles.get("validator")
+                and roles.get("planner")
+                and roles.get("validator") == roles.get("planner")
+            ):
+                warnings.append("validator_equals_planner")
         return {
             "task_type": analysis.task_type,
             "complexity": analysis.complexity,

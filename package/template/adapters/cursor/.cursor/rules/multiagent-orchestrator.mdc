@@ -24,6 +24,20 @@ Após `orchestrator_run` com `wait=false` (padrão):
 Campos úteis em `orchestrator_status`: `error`, `blocking_issues`, `active_agent`,
 `active_role`, `acceptance_criteria`, `progress`, `requires_input`.
 
+## Pós-install / update (anti-MCP-stale)
+
+Após `orchestrator update|install` que altere o runtime:
+
+1. Compare `orchestrator version --json` → `code_fingerprint` com
+   `orchestrator_health` → `runtime.code_fingerprint`.
+2. Probe `orchestrator_analyze` com prompt contendo semver (ex.: `0.4.1`) e
+   a palavra `auditoria` — espere `task_type=complex_analysis` e `0.4.1` intacto
+   nos `requirements`.
+3. Se fingerprints diferirem **ou** o probe falhar: diga que o processo MCP está
+   stale; peça reload do Cursor / reinício do servidor MCP. **Não** declare
+   “MCP verificado” só porque o pytest local passou.
+4. Só afirme sucesso no MCP depois do probe passar na sessão atual.
+
 ## Regras duras
 
 - Não simule respostas de Claude/Codex/Gemini/Kimi/OpenCode.

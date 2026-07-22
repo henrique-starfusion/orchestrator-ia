@@ -5,6 +5,9 @@
 ### Added
 
 - CLI `orchestrator agents` (registry JSON/text)
+- `orchestrator version` / `-V` / `--version` (com `--json` → fingerprint)
+- `orchestrator_health.runtime.code_fingerprint` + `features` (detecta MCP stale)
+- Regra Cursor anti-MCP-stale (comparar fingerprint CLI vs MCP após update)
 
 ### Fixed
 
@@ -13,6 +16,8 @@
 - `require_independent_validation` falha se não houver validator ≠ executor
 - `fake_agents` rejeitado na superfície MCP
 - `.orchestrator/data` com `chmod 0o700` (best-effort)
+- Parse de requirements não parte semver (`0.4.1`); auditorias → ACs `evidence`
+- `orchestrator analyze` emite `warnings` (`independent_validation_ok`, `validator_equals_planner`)
 
 ## 0.4.1 — 2026-07-21
 

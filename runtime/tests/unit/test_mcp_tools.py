@@ -24,6 +24,9 @@ def test_mcp_health(tools):
     h = tools.health()
     assert h["status"] in {"healthy", "degraded"}
     assert "agents" in h
+    assert h["runtime"]["code_fingerprint"]
+    assert "runtime_code_fingerprint" in h["runtime"]["features"]
+    assert "fingerprint=" in (h.get("message") or "")
 
 
 def test_mcp_analyze(tools):
@@ -36,6 +39,24 @@ def test_mcp_analyze(tools):
     assert out["read_only"] is True
     assert out["acceptance_criteria"]
     assert out["recommended_strategy"]
+
+
+def test_mcp_analyze_audit_preserves_semver(tools):
+    out = tools.analyze(
+        {
+            "objective": (
+                "Auditoria completa do orquestrador 0.4.1: gaps em MCP. "
+                "Não criar módulo soma."
+            ),
+            "workspace": str(tools.default_workspace),
+        }
+    )
+    assert out["task_type"] == "complex_analysis"
+    blob = " ".join(out["requirements"])
+    assert "0.4.1" in blob
+    assert "validator_equals_planner" in (out.get("warnings") or [])
+    kinds = {c["kind"] for c in out["acceptance_criteria"]}
+    assert "evidence" in kinds
 
 
 def test_mcp_delegate(tools):

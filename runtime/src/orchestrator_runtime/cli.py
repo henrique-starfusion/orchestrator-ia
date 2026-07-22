@@ -35,7 +35,24 @@ def main_callback() -> None:
 
 
 @app.command("version")
-def version_cmd() -> None:
+def version_cmd(
+    json_out: bool = typer.Option(False, "--json", help="Inclui fingerprint/features"),
+) -> None:
+    """Versão do runtime (+ fingerprint para detectar MCP stale)."""
+    if json_out:
+        from orchestrator_runtime.diagnostics import code_fingerprint
+
+        fp = code_fingerprint()
+        _print_json(
+            {
+                "version": __version__,
+                "code_fingerprint": fp["sha256_16"],
+                "features": fp["features"],
+                "module_path": fp["module_path"],
+                "package_root": fp["package_root"],
+            }
+        )
+        return
     typer.echo(__version__)
 
 

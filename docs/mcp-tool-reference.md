@@ -4,7 +4,7 @@ Status: **implementado**
 
 | Tool | Papel |
 |---|---|
-| `orchestrator_health` | Saúde runtime/agentes |
+| `orchestrator_health` | Saúde + `runtime.code_fingerprint`/`features` (detectar MCP stale) |
 | `orchestrator_analyze` | Análise read-only |
 | `orchestrator_delegate` | Um papel em um CLI |
 | `orchestrator_run` | Workflow completo; overrides `planner`/`executor`/`validator` têm precedência; resposta inclui `poll_hint` |

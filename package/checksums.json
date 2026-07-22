@@ -301,6 +301,10 @@
                   {
                       "path":  "template/.orchestrator/agents/profiles/cursor.json",
                       "sha256":  "1b11c8d8a34bd25d8dd855b942d69b0b5f1334ded1859b539fa80364dacb6f13"
+                  },
+                  {
+                      "path":  "template/adapters/cursor/.cursor/rules/multiagent-orchestrator.mdc",
+                      "sha256":  "92e694ba5f2754ddd28e06aedcfa98ce14f5af80f4bbfe1bb532f527941d38d7"
                   }
               ]
 }

@@ -35,6 +35,8 @@ MCP / Cursor (front controller):
   orchestrator cursor configure|verify|print-config
   orchestrator agents [--json]
 
+  orchestrator version [--json]   # versão + fingerprint (detecta MCP stale)
+
 Exemplos:
   orchestrator init
   orchestrator legacy cleanup --legacy-cleanup-mode safe
@@ -42,6 +44,47 @@ Exemplos:
   orchestrator run --prompt "Crie modulo soma com testes e docs"
 `.trim();
   console.log(help);
+}
+
+function printVersion(asJson) {
+  const versionPath = path.join(packageRoot, 'VERSION');
+  let version = '0.0.0';
+  try {
+    version = fs.readFileSync(versionPath, 'utf8').trim();
+  } catch (_) {
+    try {
+      version = require(path.join(packageRoot, 'package.json')).version;
+    } catch (_) { /* keep default */ }
+  }
+  if (!asJson) {
+    console.log(version);
+    return;
+  }
+  // Delega fingerprint ao runtime Python (fonte canônica).
+  const py = findPython();
+  if (!py) {
+    console.log(JSON.stringify({ version, code_fingerprint: null, error: 'python_missing' }));
+    return;
+  }
+  const env = {
+    ...process.env,
+    PYTHONPATH: runtimeSrc + (process.env.PYTHONPATH ? path.delimiter + process.env.PYTHONPATH : ''),
+  };
+  const result = spawnSync(
+    py.cmd,
+    [...py.prefix, '-m', 'orchestrator_runtime', 'version', '--json'],
+    { encoding: 'utf8', windowsHide: true, env, cwd: packageRoot },
+  );
+  if (result.status === 0 && result.stdout) {
+    process.stdout.write(result.stdout);
+    return;
+  }
+  console.log(JSON.stringify({
+    version,
+    package_root: packageRoot,
+    runtime_src: runtimeSrc,
+    error: (result.stderr || 'version_json_failed').trim(),
+  }));
 }
 
 function mapCommand(raw) {
@@ -64,6 +107,7 @@ function parseArgs(argv) {
     passthrough: [],
     runtimeArgs: [],
     help: false,
+    versionJson: false,
     raw: [...argv],
   };
 
@@ -79,10 +123,17 @@ function parseArgs(argv) {
     return out;
   }
 
+  if (first === '-V' || first === '--version' || first === 'version') {
+    out.command = 'version';
+    args.shift();
+    out.versionJson = args.includes('--json');
+    return out;
+  }
+
   const known = new Set([
     'init', 'i', 'install', 'verify', 'update', 'upgrade', 'repair', 'uninstall',
     'status', 'analyze', 'skills', 'global-tools', 'route', 'dispatch', 'legacy',
-    'run', 'task', 'tools', 'mcp', 'cursor', 'agents',
+    'run', 'task', 'tools', 'mcp', 'cursor', 'agents', 'version',
   ]);
 
   if (known.has(first) || !first.startsWith('-')) {
@@ -338,6 +389,11 @@ function main() {
   const parsed = parseArgs(process.argv.slice(2));
   if (parsed.help) {
     printHelp();
+    process.exit(0);
+  }
+
+  if (parsed.command === 'version') {
+    printVersion(Boolean(parsed.versionJson));
     process.exit(0);
   }
 
