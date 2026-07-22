@@ -57,7 +57,7 @@ Cache do one-liner PowerShell:
 
 1. `gh auth login` (HTTPS ou SSH)
 2. Confirme `git ls-remote https://github.com/henrique-starfusion/orchestrator-ia.git`
-3. Repita: `npx --yes github:henrique-starfusion/orchestrator-ia#develop init`
+3. Repita: `npx --yes github:henrique-starfusion/orchestrator-ia#latest init`
 
 ---
 
@@ -107,7 +107,7 @@ Remove-Item -Recurse -Force "$env:LOCALAPPDATA\StarFusion\multiagent-orchestrato
 npm prefix -g
 npm bin -g
 # adicione o caminho de bin ao PATH e reabra o terminal
-npm install -g github:henrique-starfusion/orchestrator-ia#develop
+npm install -g github:henrique-starfusion/orchestrator-ia#latest
 ```
 
 ---

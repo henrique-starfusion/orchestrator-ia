@@ -9,10 +9,10 @@
 
 .EXAMPLES
     # Na pasta do projeto (com gh autenticado):
-    gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=develop" | iex
+    gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=latest" | iex
 
     # Se o repositorio estiver clonado/publicado:
-    irm https://raw.githubusercontent.com/henrique-starfusion/orchestrator-ia/develop/get.ps1 | iex
+    irm https://raw.githubusercontent.com/henrique-starfusion/orchestrator-ia/latest/get.ps1 | iex
 
     # Local:
     .\get.ps1
@@ -30,7 +30,7 @@ param(
     [string]$ProjectPath = (Get-Location).Path,
 
     [string]$Repo = 'henrique-starfusion/orchestrator-ia',
-    [string]$Branch = 'develop',
+    [string]$Branch = 'latest',
     [string]$CacheRoot,
     [switch]$ForceRefresh,
     [Parameter(ValueFromRemainingArguments = $true)]

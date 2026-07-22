@@ -39,7 +39,7 @@ Quickstart one-liner: [`quickstart-oneliner.md`](quickstart-oneliner.md)
 ### 1. npm / npx (estilo OpenWolf)
 
 ```bash
-npx --yes github:henrique-starfusion/orchestrator-ia#develop init
+npx --yes github:henrique-starfusion/orchestrator-ia#latest init
 orchestrator init
 mao init
 ```
@@ -55,7 +55,7 @@ mao init
 
 ```powershell
 gh api -H "Accept: application/vnd.github.raw" `
-  "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=develop" | iex
+  "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=latest" | iex
 ```
 
 `get.ps1`:

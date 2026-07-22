@@ -101,9 +101,9 @@ flowchart TB
 
 | Entrada | Exemplo |
 |---|---|
-| **npx** | `npx --yes github:henrique-starfusion/orchestrator-ia#develop init` |
-| **npm global** | `npm install -g github:henrique-starfusion/orchestrator-ia#develop` → `orchestrator` / `mao` |
-| **PowerShell + gh** | `gh api …/get.ps1?ref=develop \| iex` |
+| **npx** | `npx --yes github:henrique-starfusion/orchestrator-ia#latest init` |
+| **npm global** | `npm install -g github:henrique-starfusion/orchestrator-ia#latest` → `orchestrator` / `mao` |
+| **PowerShell + gh** | `gh api …/get.ps1?ref=latest \| iex` |
 | **Clone local** | `orchestrator-ia.bat init` / `.\install.ps1` |
 | **Bin Node** | `bin/orchestrator.js` (Node ≥ 18) |
 
@@ -113,14 +113,14 @@ O bin Node localiza `powershell`/`pwsh`, mapeia flags `--*` → parâmetros Powe
 
 ```bash
 # 1) Atualizar o CLI (pacote npm)
-npm install -g github:henrique-starfusion/orchestrator-ia#develop
+npm install -g github:henrique-starfusion/orchestrator-ia#latest
 
 # 2) Atualizar a estrutura do projeto
 cd C:\caminho\do\projeto
 orchestrator update
 
 # Ou tudo via npx (sem global)
-npx --yes github:henrique-starfusion/orchestrator-ia#develop update
+npx --yes github:henrique-starfusion/orchestrator-ia#latest update
 ```
 
 ---

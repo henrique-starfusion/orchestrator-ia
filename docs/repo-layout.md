@@ -12,7 +12,7 @@ Repositório do **Orquestrador IA Multiagente** (`orchestrator-ia`). É **ao mes
 | `main` | Produção / releases estáveis |
 | `develop` | Desenvolvimento ativo (trabalho padrão) |
 
-Instalação via npm/GitHub deve apontar para `#develop` (ou tag de release em `main`).
+Instalação via npm/GitHub deve apontar para `#latest` (tag móvel de release) ou `#vX.Y.Z`. Use `#develop` só para tip de desenvolvimento.
 
 ## Raiz (entrada e metadados)
 
