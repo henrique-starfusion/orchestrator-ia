@@ -1,4 +1,4 @@
-﻿> **LEGADO — não use para primeira instalação**
+> **LEGADO — não use para primeira instalação**
 >
 > Este prompt descreve o fluxo antigo baseado em `.claude/` como fonte canônica.
 > **A fonte canônica atual é `.orchestrator/`.**
@@ -6,11 +6,11 @@
 > Para instalação determinística (uma linha, na pasta do projeto):
 >
 > ```bash
-> npx --yes github:henrique-starfusion/bootstrap-agents#develop init
+> npx --yes github:henrique-starfusion/orchestrator-ia#develop init
 > ```
 >
 > ```powershell
-> gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=develop" | iex
+> gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=develop" | iex
 > ```
 >
 > Consulte `README.md`, `docs/quickstart-oneliner.md` e `docs/cli-reference.md`.

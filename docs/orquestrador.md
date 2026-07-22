@@ -1,6 +1,6 @@
-﻿# Orquestrador Multiagente
+# Orquestrador IA Multiagente
 
-Documento de referência do produto **`@starfusion/orchestrator`** (pacote `bootstrap-agents`, versão **0.4.3**).
+Documento de referência do produto **Orquestrador IA Multiagente** (`@starfusion/orchestrator`, repositório `orchestrator-ia`, versão **0.4.3**).
 
 Organização: **StarFusion** · Desenvolvedor: **Henrique Rodrigues**
 
@@ -49,7 +49,7 @@ Adaptadores de vendor (`.claude/`, `CLAUDE.md`, `.cursor/rules/`, …) são **fi
 
 | Camada | Onde | Papel |
 |---|---|---|
-| Pacote de distribuição | repo `bootstrap-agents` + `package/` | Template, manifest, scripts, bins npm |
+| Pacote de distribuição | repo `orchestrator-ia` + `package/` | Template, manifest, scripts, bins npm |
 | Template | `package/template/.orchestrator/` | Árvore copiada no `install` |
 | Adaptadores | `package/template/adapters/<vendor>/` | Gerados na raiz do projeto-alvo |
 | Catálogo global | `package/global-tools/catalog.json` | MCPs/plugins/skills/CLIs do **usuário** |
@@ -101,8 +101,8 @@ flowchart TB
 
 | Entrada | Exemplo |
 |---|---|
-| **npx** | `npx --yes github:henrique-starfusion/bootstrap-agents#develop init` |
-| **npm global** | `npm install -g github:henrique-starfusion/bootstrap-agents#develop` → `orchestrator` / `mao` |
+| **npx** | `npx --yes github:henrique-starfusion/orchestrator-ia#develop init` |
+| **npm global** | `npm install -g github:henrique-starfusion/orchestrator-ia#develop` → `orchestrator` / `mao` |
 | **PowerShell + gh** | `gh api …/get.ps1?ref=develop \| iex` |
 | **Clone local** | `orchestrator-ia.bat init` / `.\install.ps1` |
 | **Bin Node** | `bin/orchestrator.js` (Node ≥ 18) |
@@ -113,14 +113,14 @@ O bin Node localiza `powershell`/`pwsh`, mapeia flags `--*` → parâmetros Powe
 
 ```bash
 # 1) Atualizar o CLI (pacote npm)
-npm install -g github:henrique-starfusion/bootstrap-agents#develop
+npm install -g github:henrique-starfusion/orchestrator-ia#develop
 
 # 2) Atualizar a estrutura do projeto
 cd C:\caminho\do\projeto
 orchestrator update
 
 # Ou tudo via npx (sem global)
-npx --yes github:henrique-starfusion/bootstrap-agents#develop update
+npx --yes github:henrique-starfusion/orchestrator-ia#develop update
 ```
 
 ---

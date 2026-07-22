@@ -1,4 +1,4 @@
-# MCP Integration
+# MCP Integration — Orquestrador IA Multiagente
 
 Status: **implementado** (stdio) · HTTP: **experimental**
 

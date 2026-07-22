@@ -1,4 +1,4 @@
-﻿# Bootstrap Agents — Orquestrador Multiagente
+# Orquestrador IA Multiagente
 
 Projeto desenvolvido e mantido pela **StarFusion**.
 
@@ -11,7 +11,7 @@ Pacote portátil para instalar, validar e manter um **ambiente multiagente gené
 
 ---
 
-## O que é o orquestrador multiagente
+## O que é o Orquestrador IA Multiagente
 
 Duas camadas:
 
@@ -89,13 +89,13 @@ Na pasta do seu projeto:
 ### Node.js / npm (recomendado)
 
 ```bash
-npx --yes github:henrique-starfusion/bootstrap-agents#develop init
+npx --yes github:henrique-starfusion/orchestrator-ia#develop init
 ```
 
 Ou instalar o CLI global e reutilizar em vários projetos:
 
 ```bash
-npm install -g github:henrique-starfusion/bootstrap-agents#develop
+npm install -g github:henrique-starfusion/orchestrator-ia#develop
 cd C:\caminho\do\seu\projeto
 orchestrator init
 ```
@@ -105,7 +105,7 @@ Equivalente curto: `mao init` (alias do mesmo binário).
 ### PowerShell (Windows, com `gh` autenticado)
 
 ```powershell
-gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=develop" | iex
+gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=develop" | iex
 ```
 
 Isso baixa o pacote para `%LOCALAPPDATA%\StarFusion\multiagent-orchestrator` (cache) e instala `.orchestrator/` no diretório atual.
@@ -117,13 +117,13 @@ Há **dois níveis**: atualizar o CLI (pacote npm) e atualizar a estrutura `.orc
 #### 1) Atualizar o CLI via npm (global)
 
 ```bash
-npm install -g github:henrique-starfusion/bootstrap-agents#develop
+npm install -g github:henrique-starfusion/orchestrator-ia#develop
 ```
 
 Sem instalar global — sempre a tip da branch `develop`:
 
 ```bash
-npx --yes github:henrique-starfusion/bootstrap-agents#develop update
+npx --yes github:henrique-starfusion/orchestrator-ia#develop update
 ```
 
 #### 2) Atualizar a estrutura do projeto
@@ -145,7 +145,7 @@ orchestrator-ia.bat update -ProjectPath C:\caminho\do\projeto
 Fluxo típico (CLI global + projeto):
 
 ```bash
-npm install -g github:henrique-starfusion/bootstrap-agents#develop
+npm install -g github:henrique-starfusion/orchestrator-ia#develop
 cd C:\caminho\do\seu\projeto
 orchestrator update
 ```
@@ -271,7 +271,7 @@ Parâmetros PowerShell aceitos via BAT (encaminhamento direto):
 | `-InstallMissingAgents` | **Reservado** — não implementado |
 | `-RunProjectTests` | **Reservado** — runner genérico não incluído |
 | `-NonInteractive` | Reservado para fluxos automatizados |
-| `-PackageRoot` | Raiz do pacote bootstrap (padrão: pai de `scripts/`) |
+| `-PackageRoot` | Raiz do pacote orchestrator-ia (padrão: pai de `scripts/`) |
 
 Exemplo completo:
 
@@ -428,7 +428,7 @@ Políticas padrão em `.orchestrator/config/policies.json` (score mínimo 0.9, m
 | Cache PowerShell corrompido | Apague `%LOCALAPPDATA%\StarFusion\multiagent-orchestrator` |
 | `git nao encontrado` | Instale Git e adicione ao PATH |
 | `Lock de instalacao ja existe` | Remova `.orchestrator/runtime/install.lock` se nenhum install estiver ativo |
-| `Workspace mais novo que o pacote` | Atualize o pacote bootstrap ou use versão compatível |
+| `Workspace mais novo que o pacote` | Atualize o pacote orchestrator-ia ou use versão compatível |
 | Arquivos gerenciados ausentes | `orchestrator repair` ou `orchestrator-ia.bat repair` |
 | Validação falhou | `orchestrator verify` e leia logs em `runtime/validations/` |
 | Agentes não detectados | Confirme CLI no PATH; rode `orchestrator status` |
@@ -484,7 +484,7 @@ Prioridade atual (v0.1): detecção de CLIs, bootstrap incremental versionado, s
 
 | Artefato | Função |
 |---|---|
-| `VERSION` | Versão do pacote bootstrap |
+| `VERSION` | Versão do Orquestrador IA Multiagente |
 | `package.json` | Pacote npm `@starfusion/orchestrator` (bins `orchestrator`, `mao`) |
 | `bin/orchestrator.js` | CLI Node — one-liner / global |
 | `get.ps1` | One-liner PowerShell (cache + install no cwd) |
@@ -499,7 +499,7 @@ Prioridade atual (v0.1): detecção de CLIs, bootstrap incremental versionado, s
 | `docs/repo-layout.md` | Organização deste repositório |
 | `LICENSE` | Todos os direitos reservados (StarFusion) |
 
-**Repositório:** https://github.com/henrique-starfusion/bootstrap-agents (branch `develop`)
+**Repositório:** https://github.com/henrique-starfusion/orchestrator-ia (branch `develop`)
 
 Layout detalhado: [`docs/repo-layout.md`](docs/repo-layout.md)
 
@@ -507,7 +507,7 @@ Layout detalhado: [`docs/repo-layout.md`](docs/repo-layout.md)
 
 ## Atribuição
 
-Projeto desenvolvido e mantido pela **StarFusion**  
+**Orquestrador IA Multiagente** — desenvolvido e mantido pela **StarFusion**  
 Desenvolvedor: **Henrique Rodrigues**  
 
 **Copyright © 2026 StarFusion Consultoria, Tecnologia e Soluções em Informática LTDA.** Todos os direitos reservados.

@@ -1,4 +1,4 @@
-﻿# Migração legada `.claude/` → `.orchestrator/`
+# Migração legada `.claude/` → `.orchestrator/`
 
 Guia para workspaces que ainda usam `.claude/` como fonte canônica e precisam adotar `.orchestrator/`.
 
@@ -11,11 +11,11 @@ Versões anteriores do bootstrap e o prompt arquivado em `docs/archive/prompts/p
 O instalador detecta legado automaticamente durante `init` / `install` — inclusive quando você usa o one-liner:
 
 ```bash
-npx --yes github:henrique-starfusion/bootstrap-agents#develop init
+npx --yes github:henrique-starfusion/orchestrator-ia#develop init
 ```
 
 ```powershell
-gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=develop" | iex
+gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=develop" | iex
 ```
 
 ---
@@ -62,7 +62,7 @@ Pastas ausentes são ignoradas. Destinos existentes são preservados (salvo `-Fo
 
 Grava `.orchestrator/VERSION` com:
 
-- versão do pacote bootstrap, se disponível; senão
+- versão do pacote orchestrator-ia, se disponível; senão
 - valor de `.claude/VERSION`
 
 ### 4. Relatório

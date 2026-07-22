@@ -1,6 +1,6 @@
-﻿# Solução de problemas
+# Solução de problemas — Orquestrador IA Multiagente
 
-Guia operacional para falhas comuns do instalador **bootstrap-agents** / **@starfusion/orchestrator**.
+Guia operacional para falhas comuns do **Orquestrador IA Multiagente** (`@starfusion/orchestrator`).
 
 Quickstart: [`quickstart-oneliner.md`](quickstart-oneliner.md)
 
@@ -56,8 +56,8 @@ Cache do one-liner PowerShell:
 **Solução:**
 
 1. `gh auth login` (HTTPS ou SSH)
-2. Confirme `git ls-remote https://github.com/henrique-starfusion/bootstrap-agents.git`
-3. Repita: `npx --yes github:henrique-starfusion/bootstrap-agents#develop init`
+2. Confirme `git ls-remote https://github.com/henrique-starfusion/orchestrator-ia.git`
+3. Repita: `npx --yes github:henrique-starfusion/orchestrator-ia#develop init`
 
 ---
 
@@ -78,7 +78,7 @@ Cache do one-liner PowerShell:
 ```powershell
 gh auth status
 gh auth refresh -s repo
-gh api repos/henrique-starfusion/bootstrap-agents --jq .full_name
+gh api repos/henrique-starfusion/orchestrator-ia --jq .full_name
 ```
 
 ---
@@ -107,7 +107,7 @@ Remove-Item -Recurse -Force "$env:LOCALAPPDATA\StarFusion\multiagent-orchestrato
 npm prefix -g
 npm bin -g
 # adicione o caminho de bin ao PATH e reabra o terminal
-npm install -g github:henrique-starfusion/bootstrap-agents#develop
+npm install -g github:henrique-starfusion/orchestrator-ia#develop
 ```
 
 ---
@@ -136,7 +136,7 @@ npm install -g github:henrique-starfusion/bootstrap-agents#develop
 
 **Solução:**
 
-- Confirme clone/cópia completa do repositório bootstrap-agents
+- Confirme clone/cópia completa do repositório orchestrator-ia
 - Se veio via npm/npx, reinstale o pacote (`npx` limpa cache com `--yes` / limpe npm cache se necessário)
 - Se veio via `get.ps1`, force refresh do cache (`-ForceRefresh`)
 - Verifique `package/manifest.json` e `package/template/.orchestrator/`
@@ -176,11 +176,11 @@ npm install -g github:henrique-starfusion/bootstrap-agents#develop
 
 ### `Workspace mais novo que o pacote` (exit 6)
 
-**Causa:** `.orchestrator/VERSION` > `VERSION` na raiz do pacote bootstrap.
+**Causa:** `.orchestrator/VERSION` > `VERSION` na raiz do pacote orchestrator-ia.
 
 **Solução:**
 
-- Atualize o pacote bootstrap-agents para versão ≥ workspace
+- Atualize o pacote orchestrator-ia para versão ≥ workspace
 - **Não** force downgrade sem backup
 
 ---

@@ -1,6 +1,6 @@
 ﻿# Layout deste repositório
 
-Este repositório é **ao mesmo tempo**:
+Repositório do **Orquestrador IA Multiagente** (`orchestrator-ia`). É **ao mesmo tempo**:
 
 1. o **pacote de distribuição** `@starfusion/orchestrator`;
 2. um **workspace dogfood** (instalação local em `.orchestrator/`, ignorada pelo git).

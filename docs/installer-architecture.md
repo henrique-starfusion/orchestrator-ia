@@ -1,6 +1,6 @@
-﻿# Arquitetura do instalador
+# Arquitetura do instalador — Orquestrador IA Multiagente
 
-Documentação técnica do pacote **bootstrap-agents** / **@starfusion/orchestrator** (v0.4.3). Descreve o instalador e aponta para o runtime.
+Documentação técnica do **Orquestrador IA Multiagente** (pacote `@starfusion/orchestrator`, repositório `orchestrator-ia`, v0.4.3). Descreve o instalador e aponta para o runtime.
 
 Runtime: [`runtime-architecture.md`](runtime-architecture.md) · Guia completo: [`orquestrador.md`](orquestrador.md)
 
@@ -39,7 +39,7 @@ Quickstart one-liner: [`quickstart-oneliner.md`](quickstart-oneliner.md)
 ### 1. npm / npx (estilo OpenWolf)
 
 ```bash
-npx --yes github:henrique-starfusion/bootstrap-agents#develop init
+npx --yes github:henrique-starfusion/orchestrator-ia#develop init
 orchestrator init
 mao init
 ```
@@ -55,7 +55,7 @@ mao init
 
 ```powershell
 gh api -H "Accept: application/vnd.github.raw" `
-  "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=develop" | iex
+  "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=develop" | iex
 ```
 
 `get.ps1`:

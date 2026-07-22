@@ -1,16 +1,16 @@
-﻿{
+{
   "name": "@starfusion/orchestrator",
   "version": "0.4.3",
-  "description": "Instalador, runtime e MCP Cursor do Orquestrador Multiagente (StarFusion). Fonte canônica .orchestrator/",
+  "description": "Orquestrador IA Multiagente (StarFusion): instalador, runtime e MCP Cursor. Fonte canônica .orchestrator/",
   "license": "UNLICENSED",
   "author": "Henrique Rodrigues <StarFusion Consultoria, Tecnologia e Soluções em Informática LTDA.>",
-  "homepage": "https://github.com/henrique-starfusion/bootstrap-agents",
+  "homepage": "https://github.com/henrique-starfusion/orchestrator-ia",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/henrique-starfusion/bootstrap-agents.git"
+    "url": "git+https://github.com/henrique-starfusion/orchestrator-ia.git"
   },
   "bugs": {
-    "url": "https://github.com/henrique-starfusion/bootstrap-agents/issues"
+    "url": "https://github.com/henrique-starfusion/orchestrator-ia/issues"
   },
   "bin": {
     "orchestrator": "bin/orchestrator.js",

@@ -1,4 +1,4 @@
-# Quickstart — uma linha de comando
+# Quickstart — Orquestrador IA Multiagente
 
 Modelo mental igual ao [OpenWolf](https://github.com/cytostack/openwolf) e ao Graphify:
 
@@ -10,13 +10,13 @@ Modelo mental igual ao [OpenWolf](https://github.com/cytostack/openwolf) e ao Gr
 Na raiz do projeto-alvo:
 
 ```bash
-npx --yes github:henrique-starfusion/bootstrap-agents#develop init
+npx --yes github:henrique-starfusion/orchestrator-ia#develop init
 ```
 
 Instalação global (reutilizar em vários projetos):
 
 ```bash
-npm install -g github:henrique-starfusion/bootstrap-agents#develop
+npm install -g github:henrique-starfusion/orchestrator-ia#develop
 orchestrator init
 ```
 
@@ -37,7 +37,7 @@ orchestrator update
 Atualizar o **CLI global** (pacote npm) e depois a estrutura do projeto:
 
 ```bash
-npm install -g github:henrique-starfusion/bootstrap-agents#develop
+npm install -g github:henrique-starfusion/orchestrator-ia#develop
 cd C:\caminho\do\seu\projeto
 orchestrator update
 ```
@@ -45,19 +45,19 @@ orchestrator update
 Ou só com npx (sem global):
 
 ```bash
-npx --yes github:henrique-starfusion/bootstrap-agents#develop update
+npx --yes github:henrique-starfusion/orchestrator-ia#develop update
 ```
 
 `update` sincroniza a estrutura `.orchestrator/` do projeto com o pacote (aditivo; use `--force` para reaplicar managed).
 
-> Repositório privado: o npm/npx usa suas credenciais Git (`gh auth` / credential helper).
+> Repositório público: `npx`/`npm` funcionam sem auth. Se usar fork privado, use `gh auth` / credential helper.
 
 ## Opção B — PowerShell + GitHub CLI
 
 Na raiz do projeto-alvo:
 
 ```powershell
-gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=develop" | iex
+gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=develop" | iex
 ```
 
 O script:
@@ -76,9 +76,9 @@ Outros comandos:
 ## Opção C — clone local
 
 ```powershell
-git clone -b develop https://github.com/henrique-starfusion/bootstrap-agents.git
+git clone -b develop https://github.com/henrique-starfusion/orchestrator-ia.git
 cd seu-projeto
-..\bootstrap-agents\get.ps1
+..\orchestrator-ia\get.ps1
 ```
 
 ## Resultado esperado
@@ -97,7 +97,7 @@ seu-projeto/
 |---|---|---|
 | OpenWolf | `npm i -g openwolf` | `openwolf init` |
 | Graphify | `uv tool install ...` / npm | `graphify install` |
-| Este pacote | `npm i -g github:.../bootstrap-agents#develop` | `orchestrator init` |
+| Orquestrador IA Multiagente | `npm i -g github:.../orchestrator-ia#develop` | `orchestrator init` |
 
 ## Segurança
 

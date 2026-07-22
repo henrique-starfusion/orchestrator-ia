@@ -1,4 +1,4 @@
-﻿# Referência da CLI
+# Referência da CLI — Orquestrador IA Multiagente
 
 Três formas de entrada:
 
@@ -60,11 +60,11 @@ Requer Python 3.11+.
 ## One-liner (projeto atual)
 
 ```bash
-npx --yes github:henrique-starfusion/bootstrap-agents#develop init
+npx --yes github:henrique-starfusion/orchestrator-ia#develop init
 ```
 
 ```powershell
-gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=develop" | iex
+gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=develop" | iex
 ```
 
 ```bash
@@ -127,13 +127,13 @@ Atualiza a estrutura `.orchestrator/` do projeto atual (comando principal de man
 Antes, atualize o CLI se estiver instalado via npm global:
 
 ```bash
-npm install -g github:henrique-starfusion/bootstrap-agents#develop
+npm install -g github:henrique-starfusion/orchestrator-ia#develop
 ```
 
 Ou rode o update direto com npx (baixa a tip de `develop`):
 
 ```bash
-npx --yes github:henrique-starfusion/bootstrap-agents#develop update
+npx --yes github:henrique-starfusion/orchestrator-ia#develop update
 ```
 
 Com o CLI no PATH:
@@ -310,7 +310,7 @@ A execução é sempre acompanhada: a saída do agente filho é transmitida ao v
 | `-DryRun` | switch | Simula; não grava lock nem copia arquivos |
 | `-Force` | switch | Sobrescreve managed/generated; força migração legada |
 | `-NonInteractive` | switch | Reservado para automação |
-| `-PackageRoot` | string | Raiz do pacote bootstrap (padrão: pai de `scripts/`) |
+| `-PackageRoot` | string | Raiz do pacote orchestrator-ia (padrão: pai de `scripts/`) |
 
 ### Agentes
 

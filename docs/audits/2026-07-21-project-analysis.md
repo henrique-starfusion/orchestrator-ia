@@ -1,4 +1,4 @@
-# Auditoria do projeto — bootstrap-agents / @starfusion/orchestrator
+# Auditoria do projeto — Orquestrador IA Multiagente (`orchestrator-ia` / `@starfusion/orchestrator`)
 
 **Data:** 2026-07-21  
 **Versão auditada:** 0.4.0  

@@ -18,7 +18,7 @@ const runtimeSrc = path.join(packageRoot, 'runtime', 'src');
 
 function printHelp() {
   const help = `
-@starfusion/orchestrator — Orquestrador Multiagente (StarFusion)
+@starfusion/orchestrator — Orquestrador IA Multiagente (StarFusion)
 
 Installer:
   orchestrator init|update|verify|repair|uninstall|status|analyze
