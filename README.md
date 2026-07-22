@@ -1,4 +1,4 @@
-# Bootstrap Agents — Orquestrador Multiagente
+﻿# Bootstrap Agents — Orquestrador Multiagente
 
 Projeto desenvolvido e mantido pela **StarFusion**.
 
@@ -139,7 +139,7 @@ Equivalente: `mao update`. Alias legado: `orchestrator upgrade`.
 Via clone local:
 
 ```bat
-bootstrap-agents.bat update -ProjectPath C:\caminho\do\projeto
+orchestrator-ia.bat update -ProjectPath C:\caminho\do\projeto
 ```
 
 Fluxo típico (CLI global + projeto):
@@ -190,8 +190,8 @@ Não usa agentes de IA para montar a estrutura. OpenWolf/Graphify no projeto e t
 ### Instalação a partir do clone local
 
 ```bat
-bootstrap-agents.bat init
-bootstrap-agents.bat install -ProjectPath C:\caminho\do\projeto
+orchestrator-ia.bat init
+orchestrator-ia.bat install -ProjectPath C:\caminho\do\projeto
 ```
 
 ```powershell
@@ -229,9 +229,9 @@ orchestrator update
 ```
 
 ```bat
-bootstrap-agents.bat update -ProjectPath C:\meu-projeto
-bootstrap-agents.bat verify -ProjectPath C:\meu-projeto
-bootstrap-agents.bat status
+orchestrator-ia.bat update -ProjectPath C:\meu-projeto
+orchestrator-ia.bat verify -ProjectPath C:\meu-projeto
+orchestrator-ia.bat status
 ```
 
 O `update`:
@@ -276,13 +276,13 @@ Parâmetros PowerShell aceitos via BAT (encaminhamento direto):
 Exemplo completo:
 
 ```bat
-bootstrap-agents.bat install -ProjectPath C:\meu-projeto -ConfigureMcps -UpdateAgents -RunSmokeTest
+orchestrator-ia.bat install -ProjectPath C:\meu-projeto -ConfigureMcps -UpdateAgents -RunSmokeTest
 ```
 
 Simulação:
 
 ```bat
-bootstrap-agents.bat install -ProjectPath C:\meu-projeto -DryRun
+orchestrator-ia.bat install -ProjectPath C:\meu-projeto -DryRun
 ```
 
 ---
@@ -348,7 +348,7 @@ Skills de orquestração registradas em `.orchestrator/skills/registry.json`:
 Listar no workspace:
 
 ```bat
-bootstrap-agents.bat skills -ProjectPath C:\meu-projeto
+orchestrator-ia.bat skills -ProjectPath C:\meu-projeto
 ```
 
 Skills externas: `.orchestrator/skills/external/` · Quarentena: `quarantined/`
@@ -429,7 +429,7 @@ Políticas padrão em `.orchestrator/config/policies.json` (score mínimo 0.9, m
 | `git nao encontrado` | Instale Git e adicione ao PATH |
 | `Lock de instalacao ja existe` | Remova `.orchestrator/runtime/install.lock` se nenhum install estiver ativo |
 | `Workspace mais novo que o pacote` | Atualize o pacote bootstrap ou use versão compatível |
-| Arquivos gerenciados ausentes | `orchestrator repair` ou `bootstrap-agents.bat repair` |
+| Arquivos gerenciados ausentes | `orchestrator repair` ou `orchestrator-ia.bat repair` |
 | Validação falhou | `orchestrator verify` e leia logs em `runtime/validations/` |
 | Agentes não detectados | Confirme CLI no PATH; rode `orchestrator status` |
 
@@ -442,7 +442,7 @@ Guia completo: [`docs/troubleshooting.md`](docs/troubleshooting.md)
 ```text
 npx / orchestrator / mao      → CLI Node (bin/orchestrator.js)
 get.ps1                       → one-liner PowerShell + cache local
-bootstrap-agents.bat          → wrapper fino (%* → PowerShell)
+orchestrator-ia.bat          → wrapper fino (%* → PowerShell)
         └─► scripts/Install-Orchestrator.ps1   → roteador (init|install|…)
             scripts/Orchestrator.Common.ps1    → helpers
 package/
@@ -488,7 +488,7 @@ Prioridade atual (v0.1): detecção de CLIs, bootstrap incremental versionado, s
 | `package.json` | Pacote npm `@starfusion/orchestrator` (bins `orchestrator`, `mao`) |
 | `bin/orchestrator.js` | CLI Node — one-liner / global |
 | `get.ps1` | One-liner PowerShell (cache + install no cwd) |
-| `bootstrap-agents.bat` | Wrapper fino Windows → PowerShell (**em uso**) |
+| `orchestrator-ia.bat` | Wrapper fino Windows → PowerShell (**em uso**) |
 | `install.ps1` | Atalho PowerShell local (**em uso**) |
 | `scripts/` | Implementação PowerShell do instalador |
 | `package/` | Template, manifest, checksums, migrações |

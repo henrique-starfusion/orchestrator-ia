@@ -1,10 +1,10 @@
-# Referência da CLI
+﻿# Referência da CLI
 
 Três formas de entrada:
 
 1. **npm:** `npx @starfusion/orchestrator` / `orchestrator` / `mao`
 2. **PowerShell:** `get.ps1`
-3. **Wrapper local:** `bootstrap-agents.bat`
+3. **Wrapper local:** `orchestrator-ia.bat`
 
 A partir de **0.2.0**, a CLI tem duas camadas:
 
@@ -77,7 +77,7 @@ mao init
 ## Invocação local
 
 ```bat
-bootstrap-agents.bat <comando> [opções]
+orchestrator-ia.bat <comando> [opções]
 ```
 
 ```powershell
@@ -99,8 +99,8 @@ orchestrator verify --project C:\dev\meu-app
 ```
 
 ```bat
-bootstrap-agents.bat install -ProjectPath C:\dev\meu-app
-bootstrap-agents.bat verify -Project C:\dev\meu-app
+orchestrator-ia.bat install -ProjectPath C:\dev\meu-app
+orchestrator-ia.bat verify -Project C:\dev\meu-app
 ```
 
 ```powershell
@@ -144,7 +144,7 @@ orchestrator update --force
 ```
 
 ```bat
-bootstrap-agents.bat update -ProjectPath C:\dev\meu-app
+orchestrator-ia.bat update -ProjectPath C:\dev\meu-app
 ```
 
 ```powershell
@@ -176,7 +176,7 @@ Pacote mais novo: backup + upgrade de VERSION.
 Instala ou completa o ambiente `.orchestrator/` no projeto-alvo.
 
 ```bat
-bootstrap-agents.bat install -ProjectPath C:\dev\meu-app
+orchestrator-ia.bat install -ProjectPath C:\dev\meu-app
 ```
 
 **Etapas:** preflight → lock → migração legada (se aplicável) → template → manifest → detect agents → adaptadores → tools → MCPs (opt-in) → validação → updates (opt-in) → probes → relatório.
@@ -190,7 +190,7 @@ bootstrap-agents.bat install -ProjectPath C:\dev\meu-app
 Validação somente leitura — não altera arquivos gerenciados.
 
 ```bat
-bootstrap-agents.bat verify -ProjectPath C:\dev\meu-app
+orchestrator-ia.bat verify -ProjectPath C:\dev\meu-app
 ```
 
 Executa: preflight → Validate-Orchestrator → Validate-Hooks.
@@ -204,9 +204,9 @@ Executa: preflight → Validate-Orchestrator → Validate-Hooks.
 Atualiza workspace quando a versão do pacote é **maior** que `.orchestrator/VERSION`.
 
 ```bat
-bootstrap-agents.bat upgrade -ProjectPath C:\dev\meu-app
-bootstrap-agents.bat upgrade -ProjectPath C:\dev\meu-app -Force
-bootstrap-agents.bat upgrade -DryRun
+orchestrator-ia.bat upgrade -ProjectPath C:\dev\meu-app
+orchestrator-ia.bat upgrade -ProjectPath C:\dev\meu-app -Force
+orchestrator-ia.bat upgrade -DryRun
 ```
 
 | Situação | Resultado |
@@ -223,8 +223,8 @@ bootstrap-agents.bat upgrade -DryRun
 Restaura arquivos gerenciados ausentes ou inconsistentes.
 
 ```bat
-bootstrap-agents.bat repair -ProjectPath C:\dev\meu-app
-bootstrap-agents.bat repair -DryRun
+orchestrator-ia.bat repair -ProjectPath C:\dev\meu-app
+orchestrator-ia.bat repair -DryRun
 ```
 
 Força re-aplicação do manifest com `-Force` interno.
@@ -236,8 +236,8 @@ Força re-aplicação do manifest com `-Force` interno.
 Remove arquivos listados no manifest (exceto `user-owned`). Sempre cria backup em `.orchestrator/backups/` antes de remover.
 
 ```bat
-bootstrap-agents.bat uninstall -ProjectPath C:\dev\meu-app
-bootstrap-agents.bat uninstall -Force
+orchestrator-ia.bat uninstall -ProjectPath C:\dev\meu-app
+orchestrator-ia.bat uninstall -Force
 ```
 
 | Flag | Efeito |
@@ -254,7 +254,7 @@ Adaptadores na raiz do projeto (`.claude/`, `CLAUDE.md`, etc.) **não** são rem
 Resumo do workspace:
 
 ```bat
-bootstrap-agents.bat status -ProjectPath C:\dev\meu-app
+orchestrator-ia.bat status -ProjectPath C:\dev\meu-app
 ```
 
 Exibe:
@@ -271,7 +271,7 @@ Exibe:
 Diagnóstico combinado:
 
 ```bat
-bootstrap-agents.bat analyze -ProjectPath C:\dev\meu-app
+orchestrator-ia.bat analyze -ProjectPath C:\dev\meu-app
 ```
 
 Executa Detect-Environment, Detect-Agents e Validate-Orchestrator.
@@ -283,7 +283,7 @@ Executa Detect-Environment, Detect-Agents e Validate-Orchestrator.
 Lista IDs registrados em `.orchestrator/skills/registry.json`:
 
 ```bat
-bootstrap-agents.bat skills -ProjectPath C:\dev\meu-app
+orchestrator-ia.bat skills -ProjectPath C:\dev\meu-app
 ```
 
 Exit 1 se o registro estiver ausente.
@@ -404,13 +404,13 @@ Resultado em `.orchestrator/agents/probe-results.json`.
 ### Primeira instalação mínima
 
 ```bat
-bootstrap-agents.bat install -ProjectPath C:\dev\novo-projeto
+orchestrator-ia.bat install -ProjectPath C:\dev\novo-projeto
 ```
 
 ### Instalação completa com opt-ins
 
 ```bat
-bootstrap-agents.bat install ^
+orchestrator-ia.bat install ^
   -ProjectPath C:\dev\novo-projeto ^
   -ConfigureMcps ^
   -UpdateAgents ^
@@ -420,19 +420,19 @@ bootstrap-agents.bat install ^
 ### Simular upgrade
 
 ```bat
-bootstrap-agents.bat upgrade -ProjectPath C:\dev\projeto -DryRun
+orchestrator-ia.bat upgrade -ProjectPath C:\dev\projeto -DryRun
 ```
 
 ### Validar ambiente existente
 
 ```bat
-bootstrap-agents.bat verify -ProjectPath C:\dev\projeto
+orchestrator-ia.bat verify -ProjectPath C:\dev\projeto
 ```
 
 ### Reparar após remoção acidental
 
 ```bat
-bootstrap-agents.bat repair -ProjectPath C:\dev\projeto
+orchestrator-ia.bat repair -ProjectPath C:\dev\projeto
 ```
 
 ---

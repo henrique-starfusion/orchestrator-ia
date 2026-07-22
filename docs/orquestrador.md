@@ -1,4 +1,4 @@
-# Orquestrador Multiagente
+﻿# Orquestrador Multiagente
 
 Documento de referência do produto **`@starfusion/orchestrator`** (pacote `bootstrap-agents`, versão **0.4.3**).
 
@@ -69,7 +69,7 @@ flowchart TB
   subgraph entradas [Entradas]
     NPX[npx / npm]
     GET[get.ps1]
-    BAT[bootstrap-agents.bat]
+    BAT[orchestrator-ia.bat]
     CLI[orchestrator / mao]
   end
 
@@ -104,7 +104,7 @@ flowchart TB
 | **npx** | `npx --yes github:henrique-starfusion/bootstrap-agents#develop init` |
 | **npm global** | `npm install -g github:henrique-starfusion/bootstrap-agents#develop` → `orchestrator` / `mao` |
 | **PowerShell + gh** | `gh api …/get.ps1?ref=develop \| iex` |
-| **Clone local** | `bootstrap-agents.bat init` / `.\install.ps1` |
+| **Clone local** | `orchestrator-ia.bat init` / `.\install.ps1` |
 | **Bin Node** | `bin/orchestrator.js` (Node ≥ 18) |
 
 O bin Node localiza `powershell`/`pwsh`, mapeia flags `--*` → parâmetros PowerShell e chama `scripts/Install-Orchestrator.ps1`.

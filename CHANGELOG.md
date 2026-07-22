@@ -5,6 +5,7 @@
 ### Changed
 
 - GitHub Actions CI desabilitado (sem plano/limite de Actions); workflow preservado em `.github/ci.yml.disabled`
+- Wrapper Windows `bootstrap-agents.bat` renomeado para `orchestrator-ia.bat`
 
 ## 0.4.3 — 2026-07-22
 

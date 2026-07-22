@@ -1,4 +1,4 @@
-# Migração legada `.claude/` → `.orchestrator/`
+﻿# Migração legada `.claude/` → `.orchestrator/`
 
 Guia para workspaces que ainda usam `.claude/` como fonte canônica e precisam adotar `.orchestrator/`.
 
@@ -84,24 +84,24 @@ Gera:
 ## Fluxo recomendado
 
 ```text
-1. bootstrap-agents.bat install -ProjectPath C:\dev\projeto
+1. orchestrator-ia.bat install -ProjectPath C:\dev\projeto
       ↓ (migração automática se legado detectado)
 2. Revisar .orchestrator/memory/legacy-import/
 3. Consolidar conteúdo útil nas pastas canônicas de memory/
-4. bootstrap-agents.bat verify -ProjectPath C:\dev\projeto
+4. orchestrator-ia.bat verify -ProjectPath C:\dev\projeto
 5. Confirmar adaptador CLAUDE.md / .claude/ apontando para .orchestrator/
 ```
 
 Simulação:
 
 ```bat
-bootstrap-agents.bat install -ProjectPath C:\dev\projeto -DryRun
+orchestrator-ia.bat install -ProjectPath C:\dev\projeto -DryRun
 ```
 
 Forçar reimportação (cuidado — pode sobrescrever destinos):
 
 ```bat
-bootstrap-agents.bat install -ProjectPath C:\dev\projeto -Force
+orchestrator-ia.bat install -ProjectPath C:\dev\projeto -Force
 ```
 
 ---
@@ -151,7 +151,7 @@ Limpeza manual: mova conteúdo útil para `.orchestrator/` ou para backup extern
 |---|---|---|
 | Fonte canônica | `.claude/` | `.orchestrator/` |
 | VERSION workspace | `.claude/VERSION` | `.orchestrator/VERSION` |
-| Primeira instalação | Prompt manual | `bootstrap-agents.bat install` |
+| Primeira instalação | Prompt manual | `orchestrator-ia.bat install` |
 | Memória | `.claude/memory/` | `.orchestrator/memory/` |
 | Skills | `.claude/skills/` | `.orchestrator/skills/` |
 | Prompt de bootstrap | `docs/archive/prompts/prompt_ambiente_multiagente.md` | **Arquivado** |
@@ -165,7 +165,7 @@ Limpeza manual: mova conteúdo útil para `.orchestrator/` ou para backup extern
 3. Remova `.orchestrator/` se precisar reverter completamente (com `-Force` no uninstall após backup manual)
 
 ```bat
-bootstrap-agents.bat uninstall -ProjectPath C:\dev\projeto -DryRun
+orchestrator-ia.bat uninstall -ProjectPath C:\dev\projeto -DryRun
 ```
 
 Revise a lista antes de executar sem `-DryRun`.
@@ -175,7 +175,7 @@ Revise a lista antes de executar sem `-DryRun`.
 ## Perguntas frequentes
 
 **Preciso rodar o prompt legado?**  
-Não. Use `bootstrap-agents.bat install -ProjectPath ...`.
+Não. Use `orchestrator-ia.bat install -ProjectPath ...`.
 
 **Posso manter `.claude/`?**  
 Sim — como adaptador. A configuração compartilhada deve estar em `.orchestrator/`.

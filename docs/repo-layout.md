@@ -1,4 +1,4 @@
-# Layout deste repositório
+﻿# Layout deste repositório
 
 Este repositório é **ao mesmo tempo**:
 
@@ -18,7 +18,7 @@ Instalação via npm/GitHub deve apontar para `#develop` (ou tag de release em `
 
 | Item | Papel |
 |---|---|
-| `bootstrap-agents.bat` | Wrapper Windows fino → `scripts/Install-Orchestrator.ps1` (**em uso**) |
+| `orchestrator-ia.bat` | Wrapper Windows fino → `scripts/Install-Orchestrator.ps1` (**em uso**) |
 | `install.ps1` | Atalho PowerShell local (**em uso**) |
 | `get.ps1` | One-liner / cache + install (**em uso**) |
 | `bin/orchestrator.js` | CLI npm `orchestrator` / `mao` (**em uso**) |

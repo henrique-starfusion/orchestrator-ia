@@ -1,4 +1,4 @@
-# Solução de problemas
+﻿# Solução de problemas
 
 Guia operacional para falhas comuns do instalador **bootstrap-agents** / **@starfusion/orchestrator**.
 
@@ -27,9 +27,9 @@ orchestrator cursor verify
 | Log `[error] INFO Processing request` + `undefined` | Cosmetico: Cursor trata stderr como erro; conexao OK se houver `Successfully connected` |
 
 ```bat
-bootstrap-agents.bat status -ProjectPath C:\dev\projeto
-bootstrap-agents.bat verify -ProjectPath C:\dev\projeto
-bootstrap-agents.bat analyze -ProjectPath C:\dev\projeto
+orchestrator-ia.bat status -ProjectPath C:\dev\projeto
+orchestrator-ia.bat verify -ProjectPath C:\dev\projeto
+orchestrator-ia.bat analyze -ProjectPath C:\dev\projeto
 ```
 
 Logs:
@@ -200,7 +200,7 @@ npm install -g github:henrique-starfusion/bootstrap-agents#develop
 **Solução:**
 
 ```bat
-bootstrap-agents.bat install -ProjectPath C:\dev\projeto
+orchestrator-ia.bat install -ProjectPath C:\dev\projeto
 ```
 
 ---
@@ -212,7 +212,7 @@ bootstrap-agents.bat install -ProjectPath C:\dev\projeto
 **Solução:**
 
 ```bat
-bootstrap-agents.bat repair -ProjectPath C:\dev\projeto
+orchestrator-ia.bat repair -ProjectPath C:\dev\projeto
 ```
 
 ---
@@ -239,7 +239,7 @@ bootstrap-agents.bat repair -ProjectPath C:\dev\projeto
 
 1. Instale o CLI desejado (ex.: Claude Code, Codex)
 2. Abra novo terminal
-3. `bootstrap-agents.bat analyze -ProjectPath ...`
+3. `orchestrator-ia.bat analyze -ProjectPath ...`
 
 Registro: `.orchestrator/agents/detected.json`
 
@@ -345,8 +345,8 @@ Limpeza automática: [`legacy-cleanup.md`](legacy-cleanup.md).
 ## Simulação (DryRun)
 
 ```bat
-bootstrap-agents.bat install -ProjectPath C:\dev\projeto -DryRun
-bootstrap-agents.bat upgrade -DryRun
+orchestrator-ia.bat install -ProjectPath C:\dev\projeto -DryRun
+orchestrator-ia.bat upgrade -DryRun
 ```
 
 Útil para preview sem lock nem escrita.
@@ -358,7 +358,7 @@ bootstrap-agents.bat upgrade -DryRun
 Inclua:
 
 1. Saída completa do comando com erro
-2. `bootstrap-agents.bat status -ProjectPath ...`
+2. `orchestrator-ia.bat status -ProjectPath ...`
 3. Último log em `.orchestrator/runtime/validations/`
 4. `installation-report.md`
 5. Versões: `VERSION` (pacote) e `.orchestrator/VERSION`

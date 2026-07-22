@@ -1,4 +1,4 @@
-> **LEGADO — não use para primeira instalação**
+﻿> **LEGADO — não use para primeira instalação**
 >
 > Este prompt descreve o fluxo antigo baseado em `.claude/` como fonte canônica.
 > **A fonte canônica atual é `.orchestrator/`.**
@@ -20,7 +20,7 @@
 
 Você é o Codex CLI responsável por **estruturar pela primeira vez** (ou completar o que falta) o ambiente de agentes de IA deste projeto.
 
-Este prompt é para modo `install` do `bootstrap-agents.bat`.
+Este prompt é para modo `install` do `orchestrator-ia.bat`.
 
 **Não use este prompt para remount:** se `.claude/VERSION` já existir e o workspace estiver estruturado, o bootstrap deve apenas verificar ou fazer upgrade incremental. Não apague `.claude/`, não faça backup destrutivo e não reconstrua do zero.
 
@@ -86,7 +86,7 @@ Quando um agente exigir um arquivo próprio, crie somente um pequeno adaptador q
 
 # 2. Estado esperado antes da execução
 
-O `bootstrap-agents.bat` opera por versão e de forma incremental:
+O `orchestrator-ia.bat` opera por versão e de forma incremental:
 
 | Modo | Quando | O que fazer |
 |---|---|---|

@@ -1,4 +1,4 @@
-# Arquitetura do instalador
+﻿# Arquitetura do instalador
 
 Documentação técnica do pacote **bootstrap-agents** / **@starfusion/orchestrator** (v0.4.3). Descreve o instalador e aponta para o runtime.
 
@@ -11,7 +11,7 @@ Quickstart one-liner: [`quickstart-oneliner.md`](quickstart-oneliner.md)
 ## Visão geral
 
 ```text
-  npx / orchestrator          get.ps1 (gh api|iex)       bootstrap-agents.bat
+  npx / orchestrator          get.ps1 (gh api|iex)       orchestrator-ia.bat
   (@starfusion/orchestrator)  cache LOCALAPPDATA         wrapper fino local
              \                        |                        /
               \                       |                       /
@@ -66,7 +66,7 @@ gh api -H "Accept: application/vnd.github.raw" `
 
 ### 3. BAT fino (clone local)
 
-`bootstrap-agents.bat` apenas:
+`orchestrator-ia.bat` apenas:
 
 1. Fixa o diretório para a raiz do pacote (`%~dp0`)
 2. Invoca PowerShell com `-ExecutionPolicy Bypass`
