@@ -1,4 +1,4 @@
-# GitHub Actions (desabilitado)
+﻿# GitHub Actions (desabilitado)
 
 O workflow de CI foi desabilitado porque a conta nao tem plano/limite de
 Actions disponivel (billing/spending limit).
@@ -18,3 +18,7 @@ Testes locais continuam sendo a fonte de verdade:
 cd runtime && python -m pytest -q
 ./tests/Run-AllTests.ps1
 ```
+
+> Este arquivo e `.github/ACTIONS.md` (nao `README.md`). O GitHub prioriza
+> `.github/README.md` sobre o README da raiz — por isso o texto de Actions
+> nao pode viver como README aqui.
