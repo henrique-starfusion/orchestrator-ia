@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
+import logging
 import os
+import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Coroutine, TypeVar
 
 from orchestrator_runtime.agents.base import AgentRequest
 from orchestrator_runtime.agents.process import redact
@@ -27,7 +30,26 @@ from orchestrator_runtime.tasks.state_machine import TaskState, can_resume
 
 
 BLOCKED_ROLES_FOR_CURSOR = {"planner", "executor", "tester", "validator", "corrector"}
+WRITE_ROLES = {"executor", "corrector", "tester"}
 MAX_PROMPT_CHARS = 100_000
+_LOG = logging.getLogger("orchestrator_runtime.mcp")
+T = TypeVar("T")
+
+
+def _run_coro(coro: Coroutine[Any, Any, T]) -> T:
+    """Executa coroutine sem quebrar se já houver event loop (MCP async)."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
+
+
+def _bg_log(context: str, exc: BaseException) -> None:
+    msg = f"[orchestrator-mcp] {context}: {exc}"
+    _LOG.exception(msg)
+    print(msg, file=sys.stderr)
 
 
 class OrchestratorMcpTools:
@@ -66,7 +88,7 @@ class OrchestratorMcpTools:
             in_allowlist = True
         except ValueError:
             in_allowlist = False
-        if not in_allowlist and not (raw / ".orchestrator").is_dir():
+        if not in_allowlist:
             raise McpSecurityError(
                 f"workspace fora da allowlist: {raw} (cwd={self.default_workspace})"
             )
@@ -185,6 +207,11 @@ class OrchestratorMcpTools:
         if os.environ.get("ORCHESTRATOR_CHILD_AGENT"):
             raise McpSecurityError("recursao bloqueada (ORCHESTRATOR_CHILD_AGENT)")
 
+        if data.read_only and data.role in WRITE_ROLES:
+            raise McpSecurityError(
+                f"read_only=true bloqueia role de escrita: {data.role}"
+            )
+
         service = self._service(data.workspace)
         adapter = service.registry.get(data.agent)
         if adapter is None:
@@ -216,7 +243,7 @@ class OrchestratorMcpTools:
             cwd=str(service.config.project_path),
             timeout_s=data.timeout_seconds,
         )
-        result = asyncio.run(adapter.run(request))
+        result = _run_coro(adapter.run(request))
         summary = redact((result.stdout or "")[-1200:])
         service.repo.add_agent_run(
             task_id=task.id,
@@ -234,6 +261,12 @@ class OrchestratorMcpTools:
             status=result.status,
             changed_files_json=__import__("json").dumps(result.changed_files),
         )
+        warnings = [
+            "exit_code_0_not_quality_proof",
+            "delegate_is_single_role_not_full_workflow",
+        ]
+        if data.read_only:
+            warnings.append("read_only_enforced")
         return {
             "run_id": f"{task.id}:{data.role}:{data.agent}",
             "task_id": task.id,
@@ -242,12 +275,10 @@ class OrchestratorMcpTools:
             "role": data.role,
             "summary": summary[:500] or f"{data.agent}/{data.role} finished",
             "artifacts": result.changed_files,
-            "warnings": [
-                "exit_code_0_not_quality_proof",
-                "delegate_is_single_role_not_full_workflow",
-            ],
+            "warnings": warnings,
             "unresolved_issues": [],
             "exit_code": result.exit_code,
+            "read_only": data.read_only,
         }
 
     def run(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -258,18 +289,16 @@ class OrchestratorMcpTools:
             if name == "cursor":
                 raise McpSecurityError("cursor nao pode ser worker")
         if data.constraints.allow_network:
-            # policy: network blocked by default; explicit flag recorded as warning only
-            pass
+            raise McpSecurityError(
+                "allow_network=true bloqueado pela politica MCP (rede desabilitada)"
+            )
         if data.constraints.allow_dependency_install:
             raise McpSecurityError("install de dependencias bloqueado pela politica MCP")
 
-        planner = None if data.routing == "automatic" else data.planner
-        executor = None if data.routing == "automatic" else data.executor
-        validator = None if data.routing == "automatic" else data.validator
-        if data.routing != "automatic":
-            planner = data.planner
-            executor = data.executor
-            validator = data.validator
+        # Overrides explícitos têm precedência mesmo com routing=automatic
+        planner = data.planner
+        executor = data.executor
+        validator = data.validator
 
         service = self._service(data.workspace)
         # temporary fake override
@@ -300,7 +329,7 @@ class OrchestratorMcpTools:
                         ),
                     )
 
-                done = asyncio.run(_wait())
+                done = _run_coro(_wait())
                 return {
                     "task_id": done.id,
                     "status": done.status.value,
@@ -308,12 +337,16 @@ class OrchestratorMcpTools:
                     "status_resource": f"orchestrator://tasks/{done.id}",
                     "events_resource": f"orchestrator://tasks/{done.id}/events",
                     "next_poll_after_seconds": 0,
+                    "error": done.error,
                 }
             except asyncio.TimeoutError:
                 return {
                     "task_id": task.id,
                     "status": "EXECUTING",
-                    "message": "Timeout MCP de espera; continue com orchestrator_status",
+                    "message": (
+                        "Timeout MCP de espera; continue com orchestrator_status "
+                        f"(poll a cada 5s; task_id={task.id})"
+                    ),
                     "status_resource": f"orchestrator://tasks/{task.id}",
                     "events_resource": f"orchestrator://tasks/{task.id}/events",
                     "next_poll_after_seconds": 5,
@@ -325,8 +358,24 @@ class OrchestratorMcpTools:
         def _bg() -> None:
             try:
                 asyncio.run(service.run_task(task.id))
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:  # noqa: BLE001
+                _bg_log(f"run_task {task.id}", exc)
+                try:
+                    t = service.get(task.id)
+                    if t.status not in {
+                        TaskState.COMPLETED,
+                        TaskState.FAILED,
+                        TaskState.CANCELLED,
+                        TaskState.INCOMPLETE,
+                    }:
+                        service.repo.transition(
+                            t,
+                            TaskState.FAILED,
+                            reason="background error",
+                            error=str(exc),
+                        )
+                except Exception as mark_exc:  # noqa: BLE001
+                    _bg_log(f"mark_failed {task.id}", mark_exc)
 
         import threading
 
@@ -334,10 +383,19 @@ class OrchestratorMcpTools:
         return {
             "task_id": task.id,
             "status": "RECEIVED",
-            "message": "Workflow iniciado; use orchestrator_status para acompanhar",
+            "message": (
+                "Workflow iniciado. Poll orchestrator_status a cada "
+                "next_poll_after_seconds; use orchestrator_events para detalhe; "
+                "só declare sucesso após orchestrator_result."
+            ),
             "status_resource": f"orchestrator://tasks/{task.id}",
             "events_resource": f"orchestrator://tasks/{task.id}/events",
             "next_poll_after_seconds": 5,
+            "poll_hint": {
+                "status": "orchestrator_status",
+                "events": "orchestrator_events",
+                "result": "orchestrator_result",
+            },
         }
 
     def status(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -351,27 +409,81 @@ class OrchestratorMcpTools:
                 "summary": (e.get("data") or {}).get("summary")
                 or (e.get("data") or {}).get("to")
                 or e.get("type"),
+                "role": e.get("role"),
+                "agent": e.get("agent"),
             }
             for e in events[-12:]
         ]
+        last = events[-1] if events else {}
+        last_data = last.get("data") or {}
+        plan = task.plan or {}
+        steps = plan.get("steps") or []
+        active_step = None
+        for step in steps:
+            if step.get("role") in {"planner", "executor", "validator"} and task.status.value in {
+                "SELECTING_AGENTS",
+                "PLANNING",
+                "EXECUTING",
+                "VALIDATING",
+                "CORRECTING",
+            }:
+                active_step = step
+                break
+        blocking = []
+        if isinstance(task.analysis, dict):
+            blocking = list(task.analysis.get("blocking_issues") or [])
+        if task.error:
+            blocking.append({"type": "error", "detail": task.error})
+
         requires_input = task.status == TaskState.WAITING_FOR_USER
+        terminal = task.status.value in {
+            "COMPLETED",
+            "FAILED",
+            "INCOMPLETE",
+            "CANCELLED",
+        }
+        message_parts = [f"Estado: {task.status.value}"]
+        if task.iteration:
+            message_parts.append(f"iter={task.iteration}")
+        if active_step:
+            message_parts.append(
+                f"agente={active_step.get('agent')}/{active_step.get('role')}"
+            )
+        elif last.get("agent"):
+            message_parts.append(f"ultimo={last.get('agent')}/{last.get('role')}")
+        if last_data.get("summary"):
+            message_parts.append(str(last_data.get("summary")))
+        if task.error:
+            message_parts.append(f"erro={task.error}")
+        if not terminal:
+            message_parts.append("poll orchestrator_status / orchestrator_events")
+
         out = {
             "task_id": task.id,
             "status": task.status.value,
             "current_state": task.status.value,
             "current_iteration": task.iteration,
-            "selected_agents": (task.plan or {}).get("roles") or {},
+            "selected_agents": plan.get("roles")
+            or {
+                s.get("role"): s.get("agent")
+                for s in steps
+                if s.get("role") and s.get("agent")
+            },
+            "active_agent": (active_step or {}).get("agent"),
+            "active_role": (active_step or {}).get("role"),
             "progress": progress,
-            "blocking_issues": [],
+            "blocking_issues": blocking,
             "documentation": task.documentation_review or {},
             "started_at": task.created_at,
             "updated_at": task.updated_at,
             "requires_input": requires_input,
-            "message": f"Estado atual: {task.status.value}",
-            "next_poll_after_seconds": 0
-            if task.status.value
-            in {"COMPLETED", "FAILED", "INCOMPLETE", "CANCELLED"}
-            else 5,
+            "error": task.error,
+            "message": " | ".join(message_parts),
+            "next_poll_after_seconds": 0 if terminal else 5,
+            "acceptance_criteria": [
+                c.model_dump() if hasattr(c, "model_dump") else c
+                for c in (task.acceptance_criteria or [])
+            ],
         }
         if requires_input:
             out["question"] = (task.analysis or {}).get("user_question") or (
@@ -457,15 +569,35 @@ class OrchestratorMcpTools:
         def _bg() -> None:
             try:
                 asyncio.run(service.resume(data.task_id))
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:  # noqa: BLE001
+                _bg_log(f"resume {data.task_id}", exc)
+                try:
+                    t = service.get(data.task_id)
+                    if t.status not in {
+                        TaskState.COMPLETED,
+                        TaskState.FAILED,
+                        TaskState.CANCELLED,
+                        TaskState.INCOMPLETE,
+                    }:
+                        service.repo.transition(
+                            t,
+                            TaskState.FAILED,
+                            reason="background resume error",
+                            error=str(exc),
+                        )
+                except Exception as mark_exc:  # noqa: BLE001
+                    _bg_log(f"mark_failed resume {data.task_id}", mark_exc)
 
         threading.Thread(target=_bg, daemon=True).start()
         return {
             "task_id": task.id,
             "status": task.status.value,
-            "message": "resume iniciado",
+            "message": (
+                "resume iniciado; poll orchestrator_status "
+                f"(task_id={task.id})"
+            ),
             "next_poll_after_seconds": 5,
+            "error": task.error,
         }
 
     def message(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -488,14 +620,17 @@ class OrchestratorMcpTools:
         def _bg() -> None:
             try:
                 asyncio.run(service.resume(data.task_id))
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:  # noqa: BLE001
+                _bg_log(f"message/resume {data.task_id}", exc)
 
         threading.Thread(target=_bg, daemon=True).start()
         return {
             "task_id": task.id,
             "status": "PLANNING",
-            "message": "mensagem aceita; workflow retomado",
+            "message": (
+                "mensagem aceita; workflow retomado — "
+                "poll orchestrator_status"
+            ),
             "next_poll_after_seconds": 5,
         }
 

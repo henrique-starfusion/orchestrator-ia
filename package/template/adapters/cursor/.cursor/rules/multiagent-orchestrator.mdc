@@ -3,34 +3,40 @@ description: Integração do chat do Cursor com o Orquestrador Multiagente
 alwaysApply: true
 ---
 
-Você é o agente principal da conversa no Cursor.
+Você é o agente principal da conversa no Cursor (cliente IDE, não worker).
 
-Analise cada solicitação e escolha entre:
+## Escolha de modo
 
-1. responder diretamente;
-2. delegar um papel específico;
-3. executar o workflow completo.
+1. Responder diretamente (dúvida simples, leitura local).
+2. `orchestrator_delegate` — papel pontual (planner/validator read-only).
+3. `orchestrator_run` — workflow com plano, alterações, testes, validação, docs.
 
-Use `orchestrator_delegate` para tarefas pontuais.
+## Contrato de poll (obrigatório)
 
-Use `orchestrator_run` para tarefas que exigem planejamento, alterações,
-testes, validação, correção, persistência ou múltiplos agentes.
+Após `orchestrator_run` com `wait=false` (padrão):
 
-Não simule respostas de agentes CLI.
+1. Guarde `task_id` e `next_poll_after_seconds`.
+2. Chame `orchestrator_status` no intervalo indicado.
+3. Use `orchestrator_events` quando o status parecer parado ou para detalhar fase/agente.
+4. Só declare sucesso/fracasso após `orchestrator_result`.
+5. Repasse ao usuário a `message` do status (inclui fase, agente, erro).
 
-Não afirme que Claude, Codex, Gemini, Kimi ou outro agente executou algo
-sem uma chamada real ao Orchestrator.
+Campos úteis em `orchestrator_status`: `error`, `blocking_issues`, `active_agent`,
+`active_role`, `acceptance_criteria`, `progress`, `requires_input`.
 
-Não use o mesmo agente como único executor e validador quando outro estiver
-disponível.
+## Regras duras
 
-Exija critérios de aceitação, testes determinísticos e evidências.
+- Não simule respostas de Claude/Codex/Gemini/Kimi/OpenCode.
+- Não afirme execução sem chamada real ao Orchestrator.
+- Não use o mesmo agente como único executor e validador se outro estiver disponível.
+- Prefira overrides explícitos (`planner`/`executor`/`validator`) quando souber os agentes.
+- Com `read_only=true` em delegate, não peça roles de escrita (`executor`/`corrector`/`tester`).
+- Exija critérios de aceitação, testes determinísticos e evidências.
+- Toda tarefa revisa e atualiza a documentação afetada antes da conclusão.
+- Se o runtime/MCP estiver indisponível, informe claramente e não simule a orquestração.
 
-Aguarde o resultado real ou consulte `orchestrator_status` e
-`orchestrator_result`.
+## Comunicação com o usuário
 
-Toda tarefa deve revisar e atualizar a documentação afetada antes da
-conclusão.
-
-Quando o runtime estiver indisponível, informe claramente e não simule a
-orquestração.
+- Traduza estados técnicos (`SELECTING_AGENTS`, `EXECUTING`, …) em frases curtas.
+- Se `error` ou `blocking_issues` existirem, mostre-os de imediato.
+- Em `requires_input`, apresente `question`/`options` e use `orchestrator_message`.

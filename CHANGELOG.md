@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Critérios de aceitação “soma” não disparam mais por substring em `resume`/`summary` (`CriteriaBuilder`)
+- `WriteLock` com reclaim de PID morto e reentrancy (evita deadlock em resume/MCP)
+- `orchestrator_delegate` não usa mais `asyncio.run` no loop MCP (`_run_coro`)
+- Allowlist MCP estrita (bloqueia workspace externo mesmo com `.orchestrator/`)
+- `read_only` enforced em delegate; `allow_network` rejeitado de verdade
+- Overrides de agentes respeitados com `routing=automatic`
+- Erros em threads background MCP deixam de ser engolidos (log + mark FAILED)
+
+### Changed
+
+- `orchestrator_status` expõe `error`, mensagem legível, agente ativo e ACs
+- Regra Cursor `multiagent-orchestrator.mdc` documenta contrato de poll chat↔runtime
+
 ## 0.4.0 — 2026-07-21
 
 ### Added

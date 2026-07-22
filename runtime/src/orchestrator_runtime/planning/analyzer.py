@@ -82,6 +82,22 @@ class TaskAnalyzer:
         )
 
 
+_SOMA_MODULE_RE = re.compile(
+    r"(?:"
+    r"\b(?:fun[cç][aã]o|function|m[oó]dulo|module|def)\s+soma\b"
+    r"|\bsoma\s*\(\s*[a-z_]"
+    r"|\b(?:function|module|def)\s+sum\b"
+    r"|\bsum\s*\(\s*[a-z_]"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def wants_soma_module(prompt: str) -> bool:
+    """True só para intent de módulo/função soma|sum — não substring em resume/summary."""
+    return bool(_SOMA_MODULE_RE.search(prompt or ""))
+
+
 class CriteriaBuilder:
     def build(self, prompt: str, analysis: TaskAnalysis) -> list[AcceptanceCriterion]:
         criteria: list[AcceptanceCriterion] = []
@@ -101,12 +117,12 @@ class CriteriaBuilder:
             )
             idx += 1
 
-        if "soma" in lowered or "sum" in lowered:
+        if wants_soma_module(prompt):
             add("Existe função soma(a, b) retornando a soma numérica")
             add("Há teste automatizado cobrindo soma(2,3)==5")
-        if "test" in lowered or "pytest" in lowered or "teste" in lowered:
+        if re.search(r"\b(test|pytest|teste|testes)\b", lowered):
             add("Suite de testes determinística passa com exit code 0")
-        if "doc" in lowered or "document" in lowered or "readme" in lowered:
+        if re.search(r"\b(docs?|document\w*|readme)\b", lowered):
             add("README ou docs descrevem uso com exemplo executável")
         if not criteria:
             add("Alterações solicitadas no prompt estão presentes no workspace")

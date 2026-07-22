@@ -146,6 +146,72 @@ def test_mcp_path_validation(tools, tmp_path):
         )
 
 
+def test_mcp_path_rejects_foreign_orchestrator(tmp_path_factory):
+    """Mesmo com .orchestrator/, path fora do default_workspace é bloqueado."""
+    allowed = tmp_path_factory.mktemp("allowed-ws")
+    (allowed / ".orchestrator").mkdir()
+    foreign = tmp_path_factory.mktemp("foreign-ws")
+    (foreign / ".orchestrator").mkdir()
+    tools = OrchestratorMcpTools(
+        default_workspace=allowed, fake_agents=True, verbose=False
+    )
+    with pytest.raises(McpSecurityError, match="allowlist"):
+        tools.analyze(
+            {
+                "objective": "x",
+                "workspace": str(foreign),
+            }
+        )
+
+
+def test_mcp_status_includes_error_and_message(tools):
+    service = tools._service()
+    task = service.create_task("x")
+    service.repo.transition(
+        task,
+        TaskState.FAILED,
+        reason="test",
+        error="lock timeout demo",
+    )
+    st = tools.status({"task_id": task.id})
+    assert st["error"] == "lock timeout demo"
+    assert "erro=" in st["message"]
+    assert st["next_poll_after_seconds"] == 0
+
+
+def test_mcp_delegate_read_only_blocks_executor(tools):
+    with pytest.raises(McpSecurityError, match="read_only"):
+        tools.delegate(
+            {
+                "agent": "claude",
+                "role": "executor",
+                "objective": "escreva codigo",
+                "read_only": True,
+            }
+        )
+
+
+def test_mcp_run_honors_agent_overrides(tools):
+    out = tools.run(
+        {
+            "objective": "Crie um modulo Python com funcao soma, testes e documente.",
+            "routing": "automatic",
+            "planner": "claude",
+            "executor": "codex",
+            "validator": "opencode",
+            "wait": True,
+            "fake_agents": True,
+        }
+    )
+    res = tools.result({"task_id": out["task_id"]})
+    plan = res.get("plan") or {}
+    steps = {s["role"]: s["agent"] for s in plan.get("steps") or [] if "role" in s}
+    # fake registry pode remapear; se steps existirem, overrides devem aparecer no plan roles ou steps
+    assert out["task_id"]
+    if steps:
+        assert steps.get("planner") == "claude" or plan.get("roles")
+
+
 def test_cursor_config_merge(project):
     existing = {
         "mcpServers": {

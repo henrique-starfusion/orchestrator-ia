@@ -7,10 +7,10 @@ Status: **implementado**
 | `orchestrator_health` | Saúde runtime/agentes |
 | `orchestrator_analyze` | Análise read-only |
 | `orchestrator_delegate` | Um papel em um CLI |
-| `orchestrator_run` | Workflow completo (`routing=automatic` padrão) |
-| `orchestrator_status` | Estado + polling hint |
-| `orchestrator_events` | Eventos paginados |
-| `orchestrator_result` | Resultado compacto |
+| `orchestrator_run` | Workflow completo; overrides `planner`/`executor`/`validator` têm precedência; resposta inclui `poll_hint` |
+| `orchestrator_status` | Estado + `error` + `message` rica + `active_agent`/`active_role` + `blocking_issues` + `next_poll_after_seconds` |
+| `orchestrator_events` | Eventos paginados (use se status parecer parado) |
+| `orchestrator_result` | Resultado compacto (única fonte para declarar sucesso) |
 | `orchestrator_cancel` | Cancelar |
 | `orchestrator_resume` | Retomar |
 | `orchestrator_message` | Resposta humana |
