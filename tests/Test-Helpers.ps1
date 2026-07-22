@@ -46,17 +46,39 @@ function Invoke-TestInstall {
         [string]$ProjectPath,
         [Parameter(Mandatory = $true)]
         [string]$PackageRoot,
+        [hashtable]$ExtraParams = @{},
         [string[]]$ExtraArgs = @()
     )
 
     $installer = Join-Path (Get-TestScriptsRoot) 'Install-Orchestrator.ps1'
 
-    if ($ExtraArgs.Count -gt 0) {
-        & $installer install -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive @ExtraArgs
+    $params = @{
+        ProjectPath     = $ProjectPath
+        PackageRoot     = $PackageRoot
+        NonInteractive  = $true
+        SkipGlobalTools = $true
+        # Evita mutar ~/.cursor/mcp.json do desenvolvedor durante a suite
+        CursorMcpScope  = 'project'
     }
-    else {
-        & $installer install -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive
+    foreach ($key in $ExtraParams.Keys) {
+        $params[$key] = $ExtraParams[$key]
     }
+
+    # Compat: ExtraArgs no formato '-Name', 'value' -> hashtable
+    for ($i = 0; $i -lt $ExtraArgs.Count; $i++) {
+        $token = $ExtraArgs[$i]
+        if ($token -like '-*' -and ($i + 1) -lt $ExtraArgs.Count -and $ExtraArgs[$i + 1] -notlike '-*') {
+            $name = $token.TrimStart('-')
+            $params[$name] = $ExtraArgs[$i + 1]
+            $i++
+        }
+        elseif ($token -like '-*') {
+            $name = $token.TrimStart('-')
+            $params[$name] = $true
+        }
+    }
+
+    & $installer install @params
 
     if ($LASTEXITCODE -ne 0) {
         throw ('Install failed with exit code {0}' -f $LASTEXITCODE)
@@ -77,18 +99,16 @@ function Invoke-TestOrchestratorCommand {
 
     $installer = Join-Path (Get-TestScriptsRoot) 'Install-Orchestrator.ps1'
 
-    if ($Force -and $DryRun) {
-        & $installer $Command -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive -Force -DryRun
+    $cmdParams = @{
+        ProjectPath     = $ProjectPath
+        PackageRoot     = $PackageRoot
+        NonInteractive  = $true
+        SkipGlobalTools = $true
+        CursorMcpScope  = 'project'
     }
-    elseif ($Force) {
-        & $installer $Command -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive -Force
-    }
-    elseif ($DryRun) {
-        & $installer $Command -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive -DryRun
-    }
-    else {
-        & $installer $Command -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive
-    }
+    if ($Force) { $cmdParams.Force = $true }
+    if ($DryRun) { $cmdParams.DryRun = $true }
+    & $installer $Command @cmdParams
 
     return $LASTEXITCODE
 }

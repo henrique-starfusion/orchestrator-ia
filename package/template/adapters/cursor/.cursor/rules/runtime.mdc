@@ -1,0 +1,37 @@
+---
+description: Runtime persistente — Cursor como cliente, nao worker
+alwaysApply: true
+---
+
+# Runtime multiagente
+
+## Fonte de verdade
+
+`.orchestrator/` + SQLite `.orchestrator/data/orchestrator.db`
+
+## Comandos
+
+```bash
+orchestrator run --prompt "<atividade>"
+orchestrator task status <id>
+orchestrator task list
+orchestrator task cancel <id>
+orchestrator task resume <id>
+```
+
+## Cursor
+
+- Cliente IDE: submete tarefas e acompanha status
+- **Nao** e planner/executor/tester/validator
+- Nao use `Task model=` como workflow principal
+
+## Gates
+
+- Testes determinísticos pelo runtime
+- Validação independente quando houver outro agente
+- Documentação obrigatória antes de COMPLETED
+- Limites: iterações, tempo, same-issue, score
+
+## Documentação
+
+Ao final de cada tarefa, revisar e atualizar a documentação afetada antes da conclusão.

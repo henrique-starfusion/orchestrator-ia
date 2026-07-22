@@ -31,6 +31,22 @@ try {
     $claudeContent = Get-Content -LiteralPath $claudePath -Raw -Encoding UTF8
     Assert-Test -Condition ($claudeContent -match '\.orchestrator') -Message 'CLAUDE.md does not reference .orchestrator'
 
+    # --- call-agent stubs ---
+    $claudeStub = Join-Path $tempDir '.claude\skills\call-agent\SKILL.md'
+    Assert-Test -Condition (Test-Path -LiteralPath $claudeStub) -Message 'stub .claude/skills/call-agent/SKILL.md ausente'
+
+    $agentsMd = Join-Path $tempDir 'AGENTS.md'
+    if (Test-Path -LiteralPath $agentsMd) {
+        $agentsContent = Get-Content -LiteralPath $agentsMd -Raw
+        Assert-Test -Condition ($agentsContent -match 'orchestrator:call-agent') -Message 'secao call-agent ausente no AGENTS.md'
+        $markerCount = ([regex]::Matches($agentsContent, 'orchestrator:call-agent')).Count
+        Assert-Test -Condition ($markerCount -eq 1) -Message ('append nao idempotente: {0} marcadores em AGENTS.md' -f $markerCount)
+
+        # colisao codex/opencode: conteudo base de AMBOS os vendors precisa sobreviver no AGENTS.md
+        Assert-Test -Condition ($agentsContent -match 'orchestrator:vendor:codex') -Message 'conteudo base do codex perdido no AGENTS.md (colisao de vendors)'
+        Assert-Test -Condition ($agentsContent -match 'orchestrator:vendor:opencode') -Message 'conteudo base do opencode perdido no AGENTS.md (colisao de vendors)'
+    }
+
     Write-Host ('PASS: {0}' -f $TestName) -ForegroundColor Green
     $exitCode = 0
 }

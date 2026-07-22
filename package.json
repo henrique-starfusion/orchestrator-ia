@@ -1,16 +1,16 @@
 {
   "name": "@starfusion/orchestrator",
-  "version": "0.1.0",
-  "description": "Instalador versionado do Orquestrador Multiagente (StarFusion). Fonte canônica .orchestrator/",
+  "version": "0.4.3",
+  "description": "Orquestrador IA Multiagente (StarFusion): instalador, runtime e MCP Cursor. Fonte canônica .orchestrator/",
   "license": "UNLICENSED",
   "author": "Henrique Rodrigues <StarFusion Consultoria, Tecnologia e Soluções em Informática LTDA.>",
-  "homepage": "https://github.com/henrique-starfusion/bootstrap-agents",
+  "homepage": "https://github.com/henrique-starfusion/orchestrator-ia",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/henrique-starfusion/bootstrap-agents.git"
+    "url": "git+https://github.com/henrique-starfusion/orchestrator-ia.git"
   },
   "bugs": {
-    "url": "https://github.com/henrique-starfusion/bootstrap-agents/issues"
+    "url": "https://github.com/henrique-starfusion/orchestrator-ia/issues"
   },
   "bin": {
     "orchestrator": "bin/orchestrator.js",
@@ -20,11 +20,13 @@
     "bin/",
     "scripts/",
     "package/",
+    "runtime/",
     "docs/",
     "VERSION",
     "LICENSE",
     "README.md",
-    "bootstrap-agents.bat",
+    "CHANGELOG.md",
+    "orchestrator-ia.bat",
     "install.ps1",
     "get.ps1"
   ],
@@ -41,7 +43,9 @@
     "bootstrap"
   ],
   "scripts": {
-    "test": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/Run-AllTests.ps1"
+    "test": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/Run-AllTests.ps1",
+    "test:runtime": "python -m pytest -q runtime/tests",
+    "test:all": "npm test && npm run test:runtime"
   },
   "preferGlobal": true
 }

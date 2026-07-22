@@ -1,0 +1,1 @@
+from orchestrator_runtime.validation.deterministic import next_issue_id

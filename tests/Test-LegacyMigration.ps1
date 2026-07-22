@@ -40,6 +40,9 @@ try {
 
     Assert-Test -Condition ($hasMigrationReport -or $hasBackup) -Message 'No migration report or backup evidence found after legacy install'
 
+    $importPath = Get-OrchestratorPath -ProjectPath $tempDir -RelativePath 'memory/legacy-import/claude'
+    Assert-Test -Condition (Test-Path -LiteralPath $importPath) -Message 'memory/legacy-import/claude ausente apos migracao'
+
     Write-Host ('PASS: {0}' -f $TestName) -ForegroundColor Green
     $exitCode = 0
 }

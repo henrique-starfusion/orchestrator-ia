@@ -1,0 +1,18 @@
+{
+  "id": "gemini",
+  "kind": "cli",
+  "verified": false,
+  "invoke": {
+    "subcommand": [],
+    "prompt_via": "arg",
+    "prompt_flag": "-p",
+    "sandbox_flags": []
+  },
+  "output": {
+    "format": "text",
+    "json_flags": []
+  },
+  "exit_codes": { "success": 0 },
+  "timeout_default_s": 600,
+  "notes": "Extraido de docs (nao testado neste host). model_flag -m vem de config/models.json."
+}

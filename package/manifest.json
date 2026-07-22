@@ -39,13 +39,53 @@
                       "mode":  "managed"
                   },
                   {
+                      "source":  "template/.orchestrator/agents/profiles/claude.json",
+                      "destination":  ".orchestrator/agents/profiles/claude.json",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/agents/profiles/codex.json",
+                      "destination":  ".orchestrator/agents/profiles/codex.json",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/agents/profiles/gemini.json",
+                      "destination":  ".orchestrator/agents/profiles/gemini.json",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/agents/profiles/opencode.json",
+                      "destination":  ".orchestrator/agents/profiles/opencode.json",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/agents/profiles/kimi.json",
+                      "destination":  ".orchestrator/agents/profiles/kimi.json",
+                      "mode":  "managed"
+                  },
+                  {
+                      "source":  "template/.orchestrator/agents/profiles/cursor.json",
+                      "destination":  ".orchestrator/agents/profiles/cursor.json",
+                      "mode":  "managed"
+                  },
+                  {
                       "source":  "template/.orchestrator/config/orchestrator.json",
                       "destination":  ".orchestrator/config/orchestrator.json",
                       "mode":  "merge"
                   },
                   {
+                      "source":  "template/.orchestrator/config/models.json",
+                      "destination":  ".orchestrator/config/models.json",
+                      "mode":  "merge"
+                  },
+                  {
                       "source":  "template/.orchestrator/config/policies.json",
                       "destination":  ".orchestrator/config/policies.json",
+                      "mode":  "merge"
+                  },
+                  {
+                      "source":  "template/.orchestrator/config/manager_model.json",
+                      "destination":  ".orchestrator/config/manager_model.json",
                       "mode":  "merge"
                   },
                   {
@@ -257,6 +297,11 @@
                       "source":  "template/.orchestrator/skills/registry.json",
                       "destination":  ".orchestrator/skills/registry.json",
                       "mode":  "merge"
+                  },
+                  {
+                      "source":  "template/.orchestrator/skills/economize-tokens/SKILL.md",
+                      "destination":  ".orchestrator/skills/economize-tokens/SKILL.md",
+                      "mode":  "managed"
                   },
                   {
                       "source":  "template/.orchestrator/skills/analyze-project/SKILL.md",

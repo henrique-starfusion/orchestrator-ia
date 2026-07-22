@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    One-liner bootstrap do Orquestrador Multiagente (estilo OpenWolf/Graphify).
+    One-liner bootstrap do Orquestrador IA Multiagente (estilo OpenWolf/Graphify).
 
 .DESCRIPTION
     Sincroniza o pacote para um cache local e executa a instalacao no diretorio atual
@@ -9,10 +9,10 @@
 
 .EXAMPLES
     # Na pasta do projeto (com gh autenticado):
-    gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=develop" | iex
+    gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=develop" | iex
 
     # Se o repositorio estiver clonado/publicado:
-    irm https://raw.githubusercontent.com/henrique-starfusion/bootstrap-agents/develop/get.ps1 | iex
+    irm https://raw.githubusercontent.com/henrique-starfusion/orchestrator-ia/develop/get.ps1 | iex
 
     # Local:
     .\get.ps1
@@ -29,7 +29,7 @@ param(
     [Alias('Project')]
     [string]$ProjectPath = (Get-Location).Path,
 
-    [string]$Repo = 'henrique-starfusion/bootstrap-agents',
+    [string]$Repo = 'henrique-starfusion/orchestrator-ia',
     [string]$Branch = 'develop',
     [string]$CacheRoot,
     [switch]$ForceRefresh,

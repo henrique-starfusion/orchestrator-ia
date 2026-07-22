@@ -1,0 +1,218 @@
+{
+  "version": "0.1.0",
+  "updated": "2026-07-19",
+  "principles": [
+    "Preferir o modelo mais novo dentro do tier adequado; nunca o mais caro por padrao.",
+    "Casar capacidade com a tarefa; escalar so se validacao falhar.",
+    "Economizar tokens de saida (caveman) e de entrada (contexto escopoado).",
+    "Um job = um tier; evitar Fable/Opus em tarefas triviais ou docs."
+  ],
+  "token_economy": {
+    "caveman": {
+      "enabled": true,
+      "default_intensity": "full",
+      "plugin": "caveman@caveman",
+      "skill": "caveman",
+      "notes": "Corta ~75% tokens de prosa; código e erros ficam intactos."
+    },
+    "scoped_context": true,
+    "avoid_full_repo_dumps": true,
+    "prefer_summaries_over_raw_logs": true,
+    "max_parallel_heavy_models": 1
+  },
+  "tiers": {
+    "fast": {
+      "cost": 1,
+      "capability": 2,
+      "use_for": ["trivial", "classify", "format", "short_fix", "status"]
+    },
+    "balanced": {
+      "cost": 3,
+      "capability": 4,
+      "use_for": ["docs", "documentation", "implementation", "refactor_simple", "code_review", "tests"]
+    },
+    "deep": {
+      "cost": 4,
+      "capability": 5,
+      "use_for": ["architecture", "debugging_hard", "security_review", "complex_refactor"]
+    },
+    "max": {
+      "cost": 5,
+      "capability": 6,
+      "use_for": ["complex_analysis", "long_agentic", "orchestration_plan", "multi_repo_reasoning"]
+    }
+  },
+  "task_classes": {
+    "trivial": { "tier": "fast", "examples": ["rename", "typo", "status check"] },
+    "classify": { "tier": "fast", "examples": ["triage issue", "label PR"] },
+    "docs": { "tier": "balanced", "examples": ["README", "changelog", "JSDoc"] },
+    "documentation": { "tier": "balanced", "examples": ["guides", "API docs"] },
+    "implementation": { "tier": "balanced", "examples": ["feature slice", "bugfix known"] },
+    "refactor_simple": { "tier": "balanced", "examples": ["extract function", "rename symbol"] },
+    "code_review": { "tier": "balanced", "examples": ["PR review", "diff review"] },
+    "tests": { "tier": "balanced", "examples": ["unit tests", "fix fixture"] },
+    "architecture": { "tier": "deep", "examples": ["module boundaries", "API design"] },
+    "debugging_hard": { "tier": "deep", "examples": ["heisenbug", "race", "perf root cause"] },
+    "security_review": { "tier": "deep", "examples": ["authz", "secrets", "injection"] },
+    "complex_analysis": { "tier": "max", "examples": ["cross-cutting diagnosis", "ambiguous failure"] },
+    "long_agentic": { "tier": "max", "examples": ["multi-step autonomy", "large migration"] },
+    "orchestration_plan": { "tier": "max", "examples": ["multi-agent plan", "wave planning"] }
+  },
+  "clients": {
+    "claude": {
+      "cli": "claude",
+      "model_flag": "--model",
+      "prefer_aliases": true,
+      "aliases": {
+        "fast": "haiku",
+        "balanced": "sonnet",
+        "deep": "opus",
+        "max": "fable"
+      },
+      "models": {
+        "haiku": "claude-haiku-4-5",
+        "sonnet": "claude-sonnet-5",
+        "opus": "claude-opus-4-8",
+        "fable": "claude-fable-5"
+      },
+      "task_map": {
+        "trivial": "haiku",
+        "classify": "haiku",
+        "docs": "sonnet",
+        "documentation": "sonnet",
+        "implementation": "sonnet",
+        "refactor_simple": "sonnet",
+        "code_review": "sonnet",
+        "tests": "sonnet",
+        "architecture": "opus",
+        "debugging_hard": "opus",
+        "security_review": "opus",
+        "complex_analysis": "fable",
+        "long_agentic": "fable",
+        "orchestration_plan": "fable"
+      },
+      "invoke_example": "claude --model sonnet -p \"...\""
+    },
+    "codex": {
+      "cli": "codex",
+      "model_flag": "-m",
+      "models": {
+        "fast": "gpt-5.6-terra-medium",
+        "balanced": "gpt-5.6-sol-medium",
+        "deep": "gpt-5.6-sol",
+        "max": "gpt-5.6-sol"
+      },
+      "task_map": {
+        "trivial": "fast",
+        "classify": "fast",
+        "docs": "balanced",
+        "documentation": "balanced",
+        "implementation": "balanced",
+        "refactor_simple": "balanced",
+        "code_review": "balanced",
+        "tests": "balanced",
+        "architecture": "deep",
+        "debugging_hard": "deep",
+        "security_review": "deep",
+        "complex_analysis": "max",
+        "long_agentic": "max",
+        "orchestration_plan": "max"
+      },
+      "notes": "Usar -m <modelo>. Evitar reasoning xhigh em tarefas fast/balanced.",
+      "invoke_example": "codex -m gpt-5.6-sol-medium \"...\""
+    },
+    "cursor": {
+      "cli": null,
+      "selection": "IDE model picker / Task tool model=",
+      "models": {
+        "fast": "claude-4.5-haiku",
+        "balanced": "claude-sonnet-5-thinking-high",
+        "deep": "claude-opus-4-8-thinking-high",
+        "max": "claude-fable-5-thinking-high",
+        "composer_fast": "composer-2.5-fast",
+        "gemini": "gemini-3.1-pro",
+        "codex": "gpt-5.6-sol-medium"
+      },
+      "task_map": {
+        "trivial": "fast",
+        "classify": "fast",
+        "docs": "balanced",
+        "documentation": "balanced",
+        "implementation": "balanced",
+        "refactor_simple": "composer_fast",
+        "code_review": "balanced",
+        "tests": "balanced",
+        "architecture": "deep",
+        "debugging_hard": "deep",
+        "security_review": "deep",
+        "complex_analysis": "max",
+        "long_agentic": "max",
+        "orchestration_plan": "max"
+      }
+    },
+    "gemini": {
+      "cli": "gemini",
+      "model_flag": "-m",
+      "models": {
+        "fast": "gemini-flash-latest",
+        "balanced": "gemini-3.1-pro",
+        "deep": "gemini-3.1-pro",
+        "max": "gemini-3.1-pro"
+      },
+      "task_map": {
+        "trivial": "fast",
+        "docs": "balanced",
+        "implementation": "balanced",
+        "complex_analysis": "max",
+        "orchestration_plan": "max"
+      },
+      "notes": "Se CLI ausente do PATH, usar só quando disponível; não bloquear orquestração."
+    },
+    "opencode": {
+      "cli": "opencode",
+      "model_flag": "--model",
+      "models": {
+        "fast": "default-fast",
+        "balanced": "default",
+        "deep": "default-strong",
+        "max": "default-strong"
+      },
+      "task_map": {
+        "trivial": "fast",
+        "docs": "balanced",
+        "implementation": "balanced",
+        "complex_analysis": "max"
+      },
+      "notes": "Mapear nomes reais via `opencode models` no host; fallback = default do usuário."
+    },
+    "kimi": {
+      "cli": "kimi",
+      "models": {
+        "fast": "kimi-latest",
+        "balanced": "kimi-latest",
+        "deep": "kimi-latest",
+        "max": "kimi-latest"
+      },
+      "task_map": {
+        "trivial": "fast",
+        "docs": "balanced",
+        "implementation": "balanced",
+        "complex_analysis": "max"
+      },
+      "notes": "Usar modelo mais novo exposto pelo CLI Kimi; ajustar quando houver tiers oficiais."
+    }
+  },
+  "escalation": {
+    "on_validation_fail": "upgrade_one_tier",
+    "tier_order": ["fast", "balanced", "deep", "max"],
+    "max_escalations": 1,
+    "never_downgrade_mid_critical_path": true
+  },
+  "resolution_algorithm": [
+    "1. Classificar a tarefa (task_classes).",
+    "2. Resolver tier → modelo do cliente disponível (agents/detected.json).",
+    "3. Aplicar caveman (full) na comunicação do orquestrador/agentes.",
+    "4. Invocar CLI com model_flag + modelo resolvido.",
+    "5. Se validate-result falhar e allow escalate: subir um tier e repetir (máx. 1)."
+  ]
+}

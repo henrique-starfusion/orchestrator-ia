@@ -1,4 +1,9 @@
 #Requires -Version 5.1
+<#
+.SYNOPSIS
+  Utilitario opcional de backup manual de .orchestrator/.
+  O instalador/update usa New-BackupBundle internamente; este script nao e chamado pelo pipeline.
+#>
 [CmdletBinding()]
 param(
     [string]$ProjectPath

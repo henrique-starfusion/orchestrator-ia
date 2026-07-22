@@ -2,6 +2,11 @@
   "version": "0.1.0",
   "skills": [
     {
+      "id": "economize-tokens",
+      "path": "economize-tokens/SKILL.md",
+      "status": "active"
+    },
+    {
       "id": "orchestrate",
       "path": "orchestrate/SKILL.md",
       "status": "active"

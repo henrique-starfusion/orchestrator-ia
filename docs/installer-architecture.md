@@ -1,6 +1,8 @@
-# Arquitetura do instalador
+# Arquitetura do instalador — Orquestrador IA Multiagente
 
-Documentação técnica do pacote **bootstrap-agents** / **@starfusion/orchestrator** (v0.1.0). Descreve como o instalador materializa `.orchestrator/` no projeto-alvo de forma determinística e incremental.
+Documentação técnica do **Orquestrador IA Multiagente** (pacote `@starfusion/orchestrator`, repositório `orchestrator-ia`, v0.4.3). Descreve o instalador e aponta para o runtime.
+
+Runtime: [`runtime-architecture.md`](runtime-architecture.md) · Guia completo: [`orquestrador.md`](orquestrador.md)
 
 Quickstart one-liner: [`quickstart-oneliner.md`](quickstart-oneliner.md)
 
@@ -9,7 +11,7 @@ Quickstart one-liner: [`quickstart-oneliner.md`](quickstart-oneliner.md)
 ## Visão geral
 
 ```text
-  npx / orchestrator          get.ps1 (gh api|iex)       bootstrap-agents.bat
+  npx / orchestrator          get.ps1 (gh api|iex)       orchestrator-ia.bat
   (@starfusion/orchestrator)  cache LOCALAPPDATA         wrapper fino local
              \                        |                        /
               \                       |                       /
@@ -37,7 +39,7 @@ Quickstart one-liner: [`quickstart-oneliner.md`](quickstart-oneliner.md)
 ### 1. npm / npx (estilo OpenWolf)
 
 ```bash
-npx --yes github:henrique-starfusion/bootstrap-agents#develop init
+npx --yes github:henrique-starfusion/orchestrator-ia#develop init
 orchestrator init
 mao init
 ```
@@ -53,7 +55,7 @@ mao init
 
 ```powershell
 gh api -H "Accept: application/vnd.github.raw" `
-  "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=develop" | iex
+  "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=develop" | iex
 ```
 
 `get.ps1`:
@@ -64,7 +66,7 @@ gh api -H "Accept: application/vnd.github.raw" `
 
 ### 3. BAT fino (clone local)
 
-`bootstrap-agents.bat` apenas:
+`orchestrator-ia.bat` apenas:
 
 1. Fixa o diretório para a raiz do pacote (`%~dp0`)
 2. Invoca PowerShell com `-ExecutionPolicy Bypass`
@@ -90,6 +92,7 @@ Não há parsing de flags no BAT — use sintaxe PowerShell (`-ProjectPath`, `-D
 | `status` | Leitura local | Não |
 | `analyze` | Detect-Environment, Detect-Agents, Validate-Orchestrator | Parcial |
 | `skills` | Lê skills/registry.json | Não |
+| `legacy` | Detect/Backup/Migrate/Remove/Restore | Sim (conforme ação) |
 
 ### Pipeline do `install`
 
@@ -97,21 +100,26 @@ Não há parsing de flags no BAT — use sintaxe PowerShell (`-ProjectPath`, `-D
 1. Compare-SemVer (workspace vs pacote) → recusa se workspace > pacote
 2. Detect-Environment.ps1          (preflight)
 3. New-InstallationLock            (runtime/install.lock)
-4. Migrate-LegacyClaude.ps1        (se .claude/VERSION e sem .orchestrator/VERSION)
-5. Copy-TemplateTree               (package/template/.orchestrator → projeto)
-6. Apply-Manifest                  (modos managed/merge/generated)
-7. Sync-WorkspaceVersion           (se VERSION ausente)
-8. Detect-Agents.ps1
-9. Generate-Adapters.ps1
-10. Install-Tools.ps1               (salvo -SkipTools)
-11. Configure-Mcps.ps1              (se -ConfigureMcps)
-12. Validate-Orchestrator.ps1
-13. Validate-Hooks.ps1
-14. Update-Agents.ps1               (se -UpdateAgents)
-15. Probe-Agents.ps1                (skip por padrão; -RunSmokeTest ativa)
-16. Write-InstallationReport.ps1
-17. Remove-InstallationLock         (finally)
+4. Legacy cleanup (pre): detect → backup → migrate   (salvo -SkipLegacyCleanup)
+5. Migrate-LegacyClaude.ps1        (wrapper compat, se necessário)
+6. Copy-TemplateTree               (package/template/.orchestrator → projeto)
+7. Apply-Manifest                  (modos managed/merge/generated)
+8. Sync-WorkspaceVersion           (se VERSION ausente)
+9. Detect-Agents.ps1
+10. Generate-Adapters.ps1
+11. Install-Tools.ps1               (salvo -SkipTools)
+12. Configure-Mcps.ps1              (se -ConfigureMcps)
+13. Validate-Orchestrator.ps1
+14. Validate-Hooks.ps1
+15. Legacy cleanup (pos): remove safe → validate
+16. Update-Agents.ps1               (se -UpdateAgents)
+17. Probe-Agents.ps1                (skip por padrão; -RunSmokeTest ativa)
+18. Configure-CursorMcp.ps1         (projeto + ~/.cursor/mcp.json; pular com -SkipCursor)
+19. Write-InstallationReport.ps1    (inclui seção Legacy cleanup)
+20. Remove-InstallationLock         (finally)
 ```
+
+Detalhes: [`legacy-cleanup.md`](legacy-cleanup.md) · [`mcp-integration.md`](mcp-integration.md).
 
 ---
 
@@ -251,10 +259,13 @@ Para evoluir o pacote sem quebrar workspaces:
 
 ## Referências
 
+- [`orquestrador.md`](orquestrador.md) — funcionamento completo (skills, MCP, tools, routing)
 - [`quickstart-oneliner.md`](quickstart-oneliner.md) — instalação em uma linha
 - [`cli-reference.md`](cli-reference.md) — parâmetros e exemplos
 - [`legacy-migration.md`](legacy-migration.md) — `.claude/` → `.orchestrator/`
 - [`repo-layout.md`](repo-layout.md) — organização deste repositório
+- [`global-tools.md`](global-tools.md) — MCPs/plugins/skills no perfil do usuário
+- [`model-routing.md`](model-routing.md) — modelos por CLI/tarefa; caveman opt-in
 - [`legacy/README.md`](legacy/README.md) — material deprecado
 - [`troubleshooting.md`](troubleshooting.md) — diagnóstico operacional
 - `package/template/docs/agent-environment.md` — layout canônico no workspace

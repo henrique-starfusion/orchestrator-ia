@@ -54,6 +54,30 @@ foreach ($vendor in $vendorsToCopy) {
 
     Get-ChildItem -LiteralPath $sourceDir -Recurse -File -Force | ForEach-Object {
         $relative = $_.FullName.Substring($sourceDir.Length).TrimStart('\', '/')
+
+        if ($_.Name -like '*.section.md') {
+            # convencao: X.section.md -> anexa em X.md na raiz do projeto, se o marcador (1a linha) nao existir.
+            # Qualificador opcional para varias secoes no mesmo alvo: X.<vendor>.section.md -> X.md
+            $targetName = $_.Name -replace '(\.[A-Za-z0-9_-]+)?\.section\.md$', '.md'
+            $destPath = Join-Path $projectRoot $targetName
+            $sectionContent = Get-Content -LiteralPath $_.FullName -Raw
+            $marker = ($sectionContent -split "`r?`n")[0].Trim()
+
+            if (Test-Path -LiteralPath $destPath) {
+                $existing = Get-Content -LiteralPath $destPath -Raw
+                if ($existing.Contains($marker)) {
+                    $skipped++
+                    return
+                }
+                Add-Content -LiteralPath $destPath -Value ("`r`n" + $sectionContent) -Encoding UTF8
+            }
+            else {
+                Set-Content -LiteralPath $destPath -Value $sectionContent -Encoding UTF8
+            }
+            $copied++
+            return
+        }
+
         $destPath = Join-Path $projectRoot $relative
 
         if ((Test-Path -LiteralPath $destPath) -and -not $Force) {

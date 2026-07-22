@@ -34,22 +34,47 @@ if ($registry.servers) {
     $servers = @($registry.servers)
 }
 
-$context7 = $servers | Where-Object { $_.id -eq 'context7' } | Select-Object -First 1
-if ($null -eq $context7 -or $Force) {
-    $context7Entry = [pscustomobject]@{
+$recommended = @(
+    [pscustomobject]@{
         id          = 'context7'
         name        = 'Context7'
-        description = 'Documentation lookup MCP (recommended, disabled by default)'
-        enabled     = $false
+        description = 'Documentacao de bibliotecas (global via npx @upstash/context7-mcp)'
+        enabled     = $true
         transport   = 'stdio'
         command     = 'npx'
         args        = @('-y', '@upstash/context7-mcp')
         recommended = $true
+        scope       = 'global'
+    },
+    [pscustomobject]@{
+        id          = 'playwright'
+        name        = 'Playwright'
+        description = 'Browser automation MCP (global via npx @playwright/mcp)'
+        enabled     = $true
+        transport   = 'stdio'
+        command     = 'npx'
+        args        = @('-y', '@playwright/mcp@latest')
+        recommended = $true
+        scope       = 'global'
+    },
+    [pscustomobject]@{
+        id          = 'sequential-thinking'
+        name        = 'Sequential Thinking'
+        description = 'Raciocinio estruturado MCP'
+        enabled     = $true
+        transport   = 'stdio'
+        command     = 'npx'
+        args        = @('-y', '@modelcontextprotocol/server-sequential-thinking@latest')
+        recommended = $true
+        scope       = 'global'
     }
+)
 
-    $filtered = @($servers | Where-Object { $_.id -ne 'context7' })
-    $filtered += $context7Entry
-    $servers = $filtered
+foreach ($entry in $recommended) {
+    $existing = $servers | Where-Object { $_.id -eq $entry.id } | Select-Object -First 1
+    if ($null -eq $existing -or $Force) {
+        $servers = @($servers | Where-Object { $_.id -ne $entry.id }) + @($entry)
+    }
 }
 
 Write-JsonFile -Path $registryPath -Object @{
@@ -58,5 +83,5 @@ Write-JsonFile -Path $registryPath -Object @{
     servers    = @($servers)
 }
 
-Write-Host '[OK] MCP registry atualizado (Context7 desabilitado por padrao).'
+Write-Host '[OK] MCP registry do workspace atualizado (context7, playwright, sequential-thinking).'
 exit 0

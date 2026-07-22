@@ -42,26 +42,32 @@ foreach ($name in $agentNames) {
         $record.command_path = $cmd.Source
         $record.installation_method = Guess-InstallationMethod -CommandPath $cmd.Source
 
-        try {
-            $result = Invoke-ExternalCommand -FilePath $cmd.Source -ArgumentList '--version' -TimeoutSeconds $TimeoutSeconds -WorkingDirectory $projectRoot
-            if ($result.timed_out) {
-                $record.status = 'installed_failed'
-                $record.version_error = 'timeout'
-            }
-            elseif ($result.exit_code -eq 0) {
-                $versionText = ($result.stdout + $result.stderr).Trim()
-                if (-not [string]::IsNullOrWhiteSpace($versionText)) {
-                    $record.version = ($versionText -split "`r?`n")[0].Trim()
+        if (Test-IsIdeAgent -Name $name) {
+            # IDE Electron: exec probe abriria a GUI (bug-001); presenca no PATH basta
+            $record.version_error = 'skipped_ide'
+        }
+        else {
+            try {
+                $result = Invoke-ExternalCommand -FilePath $cmd.Source -ArgumentList '--version' -TimeoutSeconds $TimeoutSeconds -WorkingDirectory $projectRoot
+                if ($result.timed_out) {
+                    $record.status = 'installed_failed'
+                    $record.version_error = 'timeout'
+                }
+                elseif ($result.exit_code -eq 0) {
+                    $versionText = ($result.stdout + $result.stderr).Trim()
+                    if (-not [string]::IsNullOrWhiteSpace($versionText)) {
+                        $record.version = ($versionText -split "`r?`n")[0].Trim()
+                    }
+                }
+                else {
+                    $record.status = 'installed_failed'
+                    $record.version_error = ($result.stderr + $result.stdout).Trim()
                 }
             }
-            else {
+            catch {
                 $record.status = 'installed_failed'
-                $record.version_error = ($result.stderr + $result.stdout).Trim()
+                $record.version_error = $_.Exception.Message
             }
-        }
-        catch {
-            $record.status = 'installed_failed'
-            $record.version_error = $_.Exception.Message
         }
     }
 

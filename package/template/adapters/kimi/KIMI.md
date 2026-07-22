@@ -1,5 +1,8 @@
-# Orchestrator adapter for Kimi CLI
+# Orchestrator adapter for Kimi
 #
-# Canonical project configuration lives in `.orchestrator/`.
+# Canonical: `.orchestrator/`. See `config/models.json`.
+# Status: experimental adapter until host verification.
 
-Use `.orchestrator/` for shared orchestration, skills, and memory.
+Prefer `orchestrator run` for multi-agent tasks.
+Ao final de cada tarefa, revisar e atualizar a documentação afetada antes da conclusão.
+Escalate tier only on validation failure.

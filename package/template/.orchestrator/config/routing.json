@@ -1,5 +1,33 @@
 {
-  "default_strategy": "capability_match",
+  "default_strategy": "capability_match_cost_aware",
   "fallback_agent": null,
-  "routes": []
+  "models_config": "config/models.json",
+  "prefer_cheapest_capable": true,
+  "require_task_class": true,
+  "routes": [
+    {
+      "id": "docs-to-sonnet",
+      "match": { "task_class": ["docs", "documentation"] },
+      "prefer_clients": ["claude", "cursor", "codex"],
+      "tier": "balanced"
+    },
+    {
+      "id": "complex-to-fable",
+      "match": { "task_class": ["complex_analysis", "long_agentic", "orchestration_plan"] },
+      "prefer_clients": ["claude", "cursor"],
+      "tier": "max"
+    },
+    {
+      "id": "architecture-to-opus",
+      "match": { "task_class": ["architecture", "debugging_hard", "security_review"] },
+      "prefer_clients": ["claude", "cursor", "codex"],
+      "tier": "deep"
+    },
+    {
+      "id": "trivial-to-haiku",
+      "match": { "task_class": ["trivial", "classify"] },
+      "prefer_clients": ["claude", "cursor", "codex"],
+      "tier": "fast"
+    }
+  ]
 }

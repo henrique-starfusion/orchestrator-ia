@@ -1,0 +1,18 @@
+{
+  "id": "claude",
+  "kind": "cli",
+  "verified": true,
+  "invoke": {
+    "subcommand": [],
+    "prompt_via": "arg",
+    "prompt_flag": "-p",
+    "sandbox_flags": ["--permission-mode", "acceptEdits"]
+  },
+  "output": {
+    "format": "text",
+    "json_flags": ["--output-format", "json"]
+  },
+  "exit_codes": { "success": 0 },
+  "timeout_default_s": 600,
+  "notes": "Aliases de modelo (haiku/sonnet/opus/fable) e model_flag vem de config/models.json. -p = modo print nao-interativo."
+}
