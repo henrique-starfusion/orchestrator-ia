@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -62,13 +63,63 @@ def resolve_orchestrator_root(project_path: Path) -> Path:
     return root
 
 
+def _has_orchestrator(path: Path) -> bool:
+    try:
+        return path.is_dir() and (path / ".orchestrator").is_dir()
+    except OSError:
+        return False
+
+
+def resolve_default_workspace(explicit: Path | str | None = None) -> Path:
+    """Resolve workspace para CLI/MCP (cwd do Cursor costuma ser o home).
+
+    Ordem:
+    1. argumento explicito
+    2. ORCHESTRATOR_PROJECT / ORCHESTRATOR_WORKSPACE
+    3. WORKSPACE_FOLDER_PATHS (Cursor)
+    4. cwd se tiver .orchestrator/
+    5. sobe pais a partir do cwd
+    6. cwd (fallback)
+    """
+    if explicit is not None and str(explicit).strip():
+        return Path(explicit).expanduser().resolve()
+
+    for env_name in ("ORCHESTRATOR_PROJECT", "ORCHESTRATOR_WORKSPACE"):
+        raw = (os.environ.get(env_name) or "").strip()
+        if raw:
+            candidate = Path(raw).expanduser().resolve()
+            if _has_orchestrator(candidate):
+                return candidate
+
+    workspace_paths = (os.environ.get("WORKSPACE_FOLDER_PATHS") or "").strip()
+    if workspace_paths:
+        # Cursor pode enviar varios paths separados por pathsep ou ;
+        parts = [p for p in workspace_paths.replace(";", os.pathsep).split(os.pathsep) if p.strip()]
+        for part in parts:
+            candidate = Path(part.strip()).expanduser().resolve()
+            if _has_orchestrator(candidate):
+                return candidate
+        if parts:
+            return Path(parts[0].strip()).expanduser().resolve()
+
+    cwd = Path.cwd().resolve()
+    if _has_orchestrator(cwd):
+        return cwd
+
+    for parent in cwd.parents:
+        if _has_orchestrator(parent):
+            return parent
+
+    return cwd
+
+
 def load_config(
     project_path: Path | str | None = None,
     *,
     fake_agents: bool = False,
     manager_provider: str | None = None,
 ) -> RuntimeConfig:
-    project = Path(project_path or Path.cwd()).resolve()
+    project = resolve_default_workspace(project_path)
     orch = resolve_orchestrator_root(project)
     data_dir = orch / "data"
     data_dir.mkdir(parents=True, exist_ok=True)

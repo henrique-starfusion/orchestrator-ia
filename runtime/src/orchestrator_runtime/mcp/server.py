@@ -21,8 +21,10 @@ def build_tools(
     *,
     fake_agents: bool | None = None,
 ) -> OrchestratorMcpTools:
+    from orchestrator_runtime.config import resolve_default_workspace
+
     return OrchestratorMcpTools(
-        default_workspace=workspace or Path.cwd(),
+        default_workspace=resolve_default_workspace(workspace),
         fake_agents=fake_agents,
         verbose=False,
         mcp_wait_timeout_s=int(os.environ.get("ORCHESTRATOR_MCP_WAIT_TIMEOUT", "120")),
@@ -47,7 +49,16 @@ def create_fastmcp_server(
     mcp = FastMCP(SERVER_NAME)
 
     @mcp.tool(name="orchestrator_health")
-    def orchestrator_health() -> dict[str, Any]:
+    def orchestrator_health(workspace: str | None = None) -> dict[str, Any]:
+        if workspace:
+            return OrchestratorMcpTools(
+                default_workspace=Path(workspace),
+                fake_agents=fake_agents,
+                verbose=False,
+                mcp_wait_timeout_s=int(
+                    os.environ.get("ORCHESTRATOR_MCP_WAIT_TIMEOUT", "120")
+                ),
+            ).health()
         return tools.health()
 
     @mcp.tool(name="orchestrator_analyze")

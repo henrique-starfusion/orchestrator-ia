@@ -9,7 +9,7 @@ from typing import Any
 
 from orchestrator_runtime.agents.base import AgentRequest
 from orchestrator_runtime.agents.process import redact
-from orchestrator_runtime.config import load_config
+from orchestrator_runtime.config import load_config, resolve_default_workspace
 from orchestrator_runtime.mcp.errors import McpError, McpSecurityError
 from orchestrator_runtime.mcp.schemas import (
     AnalyzeInput,
@@ -41,7 +41,7 @@ class OrchestratorMcpTools:
         verbose: bool = False,
         mcp_wait_timeout_s: int = 120,
     ) -> None:
-        self.default_workspace = (default_workspace or Path.cwd()).resolve()
+        self.default_workspace = resolve_default_workspace(default_workspace)
         env_fake = os.environ.get("ORCHESTRATOR_FAKE_AGENTS", "").lower() in {
             "1",
             "true",

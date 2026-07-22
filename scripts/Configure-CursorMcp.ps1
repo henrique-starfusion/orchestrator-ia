@@ -36,11 +36,13 @@ function New-OrchestratorMcpServerEntry {
 
     # Perfil global do Cursor no Windows costuma usar cmd /c (igual aos outros MCPs).
     # Preferir CLI global `orchestrator` quando existir; senao node + bin do pacote.
+    # ${workspaceFolder} e interpolado pelo Cursor (mcp.json) para o root do projeto aberto.
+    $projectArg = '${workspaceFolder}'
     $orch = Get-Command orchestrator -ErrorAction SilentlyContinue
     if ($null -ne $orch) {
         return [pscustomobject]@{
             command = 'cmd'
-            args    = @('/c', 'orchestrator', 'mcp', 'serve', '--transport', 'stdio')
+            args    = @('/c', 'orchestrator', 'mcp', 'serve', '--transport', 'stdio', '--project', $projectArg)
             enabled = $true
         }
     }
@@ -60,14 +62,14 @@ function New-OrchestratorMcpServerEntry {
         }
         return [pscustomobject]@{
             command = 'cmd'
-            args    = @('/c', $nodeCmd, $cliJs, 'mcp', 'serve', '--transport', 'stdio')
+            args    = @('/c', $nodeCmd, $cliJs, 'mcp', 'serve', '--transport', 'stdio', '--project', $projectArg)
             enabled = $true
         }
     }
 
     return [pscustomobject]@{
         command = 'cmd'
-        args    = @('/c', 'orchestrator', 'mcp', 'serve', '--transport', 'stdio')
+        args    = @('/c', 'orchestrator', 'mcp', 'serve', '--transport', 'stdio', '--project', $projectArg)
         enabled = $true
     }
 }
