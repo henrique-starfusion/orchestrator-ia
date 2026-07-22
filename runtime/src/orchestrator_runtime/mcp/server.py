@@ -244,13 +244,20 @@ def serve(
         raise SystemExit(2)
 
     mcp, _tools = create_fastmcp_server(workspace, fake_agents=fake_agents)
+    if transport == "stdio":
+        # Cursor marca stderr como [error]; silencia INFO do SDK e banner.
+        import logging
+
+        logging.getLogger("mcp").setLevel(logging.WARNING)
+        logging.getLogger("mcp.server").setLevel(logging.WARNING)
+        logging.getLogger("mcp.server.lowlevel").setLevel(logging.WARNING)
+        # stdout só JSON-RPC — nenhum print/log em stdout
+        mcp.run(transport="stdio")
+        return
     print(
         f"[orchestrator-mcp] name={SERVER_NAME} transport={transport} host={host} port={port}",
         file=sys.stderr,
     )
-    if transport == "stdio":
-        mcp.run(transport="stdio")
-        return
     if transport in {"http", "streamable-http", "sse"}:
         # experimental HTTP
         try:

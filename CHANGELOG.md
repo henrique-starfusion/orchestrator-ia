@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- MCP stdio: heartbeat/`[exec]` do `CliExecutor` e eventos verbose não escrevem mais em stdout (evita `Unexpected token '[heartbeat]'` no Cursor)
+
 ## 0.4.2 — 2026-07-21
 
 ### Added

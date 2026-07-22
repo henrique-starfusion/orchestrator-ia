@@ -4,12 +4,18 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from orchestrator_runtime.errors import PathEscapeError, RecursionBlockedError
+
+
+def _live(msg: str) -> None:
+    """Echo ao vivo só em stderr — stdout é sagrado no transporte MCP stdio."""
+    print(msg, file=sys.stderr, flush=True)
 
 
 SECRET_PATTERNS = ("API_KEY", "TOKEN", "SECRET", "PASSWORD", "AUTHORIZATION")
@@ -84,16 +90,27 @@ class CliExecutor:
         previous = os.environ.get("ORCHESTRATOR_CHILD_AGENT")
         merged["ORCHESTRATOR_CHILD_AGENT"] = "1"
 
+        # Windows CreateProcess não resolve PATHEXT para nomes nus (ex.: "codex");
+        # shutil.which encontra "codex.CMD", mas Popen(["codex", ...]) falha com WinError 2.
+        resolved_command = list(command)
+        if resolved_command:
+            exe = resolved_command[0]
+            exe_path = Path(exe)
+            if not exe_path.is_file():
+                found = which(exe)
+                if found:
+                    resolved_command[0] = found
+
         stdout_chunks: list[str] = []
         stderr_chunks: list[str] = []
         started = time.monotonic()
         timed_out = False
 
         if self.echo:
-            print(f"[exec] {redact(' '.join(command))}", flush=True)
+            _live(f"[exec] {redact(' '.join(resolved_command))}")
 
         proc = subprocess.Popen(
-            command,
+            resolved_command,
             cwd=str(workdir),
             env=merged,
             stdout=subprocess.PIPE,
@@ -110,12 +127,14 @@ class CliExecutor:
             for line in stream:
                 chunks.append(line)
                 if self.echo:
-                    print(f"{prefix}{redact(line.rstrip(chr(10) + chr(13)))}", flush=True)
+                    _live(f"{prefix}{redact(line.rstrip(chr(10) + chr(13)))}")
 
         def _heartbeat() -> None:
+            if not self.echo or heartbeat_s <= 0:
+                return
             while not stop_heartbeat.wait(heartbeat_s):
                 elapsed = int(time.monotonic() - started)
-                print(f"[heartbeat] running {elapsed}s pid={proc.pid}", flush=True)
+                _live(f"[heartbeat] running {elapsed}s pid={proc.pid}")
 
         t_out = threading.Thread(
             target=_reader, args=(proc.stdout, stdout_chunks, "  > "), daemon=True
@@ -153,7 +172,7 @@ class CliExecutor:
             stderr=redact("".join(stderr_chunks)),
             timed_out=timed_out,
             duration_s=duration,
-            command=command,
+            command=resolved_command,
             cwd=str(workdir),
         )
 

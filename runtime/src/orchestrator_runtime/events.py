@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
@@ -63,7 +64,8 @@ class EventBus:
                 summary = event.data.get("summary") or event.data.get("to") or ""
                 if summary:
                     extra = f" {summary}"
-            print(f"[{event.type.value}]{role}{agent}{extra}", flush=True)
+            # stderr: nunca poluir stdout (MCP stdio = JSON-RPC)
+            print(f"[{event.type.value}]{role}{agent}{extra}", file=sys.stderr, flush=True)
         for handler in self._handlers:
             handler(event)
         return event
