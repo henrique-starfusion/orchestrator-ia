@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Instalação npm/docs passam a usar `#latest` (tag git móvel de release); `github:...@latest` não é suportado pelo npm
 - Política de segurança GitHub em `.github/SECURITY.md`; `docs/security.md` atualizado (Orquestrador IA Multiagente)
 - Licença do projeto alterada para **MIT** (uso comercial e não comercial por qualquer pessoa)
 - GitHub Actions CI desabilitado (sem plano/limite de Actions); workflow preservado em `.github/ci.yml.disabled`

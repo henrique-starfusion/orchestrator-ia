@@ -10,13 +10,13 @@ Modelo mental igual ao [OpenWolf](https://github.com/cytostack/openwolf) e ao Gr
 Na raiz do projeto-alvo:
 
 ```bash
-npx --yes github:henrique-starfusion/orchestrator-ia#develop init
+npx --yes github:henrique-starfusion/orchestrator-ia#latest init
 ```
 
 Instalação global (reutilizar em vários projetos):
 
 ```bash
-npm install -g github:henrique-starfusion/orchestrator-ia#develop
+npm install -g github:henrique-starfusion/orchestrator-ia#latest
 orchestrator init
 ```
 
@@ -37,7 +37,7 @@ orchestrator update
 Atualizar o **CLI global** (pacote npm) e depois a estrutura do projeto:
 
 ```bash
-npm install -g github:henrique-starfusion/orchestrator-ia#develop
+npm install -g github:henrique-starfusion/orchestrator-ia#latest
 cd C:\caminho\do\seu\projeto
 orchestrator update
 ```
@@ -45,7 +45,7 @@ orchestrator update
 Ou só com npx (sem global):
 
 ```bash
-npx --yes github:henrique-starfusion/orchestrator-ia#develop update
+npx --yes github:henrique-starfusion/orchestrator-ia#latest update
 ```
 
 `update` sincroniza a estrutura `.orchestrator/` do projeto com o pacote (aditivo; use `--force` para reaplicar managed).
@@ -57,7 +57,7 @@ npx --yes github:henrique-starfusion/orchestrator-ia#develop update
 Na raiz do projeto-alvo:
 
 ```powershell
-gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=develop" | iex
+gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=latest" | iex
 ```
 
 O script:
@@ -97,7 +97,7 @@ seu-projeto/
 |---|---|---|
 | OpenWolf | `npm i -g openwolf` | `openwolf init` |
 | Graphify | `uv tool install ...` / npm | `graphify install` |
-| Orquestrador IA Multiagente | `npm i -g github:.../orchestrator-ia#develop` | `orchestrator init` |
+| Orquestrador IA Multiagente | `npm i -g github:.../orchestrator-ia#latest` | `orchestrator init` |
 
 ## Segurança
 

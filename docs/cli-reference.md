@@ -60,11 +60,11 @@ Requer Python 3.11+.
 ## One-liner (projeto atual)
 
 ```bash
-npx --yes github:henrique-starfusion/orchestrator-ia#develop init
+npx --yes github:henrique-starfusion/orchestrator-ia#latest init
 ```
 
 ```powershell
-gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=develop" | iex
+gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=latest" | iex
 ```
 
 ```bash
@@ -127,13 +127,13 @@ Atualiza a estrutura `.orchestrator/` do projeto atual (comando principal de man
 Antes, atualize o CLI se estiver instalado via npm global:
 
 ```bash
-npm install -g github:henrique-starfusion/orchestrator-ia#develop
+npm install -g github:henrique-starfusion/orchestrator-ia#latest
 ```
 
 Ou rode o update direto com npx (baixa a tip de `develop`):
 
 ```bash
-npx --yes github:henrique-starfusion/orchestrator-ia#develop update
+npx --yes github:henrique-starfusion/orchestrator-ia#latest update
 ```
 
 Com o CLI no PATH:

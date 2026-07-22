@@ -11,11 +11,11 @@ Versões anteriores do bootstrap e o prompt arquivado em `docs/archive/prompts/p
 O instalador detecta legado automaticamente durante `init` / `install` — inclusive quando você usa o one-liner:
 
 ```bash
-npx --yes github:henrique-starfusion/orchestrator-ia#develop init
+npx --yes github:henrique-starfusion/orchestrator-ia#latest init
 ```
 
 ```powershell
-gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=develop" | iex
+gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=latest" | iex
 ```
 
 ---

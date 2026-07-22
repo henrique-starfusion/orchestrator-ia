@@ -90,23 +90,26 @@ Na pasta do seu projeto:
 ### Node.js / npm (recomendado)
 
 ```bash
-npx --yes github:henrique-starfusion/orchestrator-ia#develop init
+npx --yes github:henrique-starfusion/orchestrator-ia#latest init
 ```
 
 Ou instalar o CLI global e reutilizar em vários projetos:
 
 ```bash
-npm install -g github:henrique-starfusion/orchestrator-ia#develop
+npm install -g github:henrique-starfusion/orchestrator-ia#latest
 cd C:\caminho\do\seu\projeto
 orchestrator init
 ```
 
 Equivalente curto: `mao init` (alias do mesmo binário).
 
+> **Nota:** com origem `github:`, o npm usa fragmento git (`#latest`), **não** `...@latest` (sintaxe de registry).  
+> `github:henrique-starfusion/orchestrator-ia@latest` **não funciona**. Alternativas: `#latest`, `#v0.4.3`, `#semver:*` ou tip de `#main`.
+
 ### PowerShell (Windows, com `gh` autenticado)
 
 ```powershell
-gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=develop" | iex
+gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=latest" | iex
 ```
 
 Isso baixa o pacote para `%LOCALAPPDATA%\StarFusion\multiagent-orchestrator` (cache) e instala `.orchestrator/` no diretório atual.
@@ -118,13 +121,13 @@ Há **dois níveis**: atualizar o CLI (pacote npm) e atualizar a estrutura `.orc
 #### 1) Atualizar o CLI via npm (global)
 
 ```bash
-npm install -g github:henrique-starfusion/orchestrator-ia#develop
+npm install -g github:henrique-starfusion/orchestrator-ia#latest
 ```
 
-Sem instalar global — sempre a tip da branch `develop`:
+Sem instalar global — sempre a tag `latest` (release estável):
 
 ```bash
-npx --yes github:henrique-starfusion/orchestrator-ia#develop update
+npx --yes github:henrique-starfusion/orchestrator-ia#latest update
 ```
 
 #### 2) Atualizar a estrutura do projeto
@@ -146,7 +149,7 @@ orchestrator-ia.bat update -ProjectPath C:\caminho\do\projeto
 Fluxo típico (CLI global + projeto):
 
 ```bash
-npm install -g github:henrique-starfusion/orchestrator-ia#develop
+npm install -g github:henrique-starfusion/orchestrator-ia#latest
 cd C:\caminho\do\seu\projeto
 orchestrator update
 ```
@@ -500,7 +503,7 @@ Prioridade atual (v0.1): detecção de CLIs, bootstrap incremental versionado, s
 | `docs/repo-layout.md` | Organização deste repositório |
 | `LICENSE` | MIT (uso comercial e não comercial) |
 
-**Repositório:** https://github.com/henrique-starfusion/orchestrator-ia (branch `develop`)
+**Repositório:** https://github.com/henrique-starfusion/orchestrator-ia (release: tag `latest` / `main`)
 
 Layout detalhado: [`docs/repo-layout.md`](docs/repo-layout.md)
 

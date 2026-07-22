@@ -6,11 +6,11 @@
 > Para instalação determinística (uma linha, na pasta do projeto):
 >
 > ```bash
-> npx --yes github:henrique-starfusion/orchestrator-ia#develop init
+> npx --yes github:henrique-starfusion/orchestrator-ia#latest init
 > ```
 >
 > ```powershell
-> gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=develop" | iex
+> gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=latest" | iex
 > ```
 >
 > Consulte `README.md`, `docs/quickstart-oneliner.md` e `docs/cli-reference.md`.
