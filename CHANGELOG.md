@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Política de segurança GitHub em `.github/SECURITY.md`; `docs/security.md` atualizado (Orquestrador IA Multiagente)
 - Licença do projeto alterada para **MIT** (uso comercial e não comercial por qualquer pessoa)
 - GitHub Actions CI desabilitado (sem plano/limite de Actions); workflow preservado em `.github/ci.yml.disabled`
 - Notas de Actions movidas de `.github/README.md` para `.github/ACTIONS.md` (GitHub priorizava esse README sobre o da raiz)

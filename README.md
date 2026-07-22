@@ -37,7 +37,7 @@ receber → analisar → memória → planejar → selecionar → executar
 
 Cursor é **cliente IDE** (front controller via MCP; não worker). MVP: Claude planeja/valida, Codex executa, runtime testa.
 
-Documentação: [`docs/mcp-integration.md`](docs/mcp-integration.md) · [`docs/orquestrador.md`](docs/orquestrador.md)
+Documentação: [`docs/mcp-integration.md`](docs/mcp-integration.md) · [`docs/orquestrador.md`](docs/orquestrador.md) · [`docs/security.md`](docs/security.md) · [Security policy](.github/SECURITY.md)
 
 ---
 
