@@ -19,7 +19,11 @@ Rodar `python -m pytest -q` no runtime.
 
 ## Próximo ciclo
 
+Itens 2–3 foram parcialmente cobertos depois; follow-up do `analyze` em
+`docs/audits/2026-07-21-cycle-6-analyze-behavior.md`.
+
 1. Fila/worker fora do stdio MCP
-2. Permissões `0o700` em `.orchestrator/data`
-3. Bloquear write roles no MCP delegate sem flag explícita de produto
+2. ~~Permissões `0o700` em `.orchestrator/data`~~
+3. ~~Bloquear write roles / `fake_agents` no MCP~~ (ver tabela acima)
 4. Smoke e2e `orchestrator_run` com agentes reais
+5. ~~Parse de requirements semver + ACs de auditoria~~ (ciclo 6)

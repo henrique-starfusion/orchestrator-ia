@@ -180,6 +180,12 @@ class OrchestratorMcpTools:
                 return analysis, {}, "execute_review_repair"
 
         analysis, roles, strategy = _run_coro(_go())
+        warnings: list[str] = []
+        if isinstance(roles, dict):
+            if roles.get("validator") and roles.get("validator") == roles.get("executor"):
+                warnings.append("validator_equals_executor")
+            elif roles.get("validator") and roles.get("executor"):
+                warnings.append("independent_validation_ok")
         return {
             "task_type": analysis.task_type,
             "complexity": analysis.complexity,
@@ -192,6 +198,12 @@ class OrchestratorMcpTools:
             "recommended_roles": roles,
             "confidence": 0.75,
             "read_only": True,
+            "warnings": warnings,
+            "message": (
+                f"Análise: type={analysis.task_type} complexity={analysis.complexity}; "
+                f"{len(analysis.acceptance_criteria)} ACs; "
+                f"roles={roles}"
+            ),
         }
 
     def agents(self) -> dict[str, Any]:

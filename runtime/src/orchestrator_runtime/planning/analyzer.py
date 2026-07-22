@@ -41,19 +41,30 @@ def detect_languages(prompt: str, project_files: Iterable[str] | None = None) ->
     return langs or ["python"]
 
 
+def extract_requirements(prompt: str) -> list[str]:
+    """Separa requisitos sem partir versões semver (ex.: 0.4.1)."""
+    parts = re.split(r"(?<!\d)\.(?!\d)|\n+|;+", prompt or "")
+    requirements = [s.strip() for s in parts if len(s.strip()) > 12][:8]
+    return requirements or [prompt.strip()]
+
+
 class TaskAnalyzer:
     def analyze(self, prompt: str, project_files: list[str] | None = None) -> TaskAnalysis:
         languages = detect_languages(prompt, project_files)
         lowered = prompt.lower()
         task_type = "implementation"
-        if any(w in lowered for w in ("doc", "readme", "changelog")):
-            task_type = "docs"
+        # Ordem: auditoria/análise antes de "doc" (substring em "documentação").
+        if any(w in lowered for w in ("security", "segurança", "seguranca")):
+            task_type = "security_review"
         elif any(w in lowered for w in ("arquitet", "architecture", "design")):
             task_type = "architecture"
-        elif any(w in lowered for w in ("security", "segurança", "seguranca")):
-            task_type = "security_review"
-        elif any(w in lowered for w in ("analis", "diagnos", "investig")):
+        elif any(
+            w in lowered
+            for w in ("analis", "diagnos", "investig", "auditor", "audit", "gap")
+        ):
             task_type = "complex_analysis"
+        elif any(w in lowered for w in ("doc", "readme", "changelog")):
+            task_type = "docs"
 
         complexity = "medium"
         if len(prompt) > 400 or task_type in {"architecture", "complex_analysis"}:
@@ -65,13 +76,7 @@ class TaskAnalyzer:
         if task_type == "security_review":
             risk = "high"
 
-        requirements = [
-            s.strip()
-            for s in re.split(r"[.\n;]", prompt)
-            if len(s.strip()) > 12
-        ][:8]
-        if not requirements:
-            requirements = [prompt.strip()]
+        requirements = extract_requirements(prompt)
 
         return TaskAnalysis(
             task_type=task_type,
@@ -164,19 +169,38 @@ class CriteriaBuilder:
                 params=params,
             )
         if not criteria:
-            add(
-                "Alterações solicitadas no prompt estão presentes no workspace",
-                CriterionKind.WORKSPACE_CHANGES,
-            )
-            add(
-                "Testes determinísticos relevantes passam ou estão justificados",
-                CriterionKind.TESTS_PASS,
-            )
-            add(
-                "Documentação afetada foi revisada e atualizada se necessário",
-                CriterionKind.DOCS_EXAMPLE,
-                params={"path": "README.md"},
-            )
+            if analysis.task_type in {
+                "complex_analysis",
+                "security_review",
+                "architecture",
+            }:
+                # Auditorias/reviews: não exigir README de produto nem suite de testes
+                add(
+                    "Entregável da análise presente no workspace (relatório/docs)",
+                    CriterionKind.WORKSPACE_CHANGES,
+                )
+                add(
+                    "Achados com evidência verificável no workspace",
+                    CriterionKind.EVIDENCE,
+                )
+                add(
+                    "Recomendações priorizadas documentadas",
+                    CriterionKind.EVIDENCE,
+                )
+            else:
+                add(
+                    "Alterações solicitadas no prompt estão presentes no workspace",
+                    CriterionKind.WORKSPACE_CHANGES,
+                )
+                add(
+                    "Testes determinísticos relevantes passam ou estão justificados",
+                    CriterionKind.TESTS_PASS,
+                )
+                add(
+                    "Documentação afetada foi revisada e atualizada se necessário",
+                    CriterionKind.DOCS_EXAMPLE,
+                    params={"path": "README.md"},
+                )
         return criteria
 
 

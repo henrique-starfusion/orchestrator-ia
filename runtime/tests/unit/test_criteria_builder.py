@@ -2,12 +2,42 @@
 
 from __future__ import annotations
 
+import re
+
 from orchestrator_runtime.planning.analyzer import (
     CriteriaBuilder,
     TaskAnalyzer,
+    extract_requirements,
     wants_soma_module,
 )
 from orchestrator_runtime.tasks.models import CriterionKind
+
+
+def test_extract_requirements_preserves_semver():
+    reqs = extract_requirements(
+        "Auditoria completa do orquestrador 0.4.1: gaps em MCP e validator. "
+        "Não criar módulo soma."
+    )
+    blob = " ".join(reqs)
+    assert "0.4.1" in blob
+    assert not any(r.rstrip(".").endswith("orquestrador 0") for r in reqs)
+    assert not any(re.match(r"^1\b", r) for r in reqs)
+    assert any("gaps em MCP" in r for r in reqs)
+
+
+def test_audit_prompt_is_complex_analysis():
+    analysis = TaskAnalyzer().analyze(
+        "Auditoria completa do orquestrador 0.4.1: gaps em MCP. Não criar módulo soma."
+    )
+    assert analysis.task_type == "complex_analysis"
+    criteria = CriteriaBuilder().build(
+        "Auditoria completa do orquestrador 0.4.1: gaps em MCP. Não criar módulo soma.",
+        analysis,
+    )
+    kinds = {c.kind for c in criteria}
+    assert CriterionKind.SOMA_MODULE not in kinds
+    assert CriterionKind.EVIDENCE in kinds
+    assert CriterionKind.DOCS_EXAMPLE not in kinds
 
 
 def test_wants_soma_module_intent():
