@@ -1,6 +1,6 @@
 # Arquitetura do instalador
 
-Documentação técnica do pacote **bootstrap-agents** / **@starfusion/orchestrator** (v0.4.2). Descreve o instalador e aponta para o runtime.
+Documentação técnica do pacote **bootstrap-agents** / **@starfusion/orchestrator** (v0.4.3). Descreve o instalador e aponta para o runtime.
 
 Runtime: [`runtime-architecture.md`](runtime-architecture.md) · Guia completo: [`orquestrador.md`](orquestrador.md)
 

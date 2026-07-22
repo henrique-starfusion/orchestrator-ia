@@ -1,6 +1,6 @@
 # Orquestrador Multiagente
 
-Documento de referência do produto **`@starfusion/orchestrator`** (pacote `bootstrap-agents`, versão **0.4.2**).
+Documento de referência do produto **`@starfusion/orchestrator`** (pacote `bootstrap-agents`, versão **0.4.3**).
 
 Organização: **StarFusion** · Desenvolvedor: **Henrique Rodrigues**
 

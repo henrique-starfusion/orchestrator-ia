@@ -2,9 +2,16 @@
 
 ## Unreleased
 
+## 0.4.3 — 2026-07-22
+
 ### Fixed
 
 - MCP stdio: heartbeat/`[exec]` do `CliExecutor` e eventos verbose não escrevem mais em stdout (evita `Unexpected token '[heartbeat]'` no Cursor)
+- Logs INFO do SDK MCP silenciados no transporte stdio (menos ruído falso no Output do Cursor)
+
+### Added
+
+- Migration `0.4.2-to-0.4.3`
 
 ## 0.4.2 — 2026-07-21
 
