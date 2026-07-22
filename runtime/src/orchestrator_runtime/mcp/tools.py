@@ -172,7 +172,7 @@ class OrchestratorMcpTools:
             except Exception:  # noqa: BLE001
                 return analysis, {}, "execute_review_repair"
 
-        analysis, roles, strategy = asyncio.run(_go())
+        analysis, roles, strategy = _run_coro(_go())
         return {
             "task_type": analysis.task_type,
             "complexity": analysis.complexity,
@@ -180,7 +180,7 @@ class OrchestratorMcpTools:
             "languages": analysis.languages,
             "requirements": analysis.requirements,
             "unknowns": [],
-            "acceptance_criteria": [c.model_dump() for c in analysis.acceptance_criteria],
+            "acceptance_criteria": [c.model_dump(mode="json") for c in analysis.acceptance_criteria],
             "recommended_strategy": strategy,
             "recommended_roles": roles,
             "confidence": 0.75,

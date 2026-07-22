@@ -1,4 +1,4 @@
-"""Critérios de aceitação: sem falso positivo em resume/summary."""
+"""Critérios de aceitação tipados: sem falso positivo em resume/summary."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from orchestrator_runtime.planning.analyzer import (
     TaskAnalyzer,
     wants_soma_module,
 )
+from orchestrator_runtime.tasks.models import CriterionKind
 
 
 def test_wants_soma_module_intent():
@@ -29,6 +30,7 @@ def test_criteria_builder_skips_resume_false_positive():
     descs = " ".join(c.description for c in criteria)
     assert "função soma" not in descs
     assert "soma(2,3)" not in descs
+    assert CriterionKind.SOMA_MODULE not in {c.kind for c in criteria}
 
 
 def test_criteria_builder_keeps_soma_demo():
@@ -37,3 +39,7 @@ def test_criteria_builder_keeps_soma_demo():
     criteria = CriteriaBuilder().build(prompt, analysis)
     descs = [c.description for c in criteria]
     assert any("soma(a, b)" in d for d in descs)
+    kinds = {c.kind for c in criteria}
+    assert CriterionKind.SOMA_MODULE in kinds
+    assert CriterionKind.TESTS_PASS in kinds
+    assert all(c.check is not None and c.check.kind == c.kind for c in criteria)

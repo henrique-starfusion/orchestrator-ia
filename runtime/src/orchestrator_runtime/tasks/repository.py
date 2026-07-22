@@ -42,6 +42,19 @@ class TaskRepository:
     def session(self) -> Session:
         return self._Session()
 
+    @staticmethod
+    def _criterion_from_raw(raw: Any) -> AcceptanceCriterion:
+        if isinstance(raw, AcceptanceCriterion):
+            return raw
+        data = dict(raw or {})
+        if "kind" not in data and "check" not in data:
+            kind = AcceptanceCriterion.infer_kind_from_description(
+                str(data.get("description") or "")
+            )
+            data["kind"] = kind.value
+            data["check"] = {"kind": kind.value, "params": {}}
+        return AcceptanceCriterion.model_validate(data)
+
     def _to_row(self, task: TaskRecord) -> TaskRow:
         return TaskRow(
             id=task.id,
@@ -53,7 +66,7 @@ class TaskRepository:
             complexity=task.complexity,
             requirements_json=dumps(task.requirements),
             acceptance_criteria_json=dumps(
-                [c.model_dump() for c in task.acceptance_criteria]
+                [c.model_dump(mode="json") for c in task.acceptance_criteria]
             ),
             constraints_json=dumps(task.constraints.model_dump()),
             status=task.status.value,
@@ -82,7 +95,7 @@ class TaskRepository:
             complexity=row.complexity or "medium",
             requirements=loads(row.requirements_json, []),
             acceptance_criteria=[
-                AcceptanceCriterion.model_validate(c) for c in criteria_raw
+                self._criterion_from_raw(c) for c in criteria_raw
             ],
             constraints=TaskConstraints.model_validate(
                 loads(row.constraints_json, {})
@@ -140,7 +153,7 @@ class TaskRepository:
                 row.complexity = task.complexity
                 row.requirements_json = dumps(task.requirements)
                 row.acceptance_criteria_json = dumps(
-                    [c.model_dump() for c in task.acceptance_criteria]
+                    [c.model_dump(mode="json") for c in task.acceptance_criteria]
                 )
                 row.constraints_json = dumps(task.constraints.model_dump())
                 row.status = task.status.value

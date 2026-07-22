@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Any
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from orchestrator_runtime.tasks.state_machine import TaskState
 
@@ -25,9 +26,27 @@ def new_task_id() -> str:
     return uuid4().hex[:12]
 
 
+class CriterionKind(str, Enum):
+    """Verificadores tipados — o validator despacha por kind, não por substring."""
+
+    SOMA_MODULE = "soma_module"
+    TESTS_PASS = "tests_pass"
+    DOCS_EXAMPLE = "docs_example"
+    WORKSPACE_CHANGES = "workspace_changes"
+    EVIDENCE = "evidence"
+    CUSTOM = "custom"
+
+
+class CriterionCheck(BaseModel):
+    kind: CriterionKind
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
 class AcceptanceCriterion(BaseModel):
     id: str
     description: str
+    kind: CriterionKind = CriterionKind.EVIDENCE
+    check: CriterionCheck | None = None
     verifiable: bool = True
     required: bool = True
     satisfied: bool | None = None
@@ -39,6 +58,45 @@ class AcceptanceCriterion(BaseModel):
         if lowered in VAGUE_CRITERIA or len(lowered) < 8:
             raise ValueError(f"Critério vago ou curto demais: {value!r}")
         return value
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_legacy_kind(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "kind" not in data and "check" not in data:
+            kind = cls.infer_kind_from_description(str(data.get("description") or ""))
+            data = {
+                **data,
+                "kind": kind,
+                "check": {"kind": kind, "params": {}},
+            }
+        return data
+
+    @model_validator(mode="after")
+    def ensure_check(self) -> AcceptanceCriterion:
+        if self.check is None:
+            self.check = CriterionCheck(kind=self.kind)
+        elif self.check.kind != self.kind:
+            # check.kind is source of truth when both present
+            self.kind = self.check.kind
+        return self
+
+    @classmethod
+    def infer_kind_from_description(cls, description: str) -> CriterionKind:
+        """Migração de critérios legados persistidos sem kind."""
+        desc = (description or "").lower()
+        if "soma" in desc and (
+            "função" in desc or "funcao" in desc or "def " in desc or "(a, b)" in desc
+        ):
+            return CriterionKind.SOMA_MODULE
+        if "suite de testes" in desc or (
+            ("teste" in desc or "test" in desc) and "passa" in desc
+        ):
+            return CriterionKind.TESTS_PASS
+        if "readme" in desc or "document" in desc or "docs" in desc:
+            return CriterionKind.DOCS_EXAMPLE
+        if "alterações solicitadas" in desc or "alteracoes solicitadas" in desc:
+            return CriterionKind.WORKSPACE_CHANGES
+        return CriterionKind.EVIDENCE
 
 
 class TaskConstraints(BaseModel):

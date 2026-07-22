@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import re
-from typing import Iterable
+from typing import Any, Iterable
 
 from orchestrator_runtime.tasks.models import (
     AcceptanceCriterion,
+    CriterionCheck,
+    CriterionKind,
     OrchestrationPlan,
     TaskAnalysis,
     TaskRecord,
@@ -104,7 +106,13 @@ class CriteriaBuilder:
         idx = 1
         lowered = prompt.lower()
 
-        def add(desc: str, required: bool = True) -> None:
+        def add(
+            desc: str,
+            kind: CriterionKind,
+            *,
+            required: bool = True,
+            params: dict[str, Any] | None = None,
+        ) -> None:
             nonlocal idx
             if desc.strip().lower() in VAGUE:
                 return
@@ -112,22 +120,52 @@ class CriteriaBuilder:
                 AcceptanceCriterion(
                     id=f"AC-{idx:03d}",
                     description=desc,
+                    kind=kind,
+                    check=CriterionCheck(kind=kind, params=params or {}),
                     required=required,
                 )
             )
             idx += 1
 
         if wants_soma_module(prompt):
-            add("Existe função soma(a, b) retornando a soma numérica")
-            add("Há teste automatizado cobrindo soma(2,3)==5")
+            add(
+                "Existe função soma(a, b) retornando a soma numérica",
+                CriterionKind.SOMA_MODULE,
+                params={"path": "soma/core.py", "symbol": "soma"},
+            )
+            add(
+                "Há teste automatizado cobrindo soma(2,3)==5",
+                CriterionKind.TESTS_PASS,
+                params={"mention": "soma"},
+            )
         if re.search(r"\b(test|pytest|teste|testes)\b", lowered):
-            add("Suite de testes determinística passa com exit code 0")
+            add(
+                "Suite de testes determinística passa com exit code 0",
+                CriterionKind.TESTS_PASS,
+            )
         if re.search(r"\b(docs?|document\w*|readme)\b", lowered):
-            add("README ou docs descrevem uso com exemplo executável")
+            params: dict[str, Any] = {"path": "README.md"}
+            if wants_soma_module(prompt):
+                params["must_contain"] = ["soma"]
+            add(
+                "README ou docs descrevem uso com exemplo executável",
+                CriterionKind.DOCS_EXAMPLE,
+                params=params,
+            )
         if not criteria:
-            add("Alterações solicitadas no prompt estão presentes no workspace")
-            add("Testes determinísticos relevantes passam ou estão justificados")
-            add("Documentação afetada foi revisada e atualizada se necessário")
+            add(
+                "Alterações solicitadas no prompt estão presentes no workspace",
+                CriterionKind.WORKSPACE_CHANGES,
+            )
+            add(
+                "Testes determinísticos relevantes passam ou estão justificados",
+                CriterionKind.TESTS_PASS,
+            )
+            add(
+                "Documentação afetada foi revisada e atualizada se necessário",
+                CriterionKind.DOCS_EXAMPLE,
+                params={"path": "README.md"},
+            )
         return criteria
 
 
@@ -144,7 +182,9 @@ class Planner:
                 {"role": "validator", "agent": roles.validator, "action": "validate"},
                 {"role": "documentation", "agent": "runtime", "action": "update_docs"},
             ],
-            "acceptance_criteria": [c.model_dump() for c in task.acceptance_criteria],
+            "acceptance_criteria": [
+                c.model_dump(mode="json") for c in task.acceptance_criteria
+            ],
             "maximum_iterations": roles.maximum_iterations,
             "fallbacks": roles.fallbacks,
         }

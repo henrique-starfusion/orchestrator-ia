@@ -12,6 +12,14 @@
 - Overrides de agentes respeitados com `routing=automatic`
 - Erros em threads background MCP deixam de ser engolidos (log + mark FAILED)
 
+### Added
+
+- Schema tipado de acceptance criteria (`CriterionKind` + `CriterionCheck`) com dispatch no validator
+
+### Fixed
+
+- `orchestrator_analyze` também usa `_run_coro` (não quebra no event loop MCP)
+
 ### Changed
 
 - `orchestrator_status` expõe `error`, mensagem legível, agente ativo e ACs
@@ -19,6 +27,7 @@
 - Default `CursorMcpScope=project` (global só com `--cursor-mcp-scope user|both`)
 - `DeterministicValidator`: critérios sem verificador exigem evidência (changed_files/tests)
 - CI GitHub Actions (pytest + suite PowerShell)
+- Critérios legados sem `kind` são migrados por inferência na carga
 
 ## 0.4.0 — 2026-07-21
 
