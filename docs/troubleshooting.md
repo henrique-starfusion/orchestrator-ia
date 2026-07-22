@@ -23,6 +23,8 @@ orchestrator cursor verify
 | `mcp` Python ausente | `pip install -e runtime/` (inclui `mcp>=1.6,<2`) |
 | Runtime unavailable | `orchestrator install` no projeto; checar `.orchestrator/` |
 | HTTP bind recusado | use `127.0.0.1` ou `ORCHESTRATOR_MCP_ALLOW_REMOTE=1` |
+| `Unexpected token '[heartbeat]'` / `transport_error` | stdout poluido no stdio; atualize o runtime (heartbeat em stderr) e **reload Cursor** |
+| Log `[error] INFO Processing request` + `undefined` | Cosmetico: Cursor trata stderr como erro; conexao OK se houver `Successfully connected` |
 
 ```bat
 bootstrap-agents.bat status -ProjectPath C:\dev\projeto
