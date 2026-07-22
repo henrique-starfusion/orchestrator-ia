@@ -1,6 +1,6 @@
-# Layout deste repositório
+﻿# Layout deste repositório
 
-Este repositório é **ao mesmo tempo**:
+Repositório do **Orquestrador IA Multiagente** (`orchestrator-ia`). É **ao mesmo tempo**:
 
 1. o **pacote de distribuição** `@starfusion/orchestrator`;
 2. um **workspace dogfood** (instalação local em `.orchestrator/`, ignorada pelo git).
@@ -18,7 +18,7 @@ Instalação via npm/GitHub deve apontar para `#develop` (ou tag de release em `
 
 | Item | Papel |
 |---|---|
-| `bootstrap-agents.bat` | Wrapper Windows fino → `scripts/Install-Orchestrator.ps1` (**em uso**) |
+| `orchestrator-ia.bat` | Wrapper Windows fino → `scripts/Install-Orchestrator.ps1` (**em uso**) |
 | `install.ps1` | Atalho PowerShell local (**em uso**) |
 | `get.ps1` | One-liner / cache + install (**em uso**) |
 | `bin/orchestrator.js` | CLI npm `orchestrator` / `mao` (**em uso**) |
@@ -35,15 +35,20 @@ Instalação via npm/GitHub deve apontar para `#develop` (ou tag de release em `
 | `package/manifest.json` | Arquivos gerenciados |
 | `package/checksums.json` | Integridade |
 | `package/migrations/` | Migrations de versão |
+| `runtime/` | Runtime Python multiagente (SQLite) |
+
+Documentação completa: [`orquestrador.md`](orquestrador.md) · [`runtime-architecture.md`](runtime-architecture.md) · [`mcp-integration.md`](mcp-integration.md).
 
 ## Runtime do instalador
 
 | Pasta | Papel |
 |---|---|
 | `scripts/` | Lógica PowerShell (install/update/verify/…) |
-| `tests/` | Testes em fixtures temporárias |
+| `tests/` | Testes do instalador em fixtures temporárias |
+| `runtime/tests/` | Testes do runtime (pytest) |
 | `docs/` | Documentação do produto |
 | `docs/legacy/` | Material deprecado (não usar no fluxo atual) |
+| `docs/legacy-cleanup.md` | Limpeza automática de legado no install/update |
 | `.cursor/rules/` | Regras Cursor versionadas deste pacote |
 
 ## Gerado no workspace (gitignored)
@@ -56,4 +61,5 @@ Instalação via npm/GitHub deve apontar para `#develop` (ou tag de release em `
 
 ## O que NÃO usar
 
-- `docs/legacy/prompt_ambiente_multiagente.md` — prompt antigo baseado em `.claude/`
+- `docs/archive/prompts/` — prompts bootstrap antigos (não executáveis)
+- `docs/archive/superpowers/` — specs/planos já incorporados

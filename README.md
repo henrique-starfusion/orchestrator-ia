@@ -1,34 +1,42 @@
-# Bootstrap Agents — Orquestrador Multiagente
+# Orquestrador IA Multiagente
 
 Projeto desenvolvido e mantido pela **StarFusion**.
 
 - **Desenvolvedor:** Henrique Rodrigues
 - **Copyright © 2026 StarFusion Consultoria, Tecnologia e Soluções em Informática LTDA.** Todos os direitos reservados.
 
-Pacote portátil para instalar, validar e manter um **ambiente multiagente genérico** em qualquer repositório de software. O orquestrador não pertence a uma aplicação específica: projetos-alvo são apenas workspaces de execução.
+Pacote portátil para instalar, validar e manter um **ambiente multiagente genérico** e um **runtime persistente** em qualquer repositório. O orquestrador não pertence a uma aplicação específica: projetos-alvo são workspaces de execução.
+
+**Versão atual:** 0.4.3 — ver [`CHANGELOG.md`](CHANGELOG.md).
 
 ---
 
-## O que é o orquestrador multiagente
+## O que é o Orquestrador IA Multiagente
 
-O orquestrador é um **meta-agente de desenvolvimento** que recebe tarefas, analisa contexto, seleciona agentes CLI disponíveis, planeja execução, delega trabalho, testa resultados, valida evidências e persiste aprendizado.
+Duas camadas:
 
-Fluxo resumido:
+| Camada | Papel | Status |
+|---|---|---|
+| **Installer** | Instala/atualiza `.orchestrator/`, detecta agentes, adaptadores | implementado |
+| **Runtime** | Executa o ciclo multiagente com SQLite, gates e evidências | implementado (MVP) |
 
-```text
-entender → planejar → selecionar agentes → delegar → executar
-→ testar → validar → corrigir → concluir → aprender
+```bash
+orchestrator install                 # nucleo do workspace
+orchestrator cursor configure        # MCP + rule no Cursor
+orchestrator mcp serve               # tools MCP para o chat
+orchestrator run --prompt "..."      # tarefa real (CLI)
 ```
 
-Papéis padrão (`.orchestrator/orchestration/roles.json`):
+Fluxo do runtime:
 
-| Papel | Responsabilidade |
-|---|---|
-| Orquestrador | Estado, estratégia, limites, anti-recursão, consolidação |
-| Planejador | Riscos, subtarefas, critérios de aceitação |
-| Executor | Implementação e evidências |
-| Testador | Testes determinísticos e regressões |
-| Validador | Revisão independente de pedido, plano, diffs e critérios |
+```text
+receber → analisar → memória → planejar → selecionar → executar
+→ testar → validar → corrigir → documentação → consolidar
+```
+
+Cursor é **cliente IDE** (front controller via MCP; não worker). MVP: Claude planeja/valida, Codex executa, runtime testa.
+
+Documentação: [`docs/mcp-integration.md`](docs/mcp-integration.md) · [`docs/orquestrador.md`](docs/orquestrador.md)
 
 ---
 
@@ -81,13 +89,13 @@ Na pasta do seu projeto:
 ### Node.js / npm (recomendado)
 
 ```bash
-npx --yes github:henrique-starfusion/bootstrap-agents#develop init
+npx --yes github:henrique-starfusion/orchestrator-ia#develop init
 ```
 
 Ou instalar o CLI global e reutilizar em vários projetos:
 
 ```bash
-npm install -g github:henrique-starfusion/bootstrap-agents#develop
+npm install -g github:henrique-starfusion/orchestrator-ia#develop
 cd C:\caminho\do\seu\projeto
 orchestrator init
 ```
@@ -97,7 +105,7 @@ Equivalente curto: `mao init` (alias do mesmo binário).
 ### PowerShell (Windows, com `gh` autenticado)
 
 ```powershell
-gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=develop" | iex
+gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=develop" | iex
 ```
 
 Isso baixa o pacote para `%LOCALAPPDATA%\StarFusion\multiagent-orchestrator` (cache) e instala `.orchestrator/` no diretório atual.
@@ -109,13 +117,13 @@ Há **dois níveis**: atualizar o CLI (pacote npm) e atualizar a estrutura `.orc
 #### 1) Atualizar o CLI via npm (global)
 
 ```bash
-npm install -g github:henrique-starfusion/bootstrap-agents#develop
+npm install -g github:henrique-starfusion/orchestrator-ia#develop
 ```
 
 Sem instalar global — sempre a tip da branch `develop`:
 
 ```bash
-npx --yes github:henrique-starfusion/bootstrap-agents#develop update
+npx --yes github:henrique-starfusion/orchestrator-ia#develop update
 ```
 
 #### 2) Atualizar a estrutura do projeto
@@ -131,13 +139,13 @@ Equivalente: `mao update`. Alias legado: `orchestrator upgrade`.
 Via clone local:
 
 ```bat
-bootstrap-agents.bat update -ProjectPath C:\caminho\do\projeto
+orchestrator-ia.bat update -ProjectPath C:\caminho\do\projeto
 ```
 
 Fluxo típico (CLI global + projeto):
 
 ```bash
-npm install -g github:henrique-starfusion/bootstrap-agents#develop
+npm install -g github:henrique-starfusion/orchestrator-ia#develop
 cd C:\caminho\do\seu\projeto
 orchestrator update
 ```
@@ -182,8 +190,8 @@ Não usa agentes de IA para montar a estrutura. OpenWolf/Graphify no projeto e t
 ### Instalação a partir do clone local
 
 ```bat
-bootstrap-agents.bat init
-bootstrap-agents.bat install -ProjectPath C:\caminho\do\projeto
+orchestrator-ia.bat init
+orchestrator-ia.bat install -ProjectPath C:\caminho\do\projeto
 ```
 
 ```powershell
@@ -221,9 +229,9 @@ orchestrator update
 ```
 
 ```bat
-bootstrap-agents.bat update -ProjectPath C:\meu-projeto
-bootstrap-agents.bat verify -ProjectPath C:\meu-projeto
-bootstrap-agents.bat status
+orchestrator-ia.bat update -ProjectPath C:\meu-projeto
+orchestrator-ia.bat verify -ProjectPath C:\meu-projeto
+orchestrator-ia.bat status
 ```
 
 O `update`:
@@ -258,23 +266,23 @@ Parâmetros PowerShell aceitos via BAT (encaminhamento direto):
 | `-ConfigureMcps` | Atualiza `.orchestrator/mcp/registry.json` (Context7 desabilitado) |
 | `-RunSmokeTest` | Executa probes de agentes (`--help`, somente leitura) |
 | `-SkipAgentProbes` | Pula probes (padrão no install sem smoke test) |
-| `-LegacyCleanup` | **Reservado** — registrado no relatório; limpeza opt-in futura |
+| Limpeza de legado | **Padrão `safe`** em install/update — ver [`docs/legacy-cleanup.md`](docs/legacy-cleanup.md) |
 | `-Force` | Sobrescreve arquivos gerenciados / força migração e reparo |
 | `-InstallMissingAgents` | **Reservado** — não implementado |
 | `-RunProjectTests` | **Reservado** — runner genérico não incluído |
 | `-NonInteractive` | Reservado para fluxos automatizados |
-| `-PackageRoot` | Raiz do pacote bootstrap (padrão: pai de `scripts/`) |
+| `-PackageRoot` | Raiz do pacote orchestrator-ia (padrão: pai de `scripts/`) |
 
 Exemplo completo:
 
 ```bat
-bootstrap-agents.bat install -ProjectPath C:\meu-projeto -ConfigureMcps -UpdateAgents -RunSmokeTest
+orchestrator-ia.bat install -ProjectPath C:\meu-projeto -ConfigureMcps -UpdateAgents -RunSmokeTest
 ```
 
 Simulação:
 
 ```bat
-bootstrap-agents.bat install -ProjectPath C:\meu-projeto -DryRun
+orchestrator-ia.bat install -ProjectPath C:\meu-projeto -DryRun
 ```
 
 ---
@@ -340,10 +348,14 @@ Skills de orquestração registradas em `.orchestrator/skills/registry.json`:
 Listar no workspace:
 
 ```bat
-bootstrap-agents.bat skills -ProjectPath C:\meu-projeto
+orchestrator-ia.bat skills -ProjectPath C:\meu-projeto
 ```
 
 Skills externas: `.orchestrator/skills/external/` · Quarentena: `quarantined/`
+
+### Perfis de invocação por CLI
+
+Cada agente tem um perfil declarativo em `.orchestrator/agents/profiles/<cli>.json` (mecânica de invocação: subcomando não-interativo, flag de prompt, saída, timeout). **CLI novo = JSON novo, zero código** — o dispatch e a skill `call-agent` leem o perfil. Schema: `package/schemas/agent-profile.schema.json`. Agentes classe IDE (cursor, kiro) são detectados por presença no PATH, sem sonda de execução.
 
 ---
 
@@ -416,8 +428,8 @@ Políticas padrão em `.orchestrator/config/policies.json` (score mínimo 0.9, m
 | Cache PowerShell corrompido | Apague `%LOCALAPPDATA%\StarFusion\multiagent-orchestrator` |
 | `git nao encontrado` | Instale Git e adicione ao PATH |
 | `Lock de instalacao ja existe` | Remova `.orchestrator/runtime/install.lock` se nenhum install estiver ativo |
-| `Workspace mais novo que o pacote` | Atualize o pacote bootstrap ou use versão compatível |
-| Arquivos gerenciados ausentes | `orchestrator repair` ou `bootstrap-agents.bat repair` |
+| `Workspace mais novo que o pacote` | Atualize o pacote orchestrator-ia ou use versão compatível |
+| Arquivos gerenciados ausentes | `orchestrator repair` ou `orchestrator-ia.bat repair` |
 | Validação falhou | `orchestrator verify` e leia logs em `runtime/validations/` |
 | Agentes não detectados | Confirme CLI no PATH; rode `orchestrator status` |
 
@@ -430,7 +442,7 @@ Guia completo: [`docs/troubleshooting.md`](docs/troubleshooting.md)
 ```text
 npx / orchestrator / mao      → CLI Node (bin/orchestrator.js)
 get.ps1                       → one-liner PowerShell + cache local
-bootstrap-agents.bat          → wrapper fino (%* → PowerShell)
+orchestrator-ia.bat          → wrapper fino (%* → PowerShell)
         └─► scripts/Install-Orchestrator.ps1   → roteador (init|install|…)
             scripts/Orchestrator.Common.ps1    → helpers
 package/
@@ -441,6 +453,7 @@ package/
 └── migrations/               → scripts <from>-to-<to>.ps1
 ```
 
+- Funcionamento completo: [`docs/orquestrador.md`](docs/orquestrador.md)
 - Arquitetura: [`docs/installer-architecture.md`](docs/installer-architecture.md)
 - CLI: [`docs/cli-reference.md`](docs/cli-reference.md)
 - One-liner: [`docs/quickstart-oneliner.md`](docs/quickstart-oneliner.md)
@@ -451,7 +464,7 @@ package/
 
 Se existir `.claude/VERSION` sem `.orchestrator/VERSION`, o `install` executa `Migrate-LegacyClaude.ps1` (importa memória/regras para `legacy-import/`). Veja [`docs/legacy-migration.md`](docs/legacy-migration.md).
 
-O prompt antigo está em [`docs/legacy/prompt_ambiente_multiagente.md`](docs/legacy/prompt_ambiente_multiagente.md) — **não use** para instalação.
+O prompt antigo está arquivado em [`docs/archive/prompts/`](docs/archive/prompts/) — **não use** para instalação.
 
 ---
 
@@ -471,21 +484,22 @@ Prioridade atual (v0.1): detecção de CLIs, bootstrap incremental versionado, s
 
 | Artefato | Função |
 |---|---|
-| `VERSION` | Versão do pacote bootstrap |
+| `VERSION` | Versão do Orquestrador IA Multiagente |
 | `package.json` | Pacote npm `@starfusion/orchestrator` (bins `orchestrator`, `mao`) |
 | `bin/orchestrator.js` | CLI Node — one-liner / global |
 | `get.ps1` | One-liner PowerShell (cache + install no cwd) |
-| `bootstrap-agents.bat` | Wrapper fino Windows → PowerShell (**em uso**) |
+| `orchestrator-ia.bat` | Wrapper fino Windows → PowerShell (**em uso**) |
 | `install.ps1` | Atalho PowerShell local (**em uso**) |
 | `scripts/` | Implementação PowerShell do instalador |
 | `package/` | Template, manifest, checksums, migrações |
 | `tests/` | Suíte de testes em fixtures temporárias |
 | `docs/` | Documentação do produto |
+| `docs/orquestrador.md` | Guia completo de funcionamento |
 | `docs/legacy/` | Prompt e material deprecados |
 | `docs/repo-layout.md` | Organização deste repositório |
 | `LICENSE` | Todos os direitos reservados (StarFusion) |
 
-**Repositório:** https://github.com/henrique-starfusion/bootstrap-agents (branch `develop`)
+**Repositório:** https://github.com/henrique-starfusion/orchestrator-ia (branch `develop`)
 
 Layout detalhado: [`docs/repo-layout.md`](docs/repo-layout.md)
 
@@ -493,7 +507,7 @@ Layout detalhado: [`docs/repo-layout.md`](docs/repo-layout.md)
 
 ## Atribuição
 
-Projeto desenvolvido e mantido pela **StarFusion**  
+**Orquestrador IA Multiagente** — desenvolvido e mantido pela **StarFusion**  
 Desenvolvedor: **Henrique Rodrigues**  
 
 **Copyright © 2026 StarFusion Consultoria, Tecnologia e Soluções em Informática LTDA.** Todos os direitos reservados.

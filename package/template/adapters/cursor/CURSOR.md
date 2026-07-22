@@ -1,14 +1,29 @@
 # Orchestrator adapter for Cursor
 #
 # Canonical project configuration lives in `.orchestrator/`.
+#
+# Cursor is an IDE **client** of the runtime — not a CLI worker.
 
-## Token economy + models
+## Runtime + MCP (preferred)
+
+```bash
+orchestrator cursor configure
+orchestrator mcp serve --transport stdio
+orchestrator run --prompt "<atividade>"
+orchestrator task status <id>
+```
+
+No chat, use MCP tools `orchestrator_run` / `orchestrator_delegate` (any model can be front controller).
+
+Do **not** select Cursor as planner/executor/tester/validator.
+Do **not** rely on `Task model=` for the main multi-agent workflow.
+
+## Documentation gate
+
+Ao final de cada tarefa, revisar e atualizar a documentação afetada antes da conclusão.
+
+## Token economy + models (legacy Task fallback only)
 
 - Rules: `.cursor/rules/` + `.orchestrator/config/models.json`.
-- Caveman on by default for agent replies (terse, accurate).
-- Model picker / Task `model=` by task class:
-  - fast → `claude-4.5-haiku`
-  - balanced/docs → `claude-sonnet-5-thinking-high`
-  - deep → `claude-opus-4-8-thinking-high`
-  - max/complex → `claude-fable-5-thinking-high`
-  - mechanical edits → `composer-2.5-fast`
+- Caveman is **off** by default for runtime/logs; optional for presentation replies.
+- If you must use Task, always pass `model=` (never inherit parent).

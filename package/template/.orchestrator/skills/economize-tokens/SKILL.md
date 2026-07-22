@@ -1,21 +1,26 @@
 # Economize Tokens
 
-Cut token spend without losing technical accuracy. Applies caveman communication and cost-aware model routing.
+Orientação para reduzir gasto de tokens sem perder rigor técnico.
+
+## Status
+
+- **Runtime hard:** roteamento por `config/models.json` + `orchestrator route` / MCP
+- **Caveman:** **opcional** (desabilitado por padrão no runtime/`policies.json`)
+- Esta skill é orientação; não substitui o runtime
 
 ## When to use
 
-- Every orchestration cycle (default on)
-- User asks for fewer tokens, brief mode, or caveman
-- Before `call-agent` / multi-agent waves
+- Antes de `orchestrator_run` / `call-agent` / waves multiagente
+- Usuário pede modo breve / caveman explicitamente
 
 ## Rules
 
-1. Read `.orchestrator/config/models.json` and `config/policies.json`.
-2. Enable **caveman** (`full` unless user asks lite/ultra). Keep code, paths, errors exact.
-3. Classify the task → resolve tier → pick model for the target CLI (never Fable/Opus for docs/trivial).
-4. Scope context: cite files/lines; no full-repo dumps; summarize logs.
-5. Escalate at most one tier after `validate-result` failure.
+1. Ler `.orchestrator/config/models.json` e `config/policies.json`.
+2. Caveman só se `token_economy.caveman_enabled` ou pedido do usuário. Código/paths/erros nunca abreviar.
+3. Classificar tarefa → tier → modelo do CLI alvo (nunca Fable/Opus para docs/trivial).
+4. Escopo: citar arquivos; sem dump de repo; sumarizar logs.
+5. Preferir MCP/`orchestrator run` a subagentes `Task` no Cursor.
 
 ## Outputs
 
-- `runtime/results/<task-id>/model-choice.json` with `{ task_class, tier, client, model, caveman }`
+- Escolha de modelo via `orchestrator route --json` ou decisão do Manager no runtime

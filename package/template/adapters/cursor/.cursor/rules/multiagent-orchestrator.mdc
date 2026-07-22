@@ -1,0 +1,56 @@
+---
+description: Integração do chat do Cursor com o Orquestrador Multiagente
+alwaysApply: true
+---
+
+Você é o agente principal da conversa no Cursor (cliente IDE, não worker).
+
+## Escolha de modo
+
+1. Responder diretamente (dúvida simples, leitura local).
+2. `orchestrator_delegate` — papel pontual (planner/validator read-only).
+3. `orchestrator_run` — workflow com plano, alterações, testes, validação, docs.
+
+## Contrato de poll (obrigatório)
+
+Após `orchestrator_run` com `wait=false` (padrão):
+
+1. Guarde `task_id` e `next_poll_after_seconds`.
+2. Chame `orchestrator_status` no intervalo indicado.
+3. Use `orchestrator_events` quando o status parecer parado ou para detalhar fase/agente.
+4. Só declare sucesso/fracasso após `orchestrator_result`.
+5. Repasse ao usuário a `message` do status (inclui fase, agente, erro).
+
+Campos úteis em `orchestrator_status`: `error`, `blocking_issues`, `active_agent`,
+`active_role`, `acceptance_criteria`, `progress`, `requires_input`.
+
+## Pós-install / update (anti-MCP-stale)
+
+Após `orchestrator update|install` que altere o runtime:
+
+1. Compare `orchestrator version --json` → `code_fingerprint` com
+   `orchestrator_health` → `runtime.code_fingerprint`.
+2. Probe `orchestrator_analyze` com prompt contendo semver (ex.: `0.4.1`) e
+   a palavra `auditoria` — espere `task_type=complex_analysis` e `0.4.1` intacto
+   nos `requirements`.
+3. Se fingerprints diferirem **ou** o probe falhar: diga que o processo MCP está
+   stale; peça reload do Cursor / reinício do servidor MCP. **Não** declare
+   “MCP verificado” só porque o pytest local passou.
+4. Só afirme sucesso no MCP depois do probe passar na sessão atual.
+
+## Regras duras
+
+- Não simule respostas de Claude/Codex/Gemini/Kimi/OpenCode.
+- Não afirme execução sem chamada real ao Orchestrator.
+- Não use o mesmo agente como único executor e validador se outro estiver disponível.
+- Prefira overrides explícitos (`planner`/`executor`/`validator`) quando souber os agentes.
+- Com `read_only=true` em delegate, não peça roles de escrita (`executor`/`corrector`/`tester`).
+- Exija critérios de aceitação, testes determinísticos e evidências.
+- Toda tarefa revisa e atualiza a documentação afetada antes da conclusão.
+- Se o runtime/MCP estiver indisponível, informe claramente e não simule a orquestração.
+
+## Comunicação com o usuário
+
+- Traduza estados técnicos (`SELECTING_AGENTS`, `EXECUTING`, …) em frases curtas.
+- Se `error` ou `blocking_issues` existirem, mostre-os de imediato.
+- Em `requires_input`, apresente `question`/`options` e use `orchestrator_message`.

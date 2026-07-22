@@ -1,6 +1,6 @@
 # Migrações de versão
 
-Scripts de migração incrementais entre versões do pacote bootstrap.
+Scripts de migração incrementais entre versões do Orquestrador IA Multiagente.
 
 ## Convenção de nomenclatura
 

@@ -1,0 +1,7 @@
+---
+description: How to invoke other agent CLIs with the correct model (call-agent)
+alwaysApply: false
+---
+
+To delegate work to another agent, read `.orchestrator/skills/call-agent/SKILL.md`.
+Cursor has no dispatch CLI: use Task with model="<slug>" (MANDATORY — without model= the subagent inherits the parent model). Get the slug: `orchestrator route --task-class <class> --client cursor --json`. Invocation mechanics for external CLIs: `.orchestrator/agents/profiles/<cli>.json`.

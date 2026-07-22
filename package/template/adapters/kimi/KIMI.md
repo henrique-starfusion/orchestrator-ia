@@ -1,5 +1,8 @@
 # Orchestrator adapter for Kimi
 #
 # Canonical: `.orchestrator/`. See `config/models.json`.
+# Status: experimental adapter until host verification.
 
-Prefer newest Kimi model exposed by the CLI. Keep replies terse (caveman). Escalate tier only on validation failure.
+Prefer `orchestrator run` for multi-agent tasks.
+Ao final de cada tarefa, revisar e atualizar a documentação afetada antes da conclusão.
+Escalate tier only on validation failure.

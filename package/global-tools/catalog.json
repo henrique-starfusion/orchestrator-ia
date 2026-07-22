@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Ferramentas, MCPs, plugins e skills instalados no perfil do usuario (globais), reutilizaveis em qualquer projeto.",
   "npm_globals": [
     {
@@ -71,6 +71,11 @@
       "id": "firecrawl",
       "source": "firecrawl/cli",
       "notes": "hub Firecrawl + variantes CLI"
+    },
+    {
+      "id": "terraform-skill",
+      "source": "antonbabenko/terraform-skill",
+      "notes": "Terraform/OpenTofu best practices (Anton Babenko, 2.2k stars, ativo). Instala via npx skills add; alternativa gerenciada: marketplace antonbabenko/agent-plugins"
     },
     {
       "id": "caveman",

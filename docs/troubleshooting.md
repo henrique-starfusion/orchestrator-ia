@@ -1,6 +1,6 @@
-# Solução de problemas
+# Solução de problemas — Orquestrador IA Multiagente
 
-Guia operacional para falhas comuns do instalador **bootstrap-agents** / **@starfusion/orchestrator**.
+Guia operacional para falhas comuns do **Orquestrador IA Multiagente** (`@starfusion/orchestrator`).
 
 Quickstart: [`quickstart-oneliner.md`](quickstart-oneliner.md)
 
@@ -11,12 +11,25 @@ Quickstart: [`quickstart-oneliner.md`](quickstart-oneliner.md)
 ```bash
 orchestrator status
 orchestrator verify
+orchestrator mcp doctor
+orchestrator cursor verify
 ```
 
+### MCP / Cursor
+
+| Sintoma | Ação |
+|---|---|
+| Tools MCP ausentes no chat | `orchestrator cursor configure` e reiniciar Cursor |
+| `mcp` Python ausente | `pip install -e runtime/` (inclui `mcp>=1.6,<2`) |
+| Runtime unavailable | `orchestrator install` no projeto; checar `.orchestrator/` |
+| HTTP bind recusado | use `127.0.0.1` ou `ORCHESTRATOR_MCP_ALLOW_REMOTE=1` |
+| `Unexpected token '[heartbeat]'` / `transport_error` | stdout poluido no stdio; atualize o runtime (heartbeat em stderr) e **reload Cursor** |
+| Log `[error] INFO Processing request` + `undefined` | Cosmetico: Cursor trata stderr como erro; conexao OK se houver `Successfully connected` |
+
 ```bat
-bootstrap-agents.bat status -ProjectPath C:\dev\projeto
-bootstrap-agents.bat verify -ProjectPath C:\dev\projeto
-bootstrap-agents.bat analyze -ProjectPath C:\dev\projeto
+orchestrator-ia.bat status -ProjectPath C:\dev\projeto
+orchestrator-ia.bat verify -ProjectPath C:\dev\projeto
+orchestrator-ia.bat analyze -ProjectPath C:\dev\projeto
 ```
 
 Logs:
@@ -43,8 +56,8 @@ Cache do one-liner PowerShell:
 **Solução:**
 
 1. `gh auth login` (HTTPS ou SSH)
-2. Confirme `git ls-remote https://github.com/henrique-starfusion/bootstrap-agents.git`
-3. Repita: `npx --yes github:henrique-starfusion/bootstrap-agents#develop init`
+2. Confirme `git ls-remote https://github.com/henrique-starfusion/orchestrator-ia.git`
+3. Repita: `npx --yes github:henrique-starfusion/orchestrator-ia#develop init`
 
 ---
 
@@ -65,7 +78,7 @@ Cache do one-liner PowerShell:
 ```powershell
 gh auth status
 gh auth refresh -s repo
-gh api repos/henrique-starfusion/bootstrap-agents --jq .full_name
+gh api repos/henrique-starfusion/orchestrator-ia --jq .full_name
 ```
 
 ---
@@ -94,7 +107,7 @@ Remove-Item -Recurse -Force "$env:LOCALAPPDATA\StarFusion\multiagent-orchestrato
 npm prefix -g
 npm bin -g
 # adicione o caminho de bin ao PATH e reabra o terminal
-npm install -g github:henrique-starfusion/bootstrap-agents#develop
+npm install -g github:henrique-starfusion/orchestrator-ia#develop
 ```
 
 ---
@@ -123,7 +136,7 @@ npm install -g github:henrique-starfusion/bootstrap-agents#develop
 
 **Solução:**
 
-- Confirme clone/cópia completa do repositório bootstrap-agents
+- Confirme clone/cópia completa do repositório orchestrator-ia
 - Se veio via npm/npx, reinstale o pacote (`npx` limpa cache com `--yes` / limpe npm cache se necessário)
 - Se veio via `get.ps1`, force refresh do cache (`-ForceRefresh`)
 - Verifique `package/manifest.json` e `package/template/.orchestrator/`
@@ -163,11 +176,11 @@ npm install -g github:henrique-starfusion/bootstrap-agents#develop
 
 ### `Workspace mais novo que o pacote` (exit 6)
 
-**Causa:** `.orchestrator/VERSION` > `VERSION` na raiz do pacote bootstrap.
+**Causa:** `.orchestrator/VERSION` > `VERSION` na raiz do pacote orchestrator-ia.
 
 **Solução:**
 
-- Atualize o pacote bootstrap-agents para versão ≥ workspace
+- Atualize o pacote orchestrator-ia para versão ≥ workspace
 - **Não** force downgrade sem backup
 
 ---
@@ -187,7 +200,7 @@ npm install -g github:henrique-starfusion/bootstrap-agents#develop
 **Solução:**
 
 ```bat
-bootstrap-agents.bat install -ProjectPath C:\dev\projeto
+orchestrator-ia.bat install -ProjectPath C:\dev\projeto
 ```
 
 ---
@@ -199,7 +212,7 @@ bootstrap-agents.bat install -ProjectPath C:\dev\projeto
 **Solução:**
 
 ```bat
-bootstrap-agents.bat repair -ProjectPath C:\dev\projeto
+orchestrator-ia.bat repair -ProjectPath C:\dev\projeto
 ```
 
 ---
@@ -226,7 +239,7 @@ bootstrap-agents.bat repair -ProjectPath C:\dev\projeto
 
 1. Instale o CLI desejado (ex.: Claude Code, Codex)
 2. Abra novo terminal
-3. `bootstrap-agents.bat analyze -ProjectPath ...`
+3. `orchestrator-ia.bat analyze -ProjectPath ...`
 
 Registro: `.orchestrator/agents/detected.json`
 
@@ -316,25 +329,24 @@ Veja [`legacy-migration.md`](legacy-migration.md).
 
 ---
 
-## Flags reservadas
+## Limpeza de legado e flags
 
-Estas flags **não executam ação** hoje — aparecem como limitação no relatório:
+Limpeza automática: [`legacy-cleanup.md`](legacy-cleanup.md).
 
-| Flag | Status |
+| Flag / comando | Status |
 |---|---|
-| `-LegacyCleanup` | Não implementado |
+| `--skip-legacy-cleanup` / `--legacy-cleanup-mode` | Implementado (0.4.0+) |
+| `orchestrator legacy restore --backup <id>` | Implementado |
 | `-InstallMissingAgents` | Não implementado |
 | `-RunProjectTests` | Não implementado |
-
-Não indica falha do install.
 
 ---
 
 ## Simulação (DryRun)
 
 ```bat
-bootstrap-agents.bat install -ProjectPath C:\dev\projeto -DryRun
-bootstrap-agents.bat upgrade -DryRun
+orchestrator-ia.bat install -ProjectPath C:\dev\projeto -DryRun
+orchestrator-ia.bat upgrade -DryRun
 ```
 
 Útil para preview sem lock nem escrita.
@@ -346,7 +358,7 @@ bootstrap-agents.bat upgrade -DryRun
 Inclua:
 
 1. Saída completa do comando com erro
-2. `bootstrap-agents.bat status -ProjectPath ...`
+2. `orchestrator-ia.bat status -ProjectPath ...`
 3. Último log em `.orchestrator/runtime/validations/`
 4. `installation-report.md`
 5. Versões: `VERSION` (pacote) e `.orchestrator/VERSION`

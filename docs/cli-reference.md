@@ -1,23 +1,70 @@
-# Referência da CLI
+# Referência da CLI — Orquestrador IA Multiagente
 
-Três formas de entrada (mesma lógica):
+Três formas de entrada:
 
-1. **One-liner npm:** `npx @starfusion/orchestrator init` / `orchestrator init`
-2. **One-liner PowerShell:** `get.ps1` (via `gh api ... | iex` ou local)
-3. **Wrapper local:** `bootstrap-agents.bat` → `scripts/Install-Orchestrator.ps1`
+1. **npm:** `npx @starfusion/orchestrator` / `orchestrator` / `mao`
+2. **PowerShell:** `get.ps1`
+3. **Wrapper local:** `orchestrator-ia.bat`
 
-**Sintaxe PowerShell:** 5.1+. O BAT e o bin Node encaminham argumentos ao instalador.
+A partir de **0.2.0**, a CLI tem duas camadas:
+
+| Camada | Comandos | Backend |
+|---|---|---|
+| Installer | `install`, `update`, `verify`, `repair`, `uninstall`, `status`, `route`, `dispatch`, `global-tools` | PowerShell |
+| Runtime | `run`, `task *` | Python (`orchestrator_runtime`) |
+| MCP / Cursor | `mcp serve\|status\|doctor`, `cursor configure\|verify\|print-config` | Python |
+
+---
+
+## MCP / Cursor
+
+```bash
+orchestrator mcp serve --transport stdio
+orchestrator mcp serve --transport http --host 127.0.0.1 --port 8765
+orchestrator mcp doctor
+orchestrator cursor configure
+orchestrator cursor verify
+orchestrator cursor print-config
+```
+
+Installer: Cursor MCP do **projeto** roda por padrão em `init`/`install`/`update` (`--cursor-mcp-scope project`). Use `--cursor-mcp-scope user|both` para também gravar `~/.cursor/mcp.json`.
+
+```bash
+orchestrator init
+orchestrator update --skip-cursor              # nao tocar no MCP do Cursor
+orchestrator update --cursor-mcp-scope user    # so global
+```
+
+---
+
+## Runtime
+
+```bash
+orchestrator run --prompt "Crie modulo soma com testes e docs"
+orchestrator task create --prompt "..."
+orchestrator task run <id>
+orchestrator task status <id>
+orchestrator task list
+orchestrator task cancel <id>
+orchestrator task resume <id>
+orchestrator task logs <id>
+orchestrator task artifacts <id>
+```
+
+Opções comuns: `--project`, `--profile`, `--max-iterations`, `--timeout`, `--planner`, `--executor`, `--validator`, `--manager-provider`, `--fake-agents` (CI), `--json`, `--dry-run`.
+
+Requer Python 3.11+.
 
 ---
 
 ## One-liner (projeto atual)
 
 ```bash
-npx --yes github:henrique-starfusion/bootstrap-agents#develop init
+npx --yes github:henrique-starfusion/orchestrator-ia#develop init
 ```
 
 ```powershell
-gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/bootstrap-agents/contents/get.ps1?ref=develop" | iex
+gh api -H "Accept: application/vnd.github.raw" "repos/henrique-starfusion/orchestrator-ia/contents/get.ps1?ref=develop" | iex
 ```
 
 ```bash
@@ -30,7 +77,7 @@ mao init
 ## Invocação local
 
 ```bat
-bootstrap-agents.bat <comando> [opções]
+orchestrator-ia.bat <comando> [opções]
 ```
 
 ```powershell
@@ -52,8 +99,8 @@ orchestrator verify --project C:\dev\meu-app
 ```
 
 ```bat
-bootstrap-agents.bat install -ProjectPath C:\dev\meu-app
-bootstrap-agents.bat verify -Project C:\dev\meu-app
+orchestrator-ia.bat install -ProjectPath C:\dev\meu-app
+orchestrator-ia.bat verify -Project C:\dev\meu-app
 ```
 
 ```powershell
@@ -80,13 +127,13 @@ Atualiza a estrutura `.orchestrator/` do projeto atual (comando principal de man
 Antes, atualize o CLI se estiver instalado via npm global:
 
 ```bash
-npm install -g github:henrique-starfusion/bootstrap-agents#develop
+npm install -g github:henrique-starfusion/orchestrator-ia#develop
 ```
 
 Ou rode o update direto com npx (baixa a tip de `develop`):
 
 ```bash
-npx --yes github:henrique-starfusion/bootstrap-agents#develop update
+npx --yes github:henrique-starfusion/orchestrator-ia#develop update
 ```
 
 Com o CLI no PATH:
@@ -97,7 +144,7 @@ orchestrator update --force
 ```
 
 ```bat
-bootstrap-agents.bat update -ProjectPath C:\dev\meu-app
+orchestrator-ia.bat update -ProjectPath C:\dev\meu-app
 ```
 
 ```powershell
@@ -129,7 +176,7 @@ Pacote mais novo: backup + upgrade de VERSION.
 Instala ou completa o ambiente `.orchestrator/` no projeto-alvo.
 
 ```bat
-bootstrap-agents.bat install -ProjectPath C:\dev\meu-app
+orchestrator-ia.bat install -ProjectPath C:\dev\meu-app
 ```
 
 **Etapas:** preflight → lock → migração legada (se aplicável) → template → manifest → detect agents → adaptadores → tools → MCPs (opt-in) → validação → updates (opt-in) → probes → relatório.
@@ -143,7 +190,7 @@ bootstrap-agents.bat install -ProjectPath C:\dev\meu-app
 Validação somente leitura — não altera arquivos gerenciados.
 
 ```bat
-bootstrap-agents.bat verify -ProjectPath C:\dev\meu-app
+orchestrator-ia.bat verify -ProjectPath C:\dev\meu-app
 ```
 
 Executa: preflight → Validate-Orchestrator → Validate-Hooks.
@@ -157,9 +204,9 @@ Executa: preflight → Validate-Orchestrator → Validate-Hooks.
 Atualiza workspace quando a versão do pacote é **maior** que `.orchestrator/VERSION`.
 
 ```bat
-bootstrap-agents.bat upgrade -ProjectPath C:\dev\meu-app
-bootstrap-agents.bat upgrade -ProjectPath C:\dev\meu-app -Force
-bootstrap-agents.bat upgrade -DryRun
+orchestrator-ia.bat upgrade -ProjectPath C:\dev\meu-app
+orchestrator-ia.bat upgrade -ProjectPath C:\dev\meu-app -Force
+orchestrator-ia.bat upgrade -DryRun
 ```
 
 | Situação | Resultado |
@@ -176,8 +223,8 @@ bootstrap-agents.bat upgrade -DryRun
 Restaura arquivos gerenciados ausentes ou inconsistentes.
 
 ```bat
-bootstrap-agents.bat repair -ProjectPath C:\dev\meu-app
-bootstrap-agents.bat repair -DryRun
+orchestrator-ia.bat repair -ProjectPath C:\dev\meu-app
+orchestrator-ia.bat repair -DryRun
 ```
 
 Força re-aplicação do manifest com `-Force` interno.
@@ -189,8 +236,8 @@ Força re-aplicação do manifest com `-Force` interno.
 Remove arquivos listados no manifest (exceto `user-owned`). Sempre cria backup em `.orchestrator/backups/` antes de remover.
 
 ```bat
-bootstrap-agents.bat uninstall -ProjectPath C:\dev\meu-app
-bootstrap-agents.bat uninstall -Force
+orchestrator-ia.bat uninstall -ProjectPath C:\dev\meu-app
+orchestrator-ia.bat uninstall -Force
 ```
 
 | Flag | Efeito |
@@ -207,7 +254,7 @@ Adaptadores na raiz do projeto (`.claude/`, `CLAUDE.md`, etc.) **não** são rem
 Resumo do workspace:
 
 ```bat
-bootstrap-agents.bat status -ProjectPath C:\dev\meu-app
+orchestrator-ia.bat status -ProjectPath C:\dev\meu-app
 ```
 
 Exibe:
@@ -224,7 +271,7 @@ Exibe:
 Diagnóstico combinado:
 
 ```bat
-bootstrap-agents.bat analyze -ProjectPath C:\dev\meu-app
+orchestrator-ia.bat analyze -ProjectPath C:\dev\meu-app
 ```
 
 Executa Detect-Environment, Detect-Agents e Validate-Orchestrator.
@@ -236,10 +283,23 @@ Executa Detect-Environment, Detect-Agents e Validate-Orchestrator.
 Lista IDs registrados em `.orchestrator/skills/registry.json`:
 
 ```bat
-bootstrap-agents.bat skills -ProjectPath C:\dev\meu-app
+orchestrator-ia.bat skills -ProjectPath C:\dev\meu-app
 ```
 
 Exit 1 se o registro estiver ausente.
+
+### `route` / `dispatch`
+
+Resolvem `task_class` → modelo e despacham prompt ao CLI do agente:
+
+```bash
+orchestrator route --task-class docs --client claude --json
+orchestrator dispatch --task-class docs --client claude --prompt "Atualize o README"
+```
+
+O despacho monta a linha de comando a partir do perfil declarativo `.orchestrator/agents/profiles/<client>.json` (subcomando não-interativo, flag de prompt, timeout); sem o perfil, o comando falha instruindo `orchestrator update`. `--dry-run` imprime a linha planejada sem executar — funciona mesmo com o CLI ausente do PATH. Perfis `verified: false` geram `[AVISO]`. Cliente `cursor` é `ide-client`: não executa CLI; orienta uso de `orchestrator run` / MCP (`dispatch --client cursor` está deprecado).
+
+A execução é sempre acompanhada: a saída do agente filho é transmitida ao vivo no console (`  > ` stdout, `  ! ` stderr), com heartbeat `[INFO]` a cada 30s. Ao atingir `timeout_default_s` do perfil o processo é finalizado e a saída parcial é preservada. Além de `result.txt` e `model-choice.json`, todo despacho grava `runtime/results/<stamp>-<task_class>-status.json` com `status` (`completed|failed|timeout`), `exit_code` e `duration_s` — registro durável para outras sessões verificarem falha. Falha imprime `[ERRO]` e retorna exit code ≠ 0; nunca rode dispatch em segundo plano sem acompanhar até o fim.
 
 ---
 
@@ -250,7 +310,7 @@ Exit 1 se o registro estiver ausente.
 | `-DryRun` | switch | Simula; não grava lock nem copia arquivos |
 | `-Force` | switch | Sobrescreve managed/generated; força migração legada |
 | `-NonInteractive` | switch | Reservado para automação |
-| `-PackageRoot` | string | Raiz do pacote bootstrap (padrão: pai de `scripts/`) |
+| `-PackageRoot` | string | Raiz do pacote orchestrator-ia (padrão: pai de `scripts/`) |
 
 ### Agentes
 
@@ -280,7 +340,10 @@ Exit 1 se o registro estiver ausente.
 
 | Parâmetro | Descrição |
 |---|---|
-| `-LegacyCleanup` | **Não implementado** — limitação registrada no relatório |
+| `-SkipLegacyCleanup` | Pula limpeza de legado (padrão: limpeza `safe` ativa) |
+| `-LegacyCleanupMode` | `safe` \| `aggressive` \| `report-only` |
+| `-KeepLegacyBackup` | Mantém backup de legado (sempre criado sob `.orchestrator/backups/`) |
+| `legacy scan\|cleanup\|status\|restore` | Comandos dedicados de legado |
 | `-RunProjectTests` | **Não implementado** — limitação registrada no relatório |
 
 ---
@@ -341,13 +404,13 @@ Resultado em `.orchestrator/agents/probe-results.json`.
 ### Primeira instalação mínima
 
 ```bat
-bootstrap-agents.bat install -ProjectPath C:\dev\novo-projeto
+orchestrator-ia.bat install -ProjectPath C:\dev\novo-projeto
 ```
 
 ### Instalação completa com opt-ins
 
 ```bat
-bootstrap-agents.bat install ^
+orchestrator-ia.bat install ^
   -ProjectPath C:\dev\novo-projeto ^
   -ConfigureMcps ^
   -UpdateAgents ^
@@ -357,19 +420,19 @@ bootstrap-agents.bat install ^
 ### Simular upgrade
 
 ```bat
-bootstrap-agents.bat upgrade -ProjectPath C:\dev\projeto -DryRun
+orchestrator-ia.bat upgrade -ProjectPath C:\dev\projeto -DryRun
 ```
 
 ### Validar ambiente existente
 
 ```bat
-bootstrap-agents.bat verify -ProjectPath C:\dev\projeto
+orchestrator-ia.bat verify -ProjectPath C:\dev\projeto
 ```
 
 ### Reparar após remoção acidental
 
 ```bat
-bootstrap-agents.bat repair -ProjectPath C:\dev\projeto
+orchestrator-ia.bat repair -ProjectPath C:\dev\projeto
 ```
 
 ---

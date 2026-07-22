@@ -8,7 +8,7 @@
                   },
                   {
                       "path":  "template/.orchestrator/VERSION",
-                      "sha256":  "3d097c315a1c543040f548da4c7051265e94c77211a2411ced1d4621344270de"
+                      "sha256":  "30c20b763e4558ab31ee6af4fe67c2b6626d8341c50660850fd829661b0cd1bb"
                   },
                   {
                       "path":  "template/.orchestrator/agents/capabilities.json",
@@ -36,7 +36,7 @@
                   },
                   {
                       "path":  "template/.orchestrator/config/models.json",
-                      "sha256":  "73c50c89c81093f3c82f31030a60060412aca61c759c50f43ffb1feb80eebf3a"
+                      "sha256":  "c552a292627225d2ddd5b9ff810a5ced168db99c127b8550e89830b970c394bd"
                   },
                   {
                       "path":  "template/.orchestrator/config/policies.json",
@@ -224,7 +224,7 @@
                   },
                   {
                       "path":  "template/.orchestrator/skills/call-agent/SKILL.md",
-                      "sha256":  "478998f2499b2e899017f1c7b2fdcfbdf933335393ba048a6b446c7f579dd140"
+                      "sha256":  "a181d8ac5a1317e60d2b1822a46a3ba30c8de2951f8a294370a22b79c9dbf48e"
                   },
                   {
                       "path":  "template/.orchestrator/skills/correction-loop/SKILL.md",
@@ -277,6 +277,34 @@
                   {
                       "path":  "template/.orchestrator/tools/optional/.gitkeep",
                       "sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                  },
+                  {
+                      "path":  "template/.orchestrator/agents/profiles/claude.json",
+                      "sha256":  "788794fb1216135f23154ea3f546ec98073876e828f2a5bc92d378d46e89b5f1"
+                  },
+                  {
+                      "path":  "template/.orchestrator/agents/profiles/codex.json",
+                      "sha256":  "308b3846cd0adf8d925d49ea3842663ab80da24ed60f670b81425dad5511c022"
+                  },
+                  {
+                      "path":  "template/.orchestrator/agents/profiles/gemini.json",
+                      "sha256":  "af4e32c56a3cd85a68cce7e87bfec15812014d127c391e5881704134974b09c7"
+                  },
+                  {
+                      "path":  "template/.orchestrator/agents/profiles/opencode.json",
+                      "sha256":  "aebe381e59cc108cb0a899060b595e9606af2da3912feea157755ffada53c21c"
+                  },
+                  {
+                      "path":  "template/.orchestrator/agents/profiles/kimi.json",
+                      "sha256":  "8bee2e96c8047b6bcafa3dab3eb29528db48a41f560734b5e88cf76fdfc3e45c"
+                  },
+                  {
+                      "path":  "template/.orchestrator/agents/profiles/cursor.json",
+                      "sha256":  "1b11c8d8a34bd25d8dd855b942d69b0b5f1334ded1859b539fa80364dacb6f13"
+                  },
+                  {
+                      "path":  "template/adapters/cursor/.cursor/rules/multiagent-orchestrator.mdc",
+                      "sha256":  "92e694ba5f2754ddd28e06aedcfa98ce14f5af80f4bbfe1bb532f527941d38d7"
                   }
               ]
 }

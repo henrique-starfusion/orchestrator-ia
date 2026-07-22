@@ -583,6 +583,18 @@ function Test-PackageIntegrity {
     }
 }
 
+# Agentes classe IDE (Electron GUI): exec-probe boota a interface em vez de responder (bug-001).
+# Presenca via Get-Command basta; nunca executar --version/--help nesses binarios.
+$script:IdeAgents = @('cursor', 'kiro')
+
+function Test-IsIdeAgent {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+    return ($script:IdeAgents -contains $Name.ToLowerInvariant())
+}
+
 function Resolve-CommandExecutable {
     <#
     .SYNOPSIS
@@ -638,7 +650,9 @@ function Invoke-ExternalCommand {
         [string]$FilePath,
         $ArgumentList = @(),
         [int]$TimeoutSeconds = 30,
-        [string]$WorkingDirectory
+        [string]$WorkingDirectory,
+        [switch]$EchoOutput,
+        [int]$HeartbeatSeconds = 0
     )
 
     # Normaliza argumentos (string unica ou array)
@@ -703,26 +717,59 @@ function Invoke-ExternalCommand {
         }
     }
 
-    $completed = $process.WaitForExit($TimeoutSeconds * 1000)
+    # Leitura assincrona: evita deadlock de pipe cheio e permite eco ao vivo.
+    $stdoutSb = New-Object System.Text.StringBuilder
+    $stderrSb = New-Object System.Text.StringBuilder
+    $streamAction = {
+        if ($null -ne $EventArgs.Data) {
+            [void]$Event.MessageData.Buffer.AppendLine($EventArgs.Data)
+            if ($Event.MessageData.Echo) { Write-Host ($Event.MessageData.Prefix + $EventArgs.Data) }
+        }
+    }
+    $outSub = Register-ObjectEvent -InputObject $process -EventName OutputDataReceived -MessageData ([pscustomobject]@{ Buffer = $stdoutSb; Echo = [bool]$EchoOutput; Prefix = '  > ' }) -Action $streamAction
+    $errSub = Register-ObjectEvent -InputObject $process -EventName ErrorDataReceived -MessageData ([pscustomobject]@{ Buffer = $stderrSb; Echo = [bool]$EchoOutput; Prefix = '  ! ' }) -Action $streamAction
+    $process.BeginOutputReadLine()
+    $process.BeginErrorReadLine()
 
-    if (-not $completed) {
-        try { $process.Kill() } catch { }
-        return @{
-            timed_out = $true
-            exit_code = -1
-            stdout    = ''
-            stderr    = 'Process timed out'
+    $startedAt = [DateTime]::UtcNow
+    $deadline = $startedAt.AddSeconds($TimeoutSeconds)
+    $nextBeat = [DateTime]::MaxValue
+    if ($HeartbeatSeconds -gt 0) { $nextBeat = $startedAt.AddSeconds($HeartbeatSeconds) }
+    $timedOut = $false
+
+    while (-not $process.HasExited) {
+        if ([DateTime]::UtcNow -ge $deadline) {
+            $timedOut = $true
+            try { $process.Kill() } catch { }
+            break
+        }
+        if ([DateTime]::UtcNow -ge $nextBeat) {
+            $elapsedS = [int](([DateTime]::UtcNow - $startedAt).TotalSeconds)
+            Write-Host ("[INFO] processo em execucao ha {0}s (timeout {1}s)" -f $elapsedS, $TimeoutSeconds)
+            $nextBeat = [DateTime]::UtcNow.AddSeconds($HeartbeatSeconds)
+        }
+        Start-Sleep -Milliseconds 250
+    }
+
+    # WaitForExit sem argumento garante flush dos handlers assincronos.
+    if ($timedOut) { $null = $process.WaitForExit(5000) } else { $process.WaitForExit() }
+    Start-Sleep -Milliseconds 200
+    foreach ($sub in @($outSub, $errSub)) {
+        if ($sub) {
+            Unregister-Event -SourceIdentifier $sub.Name -ErrorAction SilentlyContinue
+            Remove-Job -Id $sub.Id -Force -ErrorAction SilentlyContinue
         }
     }
 
-    $stdout = $process.StandardOutput.ReadToEnd()
-    $stderr = $process.StandardError.ReadToEnd()
+    $exitCode = -1
+    if (-not $timedOut) { $exitCode = $process.ExitCode }
+    if ($timedOut) { [void]$stderrSb.AppendLine('Process timed out') }
 
     return @{
-        timed_out = $false
-        exit_code = $process.ExitCode
-        stdout    = $stdout
-        stderr    = $stderr
+        timed_out = $timedOut
+        exit_code = $exitCode
+        stdout    = $stdoutSb.ToString()
+        stderr    = $stderrSb.ToString()
     }
 }
 

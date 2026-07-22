@@ -1,8 +1,8 @@
 # Ferramentas globais (perfil do usuário)
 
-O Orquestrador instala um núcleo de **MCPs, plugins, skills e CLIs no perfil do usuário**, para reutilizar em vários projetos — não só no workspace atual.
+A partir de **0.2.0**, o install/update instala o **núcleo** primeiro. MCPs, plugins, skills e CLIs globais são **opt-in**.
 
-## O que é instalado
+## O que pode ser instalado
 
 Catálogo: [`package/global-tools/catalog.json`](../package/global-tools/catalog.json)
 
@@ -12,28 +12,26 @@ Catálogo: [`package/global-tools/catalog.json`](../package/global-tools/catalog
 | CLI uv (`tool install`) | **graphify** (`graphifyy` → `~/.local/bin`) |
 | MCP (Claude user + Cursor `~/.cursor/mcp.json`) | Context7, Playwright, Sequential Thinking |
 | Plugins Claude (`-s user`) | context7, playwright, superpowers, skill-creator, atlassian, frontend-design, **caveman** |
-| Skills (`npx skills add … -g` → `~/.agents/skills`) | obra/superpowers, vercel-labs/skills, firecrawl/cli, **caveman** |
+| Skills (`npx skills add … -g` → `~/.agents/skills`) | obra/superpowers, vercel-labs/skills, firecrawl/cli, terraform-skill, **caveman** |
 
-Economia de tokens + roteamento de modelos: [`model-routing.md`](model-routing.md).
-
-- **OpenWolf no projeto:** `Install-Tools` → `openwolf init`
-- **Graphify:** CLI via `uv tool install graphifyy` (global-tools + Install-Tools se ausente); depois `graphify install` (skills do usuario) e `graphify install --project`
-
-## Comandos
+## Comandos (opt-in)
 
 ```bash
-# No init/update (padrao)
+# Nucleo apenas (padrao)
 orchestrator init
 orchestrator update
 
-# So as ferramentas globais
+# Ferramentas globais
 orchestrator global-tools
+orchestrator init --global-tools
 
-# Pular globais
-orchestrator init --skip-global-tools
+# Init OpenWolf/Graphify no projeto
+orchestrator init --init-tools
 ```
 
-Relatório (sem segredos): `.orchestrator/tools/global-status.json`
+Caveman permanece opcional e está **desabilitado** por padrão no runtime.
+
+Relatório: `.orchestrator/tools/global-status.json`
 
 ## Escopo
 

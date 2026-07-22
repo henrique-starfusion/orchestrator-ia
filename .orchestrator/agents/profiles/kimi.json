@@ -1,0 +1,18 @@
+{
+  "id": "kimi",
+  "kind": "cli",
+  "verified": false,
+  "invoke": {
+    "subcommand": [],
+    "prompt_via": "arg",
+    "prompt_flag": null,
+    "sandbox_flags": []
+  },
+  "output": {
+    "format": "text",
+    "json_flags": []
+  },
+  "exit_codes": { "success": 0 },
+  "timeout_default_s": 600,
+  "notes": "Best-effort de docs; validar flags reais quando o CLI estiver no PATH e marcar verified=true."
+}

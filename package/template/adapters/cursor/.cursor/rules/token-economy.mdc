@@ -1,43 +1,27 @@
 ---
-description: Economia de tokens (caveman) e roteamento OBRIGATORIO de modelos por tarefa
+description: Economia de tokens e preferência MCP sobre Task Cursor
 alwaysApply: true
 ---
 
-# Token economy + model routing (OBRIGATORIO)
+# Token economy + orquestração
 
-Canonical: `.orchestrator/config/models.json`
+Canonical: `.orchestrator/config/models.json` + MCP `multiagent-orchestrator`.
 
-## Por que o Grok aparece em tudo
+## Preferência
 
-Se voce lancar `Task` **sem** `model=`, o Cursor **herda o modelo do pai**.
-Isso NAO e orquestracao. E proibido omitir `model=`.
+1. Tarefas complexas → `orchestrator_run` (MCP) ou `orchestrator run` (CLI)
+2. Papel pontual → `orchestrator_delegate`
+3. `Task model=` só como fallback legado — sempre com `model=` explícito
 
-## Antes de qualquer subagente
+## Armadilha Cursor
 
-1. Classificar `task_class` (docs, implementation, complex_analysis, ...).
-2. Resolver modelo:
-   - `orchestrator route --task-class <class> --client cursor`
-   - ou tabela abaixo
-3. Chamar `Task` com `model="<slug exato>"`.
-
-## Tabela Cursor (slug obrigatorio)
-
-| Task class | model= |
-|---|---|
-| trivial / classify | `claude-4.5-haiku` |
-| docs / documentation | `claude-sonnet-5-thinking-high` |
-| implementation / code_review / tests | `claude-sonnet-5-thinking-high` |
-| refactor_simple / mechanical | `composer-2.5-fast` |
-| architecture / debugging_hard / security_review | `claude-opus-4-8-thinking-high` |
-| complex_analysis / long_agentic / orchestration_plan | `claude-fable-5-thinking-high` |
-
-## Regras duras
-
-- NUNCA lancar Task sem `model=`.
-- NUNCA usar o modelo do chat atual como default de subagente.
-- NUNCA usar Fable/Opus para docs ou typos.
-- Para Claude/Codex CLI: `orchestrator dispatch -TaskClass ... -Prompt "..."` (despacho real).
+`Task` sem `model=` herda o modelo do pai. Proibido omitir `model=` nesse fallback.
 
 ## Caveman
 
-Default **full**: prosa curta; codigo/erros exactos.
+Opcional. Runtime desabilita por padrão (`caveman_enabled: false`).
+Não abreviar JSON, logs, erros, planos ou documentação.
+
+## Modelos
+
+Nunca Fable/Opus para docs/typos. Preferir tier adequado via `orchestrator route`.

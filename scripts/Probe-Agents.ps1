@@ -48,6 +48,15 @@ foreach ($agent in $detected.agents) {
         continue
     }
 
+    if (Test-IsIdeAgent -Name $agent.name) {
+        $results += [pscustomobject]@{
+            name   = $agent.name
+            status = 'skipped_ide'
+            detail = 'ide_agent_sem_exec_probe'
+        }
+        continue
+    }
+
     $cmd = Get-Command $agent.name -ErrorAction SilentlyContinue
     if (-not $cmd) {
         $results += [pscustomobject]@{

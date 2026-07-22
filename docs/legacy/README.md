@@ -1,9 +1,15 @@
-# Legado
+# Material legado / arquivo histórico
 
-Arquivos históricos que **não** fazem parte do fluxo de instalação atual.
+Documentos **deprecados** movidos para fora da documentação operacional.
 
-| Arquivo | Status | Substituto |
+| Item | Status | Onde está agora |
 |---|---|---|
-| `prompt_ambiente_multiagente.md` | Deprecado | `orchestrator init` / `get.ps1` / `bootstrap-agents.bat` |
+| Prompt bootstrap `.claude/` | **Deprecado / arquivado** | [`docs/archive/prompts/prompt_ambiente_multiagente.md`](../archive/prompts/prompt_ambiente_multiagente.md) |
+| Specs/planos Superpowers (2026-07-20) | **Arquivado** | [`docs/archive/superpowers/`](../archive/superpowers/) |
 
-A fonte canônica é **`.orchestrator/`**. Não use o prompt legado para instalar ou remontar ambientes.
+## Não use
+
+- Não execute prompts arquivados para instalar o produto.
+- Use `orchestrator init` / `orchestrator update` / MCP Cursor.
+
+Migração `.claude` → `.orchestrator`: [`../legacy-migration.md`](../legacy-migration.md).
