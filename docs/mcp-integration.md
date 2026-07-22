@@ -35,6 +35,12 @@ orchestrator cursor configure
 orchestrator cursor verify
 ```
 
-Gera/mescla `.cursor/mcp.json` e a rule `multiagent-orchestrator.mdc`.
+Gera/mescla MCP no projeto (`.cursor/mcp.json`) e no perfil global do Cursor (`~/.cursor/mcp.json`, escopo padrão `both`), além da rule `multiagent-orchestrator.mdc`.
+
+```bash
+orchestrator cursor configure
+orchestrator cursor configure --cursor-mcp-scope user    # só global
+orchestrator cursor configure --cursor-mcp-scope project # só projeto
+```
 
 Ver também: [`cursor-front-controller.md`](cursor-front-controller.md), [`mcp-tool-reference.md`](mcp-tool-reference.md).
