@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- GitHub Actions CI desabilitado (sem plano/limite de Actions); workflow preservado em `.github/ci.yml.disabled`
+
 ## 0.4.3 — 2026-07-22
 
 ### Fixed
