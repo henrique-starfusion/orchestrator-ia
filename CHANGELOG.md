@@ -16,6 +16,9 @@
 
 - `orchestrator_status` expõe `error`, mensagem legível, agente ativo e ACs
 - Regra Cursor `multiagent-orchestrator.mdc` documenta contrato de poll chat↔runtime
+- Default `CursorMcpScope=project` (global só com `--cursor-mcp-scope user|both`)
+- `DeterministicValidator`: critérios sem verificador exigem evidência (changed_files/tests)
+- CI GitHub Actions (pytest + suite PowerShell)
 
 ## 0.4.0 — 2026-07-21
 

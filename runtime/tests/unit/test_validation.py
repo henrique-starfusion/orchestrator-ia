@@ -33,3 +33,31 @@ def test_validation_and_gate(project):
         documentation_review={"validation": "passed", "required": True},
     )
     assert ok
+
+
+def test_unknown_criterion_requires_evidence(project):
+    task = TaskRecord(
+        prompt="x",
+        project_path=str(project),
+        acceptance_criteria=[
+            AcceptanceCriterion(
+                id="AC-001",
+                description="Faz algo muito específico sem verificador dedicado",
+                required=True,
+            )
+        ],
+    )
+    det = DeterministicValidator().evaluate(
+        task,
+        changed_files=[],
+        test_results=[],
+        project_path=project,
+    )
+    assert det["status"] == "rejected"
+    det_ok = DeterministicValidator().evaluate(
+        task,
+        changed_files=["src/feature.py"],
+        test_results=[],
+        project_path=project,
+    )
+    assert det_ok["status"] == "approved"

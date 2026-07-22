@@ -33,7 +33,7 @@ param(
     [string]$CursorTransport = 'stdio',
     [string]$CursorMcpUrl = 'http://127.0.0.1:8765/mcp',
     [ValidateSet('project', 'user', 'both')]
-    [string]$CursorMcpScope = 'both',
+    [string]$CursorMcpScope = 'project',
     [switch]$SkipCursor,
     [switch]$RunSmokeTest,
     [switch]$RunProjectTests,

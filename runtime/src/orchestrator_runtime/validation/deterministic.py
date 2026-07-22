@@ -84,8 +84,9 @@ class DeterministicValidator:
         project_path: Path,
     ) -> bool:
         desc = criterion.description.lower()
-        blob = " ".join(changed_files).lower()
+        matched = False
         if "soma" in desc:
+            matched = True
             core = project_path / "soma" / "core.py"
             if not core.is_file():
                 return False
@@ -93,6 +94,7 @@ class DeterministicValidator:
             if "def soma" not in text:
                 return False
         if "teste" in desc or "test" in desc:
+            matched = True
             if not any(t.get("status") == "passed" for t in test_results):
                 # allow presence of test file for fake early stages
                 if not any("test" in f.replace("\\", "/").lower() for f in changed_files):
@@ -100,6 +102,7 @@ class DeterministicValidator:
                     if not tests_dir.exists():
                         return False
         if "readme" in desc or "document" in desc or "docs" in desc:
+            matched = True
             readme = project_path / "README.md"
             if not readme.is_file():
                 return False
@@ -108,6 +111,11 @@ class DeterministicValidator:
                     return False
         if "alterações solicitadas" in desc or "alteracoes solicitadas" in desc:
             return bool(changed_files)
+        if not matched:
+            # Critério sem verificador conhecido: exige evidência mínima no workspace
+            return bool(changed_files) or any(
+                t.get("status") == "passed" for t in test_results
+            )
         return True
 
 

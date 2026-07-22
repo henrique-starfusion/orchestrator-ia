@@ -11,7 +11,7 @@ param(
     [string]$CursorMcpUrl = 'http://127.0.0.1:8765/mcp',
     [string]$PackageRoot,
     [ValidateSet('project', 'user', 'both')]
-    [string]$CursorMcpScope = 'both',
+    [string]$CursorMcpScope = 'project',
     [switch]$Force
 )
 

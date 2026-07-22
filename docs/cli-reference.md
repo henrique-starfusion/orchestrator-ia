@@ -27,7 +27,7 @@ orchestrator cursor verify
 orchestrator cursor print-config
 ```
 
-Installer: Cursor MCP (projeto + `~/.cursor/mcp.json`) roda por padrão em `init`/`install`/`update`.
+Installer: Cursor MCP do **projeto** roda por padrão em `init`/`install`/`update` (`--cursor-mcp-scope project`). Use `--cursor-mcp-scope user|both` para também gravar `~/.cursor/mcp.json`.
 
 ```bash
 orchestrator init
