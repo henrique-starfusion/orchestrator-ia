@@ -2,12 +2,15 @@
 
 ## Unreleased
 
+## 0.4.2 — 2026-07-21
+
 ### Added
 
 - CLI `orchestrator agents` (registry JSON/text)
 - `orchestrator version` / `-V` / `--version` (com `--json` → fingerprint)
 - `orchestrator_health.runtime.code_fingerprint` + `features` (detecta MCP stale)
 - Regra Cursor anti-MCP-stale (comparar fingerprint CLI vs MCP após update)
+- Migration `0.4.1-to-0.4.2`
 
 ### Fixed
 
