@@ -1,4 +1,4 @@
-# Project Audit — bootstrap-agents 2026-07-21
+# Project Audit — Orquestrador IA Multiagente (ex bootstrap-agents) 2026-07-21
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to execute this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
