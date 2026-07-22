@@ -57,6 +57,8 @@ function Invoke-TestInstall {
         PackageRoot     = $PackageRoot
         NonInteractive  = $true
         SkipGlobalTools = $true
+        # Evita mutar ~/.cursor/mcp.json do desenvolvedor durante a suite
+        CursorMcpScope  = 'project'
     }
     foreach ($key in $ExtraParams.Keys) {
         $params[$key] = $ExtraParams[$key]
@@ -97,18 +99,16 @@ function Invoke-TestOrchestratorCommand {
 
     $installer = Join-Path (Get-TestScriptsRoot) 'Install-Orchestrator.ps1'
 
-    if ($Force -and $DryRun) {
-        & $installer $Command -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive -SkipGlobalTools -Force -DryRun
+    $cmdParams = @{
+        ProjectPath     = $ProjectPath
+        PackageRoot     = $PackageRoot
+        NonInteractive  = $true
+        SkipGlobalTools = $true
+        CursorMcpScope  = 'project'
     }
-    elseif ($Force) {
-        & $installer $Command -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive -SkipGlobalTools -Force
-    }
-    elseif ($DryRun) {
-        & $installer $Command -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive -SkipGlobalTools -DryRun
-    }
-    else {
-        & $installer $Command -ProjectPath $ProjectPath -PackageRoot $PackageRoot -NonInteractive -SkipGlobalTools
-    }
+    if ($Force) { $cmdParams.Force = $true }
+    if ($DryRun) { $cmdParams.DryRun = $true }
+    & $installer $Command @cmdParams
 
     return $LASTEXITCODE
 }

@@ -394,7 +394,9 @@ try {
                 $reportData.legacy = Get-JsonFileContent -Path $legacyReportJson
             }
 
-            if (-not $SkipCursor -and ($ConfigureCursor -or $ConfigureCursorMcp)) {
+            # Cursor MCP: padrao no update (projeto + ~/.cursor/mcp.json); pular com -SkipCursor
+            if (-not $SkipCursor) {
+                Write-Host '[ETAPA] Configurar Cursor MCP (projeto + global)'
                 $cursorArgs = @{
                     ProjectPath     = $projectRoot
                     PackageRoot     = $packageRootResolved
@@ -404,6 +406,9 @@ try {
                 }
                 if ($Force) { $cursorArgs.Force = $true }
                 Invoke-ChildScript -Name 'Configure-CursorMcp.ps1' -Arguments $cursorArgs | Out-Null
+            }
+            elseif ($ConfigureCursor -or $ConfigureCursorMcp) {
+                Write-Host '[AVISO] -ConfigureCursor* ignorado porque -SkipCursor esta ativo.'
             }
 
             Invoke-ChildScript -Name 'Write-InstallationReport.ps1' -Arguments @{
@@ -757,7 +762,9 @@ try {
         $reportData.legacy = Get-JsonFileContent -Path $legacyReportJson
     }
 
-    if (-not $SkipCursor -and ($ConfigureCursor -or $ConfigureCursorMcp)) {
+    # Cursor MCP: padrao no install (projeto + ~/.cursor/mcp.json); pular com -SkipCursor
+    if (-not $SkipCursor) {
+        Write-Host '[ETAPA] Configurar Cursor MCP (projeto + global)'
         $cursorArgs = @{
             ProjectPath     = $projectRoot
             PackageRoot     = $packageRootResolved
@@ -767,6 +774,9 @@ try {
         }
         if ($Force) { $cursorArgs.Force = $true }
         Invoke-ChildScript -Name 'Configure-CursorMcp.ps1' -Arguments $cursorArgs | Out-Null
+    }
+    elseif ($ConfigureCursor -or $ConfigureCursorMcp) {
+        Write-Host '[AVISO] -ConfigureCursor* ignorado porque -SkipCursor esta ativo.'
     }
 
     Invoke-ChildScript -Name 'Write-InstallationReport.ps1' -Arguments @{

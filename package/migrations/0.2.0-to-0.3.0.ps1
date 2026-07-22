@@ -18,7 +18,8 @@ $ErrorActionPreference = 'Stop'
 if ($PackageRoot) {
     $script = Join-Path $PackageRoot 'scripts\Configure-CursorMcp.ps1'
     if (Test-Path -LiteralPath $script) {
-        & $script -ProjectPath $ProjectPath -PackageRoot $PackageRoot -CursorTransport stdio
+        # Escopo project na migration; install/update aplica tambem ~/.cursor/mcp.json (scope both)
+        & $script -ProjectPath $ProjectPath -PackageRoot $PackageRoot -CursorTransport stdio -CursorMcpScope project
         if ($LASTEXITCODE -ne 0 -and $null -ne $LASTEXITCODE) {
             Write-Host ("[AVISO] Configure-CursorMcp exit {0}" -f $LASTEXITCODE)
         }

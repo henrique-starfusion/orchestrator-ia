@@ -35,7 +35,9 @@ orchestrator cursor configure
 orchestrator cursor verify
 ```
 
-Gera/mescla MCP no projeto (`.cursor/mcp.json`) e no perfil global do Cursor (`~/.cursor/mcp.json`, escopo padrão `both`), além da rule `multiagent-orchestrator.mdc`.
+Em `orchestrator init` / `install` / `update`, o MCP é configurado **por padrão** no projeto (`.cursor/mcp.json`) e no perfil global do Cursor (`~/.cursor/mcp.json`). Use `--skip-cursor` para pular.
+
+Comando dedicado:
 
 ```bash
 orchestrator cursor configure

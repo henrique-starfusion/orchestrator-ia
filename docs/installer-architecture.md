@@ -114,11 +114,12 @@ Não há parsing de flags no BAT — use sintaxe PowerShell (`-ProjectPath`, `-D
 15. Legacy cleanup (pos): remove safe → validate
 16. Update-Agents.ps1               (se -UpdateAgents)
 17. Probe-Agents.ps1                (skip por padrão; -RunSmokeTest ativa)
-18. Write-InstallationReport.ps1    (inclui seção Legacy cleanup)
-19. Remove-InstallationLock         (finally)
+18. Configure-CursorMcp.ps1         (projeto + ~/.cursor/mcp.json; pular com -SkipCursor)
+19. Write-InstallationReport.ps1    (inclui seção Legacy cleanup)
+20. Remove-InstallationLock         (finally)
 ```
 
-Detalhes: [`legacy-cleanup.md`](legacy-cleanup.md).
+Detalhes: [`legacy-cleanup.md`](legacy-cleanup.md) · [`mcp-integration.md`](mcp-integration.md).
 
 ---
 
