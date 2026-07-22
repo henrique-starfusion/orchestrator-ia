@@ -90,7 +90,7 @@ class CliExecutor:
         timed_out = False
 
         if self.echo:
-            print(f"[exec] {' '.join(command)}", flush=True)
+            print(f"[exec] {redact(' '.join(command))}", flush=True)
 
         proc = subprocess.Popen(
             command,
@@ -110,7 +110,7 @@ class CliExecutor:
             for line in stream:
                 chunks.append(line)
                 if self.echo:
-                    print(f"{prefix}{line}", end="", flush=True)
+                    print(f"{prefix}{redact(line.rstrip(chr(10) + chr(13)))}", flush=True)
 
         def _heartbeat() -> None:
             while not stop_heartbeat.wait(heartbeat_s):

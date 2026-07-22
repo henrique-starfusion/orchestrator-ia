@@ -1,8 +1,18 @@
 {
   "mcpServers": {
     "multiagent-orchestrator": {
-      "command": "orchestrator",
-      "args": ["mcp", "serve", "--transport", "stdio"]
+      "command": "cmd",
+      "args": [
+        "/c",
+        "orchestrator",
+        "mcp",
+        "serve",
+        "--transport",
+        "stdio",
+        "--project",
+        "${workspaceFolder}"
+      ],
+      "enabled": true
     }
   }
 }

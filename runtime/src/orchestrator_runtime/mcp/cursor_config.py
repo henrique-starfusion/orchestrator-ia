@@ -1,8 +1,9 @@
-"""Cursor MCP config merge/helpers."""
+"""Cursor MCP config merge/helpers — alinhado a Configure-CursorMcp.ps1."""
 
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -11,14 +12,38 @@ SERVER_KEY = "multiagent-orchestrator"
 
 
 def stdio_server_entry(command: str = "orchestrator") -> dict[str, Any]:
+    """Entry canônica (Windows/Cursor): cmd /c + --project ${workspaceFolder}."""
+    if os.name == "nt":
+        return {
+            "command": "cmd",
+            "args": [
+                "/c",
+                command,
+                "mcp",
+                "serve",
+                "--transport",
+                "stdio",
+                "--project",
+                "${workspaceFolder}",
+            ],
+            "enabled": True,
+        }
     return {
         "command": command,
-        "args": ["mcp", "serve", "--transport", "stdio"],
+        "args": [
+            "mcp",
+            "serve",
+            "--transport",
+            "stdio",
+            "--project",
+            "${workspaceFolder}",
+        ],
+        "enabled": True,
     }
 
 
 def http_server_entry(url: str = "http://127.0.0.1:8765/mcp") -> dict[str, Any]:
-    return {"url": url}
+    return {"url": url, "enabled": True}
 
 
 def merge_mcp_json(

@@ -344,13 +344,26 @@ class TaskService:
                 test_results=test_results,
                 project_path=self.config.project_path,
             )
-            # Independent agent validation when available and different from executor
+            # Independent agent validation — policy hard gate
             val_agent = plan_roles.validator
-            if val_agent == plan_roles.executor:
-                # separate session still — mark limitation
+            if (
+                self.config.limits.require_independent_validation
+                and val_agent == plan_roles.executor
+            ):
+                det["status"] = "rejected"
+                det["blocking_issues"] = list(det.get("blocking_issues") or []) + [
+                    {
+                        "id": "VAL-IND",
+                        "severity": "blocking",
+                        "description": (
+                            "validator==executor com require_independent_validation"
+                        ),
+                    }
+                ]
+                det["score"] = min(float(det.get("score") or 0.0), 0.5)
                 det["summary"] = (
                     det.get("summary", "")
-                    + " | limitation: validator==executor (no independent agent)"
+                    + " | blocking: validator==executor (independent validation required)"
                 )
             val_prompt = self._build_validator_prompt(task, det, test_results, changed_files)
             val_result = await self._run_agent(val_agent, "validator", val_prompt, task)

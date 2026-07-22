@@ -394,9 +394,9 @@ try {
                 $reportData.legacy = Get-JsonFileContent -Path $legacyReportJson
             }
 
-            # Cursor MCP: padrao no update (projeto + ~/.cursor/mcp.json); pular com -SkipCursor
+            # Cursor MCP: padrao no update (scope=project); pular com -SkipCursor
             if (-not $SkipCursor) {
-                Write-Host '[ETAPA] Configurar Cursor MCP (projeto + global)'
+                Write-Host ("[ETAPA] Configurar Cursor MCP (scope={0})" -f $CursorMcpScope)
                 $cursorArgs = @{
                     ProjectPath     = $projectRoot
                     PackageRoot     = $packageRootResolved
@@ -762,9 +762,9 @@ try {
         $reportData.legacy = Get-JsonFileContent -Path $legacyReportJson
     }
 
-    # Cursor MCP: padrao no install (projeto + ~/.cursor/mcp.json); pular com -SkipCursor
+    # Cursor MCP: padrao no install (scope=project); pular com -SkipCursor
     if (-not $SkipCursor) {
-        Write-Host '[ETAPA] Configurar Cursor MCP (projeto + global)'
+        Write-Host ("[ETAPA] Configurar Cursor MCP (scope={0})" -f $CursorMcpScope)
         $cursorArgs = @{
             ProjectPath     = $projectRoot
             PackageRoot     = $packageRootResolved

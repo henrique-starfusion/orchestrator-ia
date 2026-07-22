@@ -15,6 +15,10 @@ Status: **implementado** (MCP local) · auth remota: **experimental/planejado**
 - `allow_network` / install de deps **rejeitados** (não são no-op)
 - `ORCHESTRATOR_CHILD_AGENT` impede recursão
 - Overrides explícitos de `planner`/`executor`/`validator` têm precedência sobre `routing=automatic`
+- `fake_agents` **bloqueado** na superfície MCP (só CLI/`ORCHESTRATOR_ALLOW_FAKE_AGENTS` em CI)
+- `require_independent_validation`: falha se não houver validator ≠ executor
+- Echo live de subprocess passa por `redact()`
+- `.orchestrator/data` tenta `chmod 0o700` (Unix; best-effort no Windows)
 
 ## Políticas
 

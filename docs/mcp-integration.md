@@ -35,14 +35,17 @@ orchestrator cursor configure
 orchestrator cursor verify
 ```
 
-Em `orchestrator init` / `install` / `update`, o MCP é configurado **por padrão** no projeto (`.cursor/mcp.json`) e no perfil global do Cursor (`~/.cursor/mcp.json`). Use `--skip-cursor` para pular.
+Em `orchestrator init` / `install` / `update`, o MCP é configurado **por padrão só no projeto** (`.cursor/mcp.json`, `CursorMcpScope=project`). Use `--cursor-mcp-scope user|both` para também gravar `~/.cursor/mcp.json`. Use `--skip-cursor` para pular.
+
+A entry canônica (Python `cursor_config.py` + `Configure-CursorMcp.ps1`) usa `cmd /c orchestrator … --project ${workspaceFolder}`.
 
 Comando dedicado:
 
 ```bash
 orchestrator cursor configure
 orchestrator cursor configure --cursor-mcp-scope user    # só global
-orchestrator cursor configure --cursor-mcp-scope project # só projeto
+orchestrator cursor configure --cursor-mcp-scope project # só projeto (default)
+orchestrator agents --json                              # registry CLI
 ```
 
 Ver também: [`cursor-front-controller.md`](cursor-front-controller.md), [`mcp-tool-reference.md`](mcp-tool-reference.md).

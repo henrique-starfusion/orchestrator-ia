@@ -33,6 +33,7 @@ Runtime (persistente):
 MCP / Cursor (front controller):
   orchestrator mcp serve [--transport stdio|http]
   orchestrator cursor configure|verify|print-config
+  orchestrator agents [--json]
 
 Exemplos:
   orchestrator init
@@ -81,7 +82,7 @@ function parseArgs(argv) {
   const known = new Set([
     'init', 'i', 'install', 'verify', 'update', 'upgrade', 'repair', 'uninstall',
     'status', 'analyze', 'skills', 'global-tools', 'route', 'dispatch', 'legacy',
-    'run', 'task', 'tools', 'mcp', 'cursor',
+    'run', 'task', 'tools', 'mcp', 'cursor', 'agents',
   ]);
 
   if (known.has(first) || !first.startsWith('-')) {
@@ -97,7 +98,7 @@ function parseArgs(argv) {
 
   // Runtime: preserve remaining args almost as-is
   if (out.command === 'run' || out.command === 'task' || out.command === 'tools'
-      || out.command === 'mcp' || out.command === 'cursor') {
+      || out.command === 'mcp' || out.command === 'cursor' || out.command === 'agents') {
     out.runtimeArgs = args;
     // still extract --project for logging
     for (let i = 0; i < args.length; i += 1) {
@@ -260,6 +261,8 @@ function runRuntime(parsed) {
     args.push('mcp', ...parsed.runtimeArgs);
   } else if (parsed.command === 'cursor') {
     args.push('cursor', ...parsed.runtimeArgs);
+  } else if (parsed.command === 'agents') {
+    args.push('agents', ...parsed.runtimeArgs);
   } else if (parsed.command === 'tools') {
     // tools install <id> → still PowerShell global-tools for now unless id given
     console.error('[INFO] Use: orchestrator global-tools   ou   orchestrator install --init-tools');
@@ -344,6 +347,7 @@ function main() {
     || parsed.command === 'task'
     || parsed.command === 'mcp'
     || parsed.command === 'cursor'
+    || parsed.command === 'agents'
   ) {
     runRuntime(parsed);
     return;

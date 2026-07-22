@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- CLI `orchestrator agents` (registry JSON/text)
+
+### Fixed
+
+- Entry MCP Python alinhada ao PS1 (`cmd /c` + `--project ${workspaceFolder}`)
+- Echo live de subprocess aplica `redact()`
+- `require_independent_validation` falha se não houver validator ≠ executor
+- `fake_agents` rejeitado na superfície MCP
+- `.orchestrator/data` com `chmod 0o700` (best-effort)
+
 ## 0.4.1 — 2026-07-21
 
 ### Added

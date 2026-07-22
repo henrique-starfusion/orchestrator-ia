@@ -55,16 +55,23 @@ class RulesRouter:
         planner_id = self._pick("planner", analysis, planner)
         executor_id = self._pick("executor", analysis, executor)
         validator_id = self._pick("validator", analysis, validator)
-        # Independent validation when possible
+        # Independent validation obrigatória quando a policy exige
         if (
             self.config.limits.require_independent_validation
             and validator_id == executor_id
         ):
             alts = self.registry.prefer_mvp_order("validator")
+            swapped = False
             for alt in alts:
                 if alt != executor_id:
                     validator_id = alt
+                    swapped = True
                     break
+            if not swapped:
+                raise RuntimeError(
+                    "require_independent_validation: nenhum validator disponivel "
+                    f"diferente do executor ({executor_id})"
+                )
         fallbacks = {
             "executor": [a for a in self.registry.prefer_mvp_order("executor") if a != executor_id][:2],
             "validator": [a for a in self.registry.prefer_mvp_order("validator") if a != validator_id][:2],

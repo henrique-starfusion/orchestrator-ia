@@ -64,12 +64,19 @@ class OrchestratorMcpTools:
         mcp_wait_timeout_s: int = 120,
     ) -> None:
         self.default_workspace = resolve_default_workspace(default_workspace)
+        allow_fake = bool(os.environ.get("PYTEST_CURRENT_TEST")) or os.environ.get(
+            "ORCHESTRATOR_ALLOW_FAKE_AGENTS", ""
+        ).lower() in {"1", "true", "yes"}
         env_fake = os.environ.get("ORCHESTRATOR_FAKE_AGENTS", "").lower() in {
             "1",
             "true",
             "yes",
         }
-        self.fake_agents = env_fake if fake_agents is None else fake_agents
+        if fake_agents is None:
+            self.fake_agents = env_fake and allow_fake
+        else:
+            # Construtor explícito (testes) sempre honrado; env só com allow
+            self.fake_agents = bool(fake_agents)
         self.verbose = verbose
         self.mcp_wait_timeout_s = mcp_wait_timeout_s
         self._services: dict[str, TaskService] = {}
@@ -300,12 +307,14 @@ class OrchestratorMcpTools:
         executor = data.executor
         validator = data.validator
 
-        service = self._service(data.workspace)
-        # temporary fake override
-        prev_fake = service.config.fake_agents
         if data.fake_agents:
-            service.config.fake_agents = True
-            service.registry = type(service.registry)(service.config, service.executor)
+            raise McpSecurityError(
+                "fake_agents nao permitido via MCP; use CLI --fake-agents em CI "
+                "ou ORCHESTRATOR_ALLOW_FAKE_AGENTS=1"
+            )
+
+        service = self._service(data.workspace)
+        prev_fake = service.config.fake_agents
 
         task = service.create_task(
             data.objective,

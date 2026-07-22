@@ -123,6 +123,11 @@ def load_config(
     orch = resolve_orchestrator_root(project)
     data_dir = orch / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        # Unix: restringe leitura do DB/prompts; no Windows é best-effort.
+        os.chmod(data_dir, 0o700)
+    except OSError:
+        pass
     policies = _load_json(orch / "config" / "policies.json")
     models = _load_json(orch / "config" / "models.json")
     manager_raw = _load_json(orch / "config" / "manager_model.json")

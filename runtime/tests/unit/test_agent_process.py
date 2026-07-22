@@ -20,3 +20,17 @@ def test_cli_executor_echo(project, tmp_path):
     )
     assert result.exit_code == 0
     assert "hi" in result.stdout
+
+
+def test_cli_executor_live_echo_redacts(project, capsys):
+    exe = CliExecutor(project, echo=True)
+    result = exe.run(
+        ["python", "-c", "print('API_KEY=supersecret')"],
+        cwd=project,
+        timeout_s=30,
+        allow_nested=True,
+    )
+    assert result.exit_code == 0
+    captured = capsys.readouterr().out
+    assert "supersecret" not in captured
+    assert "REDACTED" in captured or "REDACTED" in result.stdout

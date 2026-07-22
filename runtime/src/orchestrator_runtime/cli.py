@@ -39,6 +39,26 @@ def version_cmd() -> None:
     typer.echo(__version__)
 
 
+@app.command("agents")
+def agents_cmd(
+    project: Optional[Path] = typer.Option(None, "--project", help="Caminho do projeto"),
+    json_out: bool = typer.Option(True, "--json/--text"),
+) -> None:
+    """Lista agentes do registry (equivalente a orchestrator_agents no MCP)."""
+    from orchestrator_runtime.mcp.tools import OrchestratorMcpTools
+
+    tools = OrchestratorMcpTools(
+        default_workspace=project or Path.cwd(), verbose=False
+    )
+    data = tools.agents()
+    if json_out:
+        _print_json(data)
+    else:
+        for item in data.get("agents") or []:
+            status = "available" if item.get("available") else "unavailable"
+            typer.echo(f"{item.get('id')}\t{status}\t{item.get('kind')}")
+
+
 @app.command("run")
 def run_cmd(
     prompt: str = typer.Option(..., "--prompt", help="Atividade a executar"),

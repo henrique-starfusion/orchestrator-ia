@@ -59,7 +59,6 @@ def test_mcp_run(tools):
             "workspace": str(tools.default_workspace),
             "routing": "automatic",
             "wait": True,
-            "fake_agents": True,
             "constraints": {"maximum_iterations": 3, "maximum_duration_seconds": 120},
         }
     )
@@ -73,7 +72,6 @@ def test_mcp_status_result(tools):
         {
             "objective": "Crie um modulo Python com funcao soma, testes e documente o uso.",
             "wait": True,
-            "fake_agents": True,
         }
     )
     st = tools.status({"task_id": created["task_id"]})
@@ -200,7 +198,6 @@ def test_mcp_run_honors_agent_overrides(tools):
             "executor": "codex",
             "validator": "opencode",
             "wait": True,
-            "fake_agents": True,
         }
     )
     res = tools.result({"task_id": out["task_id"]})
@@ -248,13 +245,33 @@ def test_mcp_documentation_gate(tools):
         {
             "objective": "Crie um modulo Python com funcao soma, testes e documente o uso.",
             "wait": True,
-            "fake_agents": True,
         }
     )
     if out["status"] == "COMPLETED":
         res = tools.result({"task_id": out["task_id"]})
         assert res["documentation"] is not None
         assert res["documentation"].get("validation") == "passed"
+
+
+def test_mcp_rejects_fake_agents_payload(tools):
+    with pytest.raises(McpSecurityError, match="fake_agents"):
+        tools.run(
+            {
+                "objective": "x",
+                "fake_agents": True,
+                "wait": False,
+            }
+        )
+
+
+def test_cursor_stdio_entry_has_project_placeholder():
+    from orchestrator_runtime.mcp.cursor_config import stdio_server_entry
+
+    entry = stdio_server_entry()
+    args = entry.get("args") or []
+    assert "--project" in args
+    assert "${workspaceFolder}" in args
+    assert entry.get("enabled") is True
 
 
 def test_front_controller_direct_vs_delegate():
