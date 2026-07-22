@@ -5,6 +5,7 @@
 ### Changed
 
 - GitHub Actions CI desabilitado (sem plano/limite de Actions); workflow preservado em `.github/ci.yml.disabled`
+- Notas de Actions movidas de `.github/README.md` para `.github/ACTIONS.md` (GitHub priorizava esse README sobre o da raiz)
 - Wrapper Windows `bootstrap-agents.bat` renomeado para `orchestrator-ia.bat`
 - Nome do produto padronizado para **Orquestrador IA Multiagente**; docs e URLs apontam para `henrique-starfusion/orchestrator-ia`
 
