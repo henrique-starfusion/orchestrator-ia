@@ -3,7 +3,8 @@
 Projeto desenvolvido e mantido pela **StarFusion**.
 
 - **Desenvolvedor:** Henrique Rodrigues
-- **Copyright © 2026 StarFusion Consultoria, Tecnologia e Soluções em Informática LTDA.** Todos os direitos reservados.
+- **Licença:** [MIT](LICENSE) — uso comercial e não comercial permitido
+- **Copyright © 2026** StarFusion Consultoria, Tecnologia e Soluções em Informática LTDA.
 
 Pacote portátil para instalar, validar e manter um **ambiente multiagente genérico** e um **runtime persistente** em qualquer repositório. O orquestrador não pertence a uma aplicação específica: projetos-alvo são workspaces de execução.
 
@@ -497,7 +498,7 @@ Prioridade atual (v0.1): detecção de CLIs, bootstrap incremental versionado, s
 | `docs/orquestrador.md` | Guia completo de funcionamento |
 | `docs/legacy/` | Prompt e material deprecados |
 | `docs/repo-layout.md` | Organização deste repositório |
-| `LICENSE` | Todos os direitos reservados (StarFusion) |
+| `LICENSE` | MIT (uso comercial e não comercial) |
 
 **Repositório:** https://github.com/henrique-starfusion/orchestrator-ia (branch `develop`)
 
@@ -510,4 +511,5 @@ Layout detalhado: [`docs/repo-layout.md`](docs/repo-layout.md)
 **Orquestrador IA Multiagente** — desenvolvido e mantido pela **StarFusion**  
 Desenvolvedor: **Henrique Rodrigues**  
 
-**Copyright © 2026 StarFusion Consultoria, Tecnologia e Soluções em Informática LTDA.** Todos os direitos reservados.
+**Copyright © 2026 StarFusion Consultoria, Tecnologia e Soluções em Informática LTDA.**  
+Licença [MIT](LICENSE) — livre para uso, modificação e distribuição (comercial e não comercial).

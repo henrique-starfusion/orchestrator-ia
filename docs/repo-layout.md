@@ -23,7 +23,7 @@ Instalação via npm/GitHub deve apontar para `#develop` (ou tag de release em `
 | `get.ps1` | One-liner / cache + install (**em uso**) |
 | `bin/orchestrator.js` | CLI npm `orchestrator` / `mao` (**em uso**) |
 | `package.json` | Pacote npm |
-| `VERSION` / `LICENSE` / `README.md` | Metadados do produto |
+| `VERSION` / `LICENSE` (MIT) / `README.md` | Metadados do produto |
 
 ## Pacote
 
