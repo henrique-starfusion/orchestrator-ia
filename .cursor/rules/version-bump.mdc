@@ -1,0 +1,50 @@
+---
+description: Sempre subir a versão do pacote ao concluir mudanças no orquestrador
+alwaysApply: true
+---
+
+# Version bump obrigatório
+
+Ao concluir qualquer mudança que altere o **pacote/runtime/instalador** deste repositório (`orchestrator-ia` / bootstrap-agents), **suba a versão semver** antes do commit final. Não misture feature/fix entregue com o mesmo número de versão já publicado.
+
+## Quando bump é obrigatório
+
+- Runtime Python (`runtime/src/...`)
+- Scripts de install/update (`scripts/`)
+- Template `.orchestrator/` / adapters / migrations
+- MCP tools/schemas ou contrato Cursor
+- Docs de produto que acompanham release (`CHANGELOG`, README de versão)
+
+## Quando NÃO precisa bump
+
+- Só docs internas/arquivo/planos sem impacto no pacote instalado
+- Só alteração em workspace consumidor (PrintBee, GuardLine, etc.) sem mudar o pacote
+
+## Patch vs minor vs major
+
+| Tipo | Quando |
+|---|---|
+| **PATCH** (`0.4.4` → `0.4.5`) | Fix, hardening, timeout, docs de release, migration aditiva sem breaking |
+| **MINOR** (`0.4.x` → `0.5.0`) | Feature nova compatível |
+| **MAJOR** (`0.x` → `1.0.0`) | Breaking change de API/contrato/install |
+
+Default neste repo: **PATCH**, salvo pedido explícito de minor/major.
+
+## Checklist do bump (faça tudo)
+
+1. `VERSION` (raiz) e `package/template/.orchestrator/VERSION`
+2. `package.json` → `version`
+3. `runtime/pyproject.toml` → `version`
+4. `runtime/src/orchestrator_runtime/__init__.py` → `__version__`
+5. `CHANGELOG.md` — seção `## X.Y.Z — YYYY-MM-DD` com Added/Fixed/Changed
+6. `package/migrations/<from>-to-<to>.ps1` (mesmo se só logar o bump)
+7. Atualizar menções de versão atual em `README.md`, `docs/orquestrador.md`, `docs/installer-architecture.md` quando citarem o número
+8. Ajustar testes que assertam string de versão (ex.: `test_diagnostics.py`)
+9. Rodar testes relevantes → **commit + push** na `develop`
+10. Nos workspaces consumidores: `orchestrator update -Force` (PrintBee, GuardLine.BR, etc.)
+
+## Anti-padrões
+
+- Entregar fix no runtime e deixar `VERSION` em `0.4.4`
+- Usar `-Force` nos consumidores sem ter bumpado o pacote (mascara “já estou na mesma versão”)
+- Pular migration script no bump (o update depende da cadeia `<from>-to-<to>`)

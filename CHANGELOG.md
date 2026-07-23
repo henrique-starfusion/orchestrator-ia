@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## 0.4.5 — 2026-07-23
+
+### Added
+
+- Orçamento de timeout por papel (`agent_timeout_default_s` / `agent_timeout_by_role` em `policies.json`); executor/corrector padrão **2400s**
+- Fallback `git status --porcelain` para popular `changed_files` quando o CLI não reporta
+- Issue `AGENT-TIMEOUT` + exclusão de VAL workspace/evidence vazios do `same_issue_repeat_limit` após timeout
+- Regra Cursor `version-bump.mdc`: bump semver obrigatório ao entregar mudanças no pacote
+- Migration `0.4.4-to-0.4.5`
+
+### Fixed
+
+- Hardcap `min(600, …)` por invocação de agente (tarefas longas morriam em ~10 min mesmo com `maximum_duration_seconds=3600`)
+- `ProfileCliAdapter`: `request.timeout_s` passa a prevalecer sobre `profile.timeout_default_s`
+- `maximum_duration_seconds` agora encerra o loop quando o tempo restante é insuficiente
+
+### Changed
+
+- Profiles template: `timeout_default_s` 600 → **2400** (CLIs de escrita); gemini **1200**
+
 ## 0.4.4 — 2026-07-23
 
 ### Added

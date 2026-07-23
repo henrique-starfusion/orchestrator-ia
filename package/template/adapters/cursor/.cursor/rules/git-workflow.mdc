@@ -19,9 +19,10 @@ alwaysApply: true
 
 Quando uma tarefa ou atualização for **concluída e testada**:
 
-1. Rodar os testes relevantes do projeto.
-2. Fazer **commit** das mudanças da tarefa.
-3. Fazer **push** para `origin` na branch correta.
+1. Se a mudança altera o pacote/runtime/instalador: **subir a versão** (ver `version-bump.mdc`) antes do commit.
+2. Rodar os testes relevantes do projeto.
+3. Fazer **commit** das mudanças da tarefa.
+4. Fazer **push** para `origin` na branch correta.
 
 Neste projeto, concluir + testar implica commit e push (não esperar pedido explícito).
 
