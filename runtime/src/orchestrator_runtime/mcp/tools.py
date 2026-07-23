@@ -156,7 +156,7 @@ class OrchestratorMcpTools:
             task_type = str(task.analysis["task_type"])
         out: dict[str, str | None] = {}
         for role, agent in agents.items():
-            model, _flag = service.router.resolve_model(agent, task_type)
+            model, _flag = service.router.resolve_model(agent, task_type, role=role)
             out[role] = model
         return out
 
@@ -364,7 +364,9 @@ class OrchestratorMcpTools:
         model = data.model
         model_flag = None
         if not model:
-            model, model_flag = service.router.resolve_model(data.agent, "implementation")
+            model, model_flag = service.router.resolve_model(
+                data.agent, "implementation", role=data.role
+            )
         request = AgentRequest(
             role=data.role,
             prompt=data.objective,

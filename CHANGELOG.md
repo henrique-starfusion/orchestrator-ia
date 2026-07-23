@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.4.6 — 2026-07-23
+
+### Added
+
+- `role_model_preferences` em `models.json`: papel **planner** prefere **fable** → **opus** (Claude) quando declarados no cliente
+- `RulesRouter.resolve_model(..., role=)` aplica preferências por papel antes do `task_map`
+- Migration `0.4.5-to-0.4.6`
+
+### Fixed
+
+- Planner recebia Sonnet em tarefas `implementation`/`docs` porque o modelo seguia só o `task_type`
+
 ## 0.4.5 — 2026-07-23
 
 ### Added

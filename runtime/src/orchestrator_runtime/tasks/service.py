@@ -868,7 +868,9 @@ class TaskService:
                 f"(timeout_s={timeout_s})"
             )
 
-        model, model_flag = self.router.resolve_model(agent_id, task.task_type)
+        model, model_flag = self.router.resolve_model(
+            agent_id, task.task_type, role=role
+        )
         self.bus.emit(
             RuntimeEvent(
                 task_id=task.id,

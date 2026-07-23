@@ -55,6 +55,50 @@ def test_resolve_model_claude_alias_and_codex_concrete(project):
     router = RulesRouter(config, AgentRegistry(config))
     assert router.resolve_model("claude", "implementation") == ("sonnet", "--model")
     assert router.resolve_model("codex", "implementation") == ("gpt-5.6-sol", "-m")
+    # Planner: fable (preferido) mesmo com task_type=implementation → sonnet
+    assert router.resolve_model("claude", "implementation", role="planner") == (
+        "fable",
+        "--model",
+    )
+    # Sem fable no cliente → cai para opus
+    config.models["clients"]["claude"]["models"].pop("fable", None)
+    config.models["clients"]["claude"]["aliases"]["max"] = "opus"
+    assert router.resolve_model("claude", "implementation", role="planner") == (
+        "opus",
+        "--model",
+    )
     # Sem prefer_aliases no cliente mas só tiers em models → concreto
     config.models["clients"]["codex"].pop("prefer_aliases", None)
     assert router.resolve_model("codex", "implementation") == ("gpt-5.6-sol", "-m")
+
+
+def test_planner_role_preferences_from_models_json(project):
+    config = load_config(project, fake_agents=True)
+    config.models = {
+        "role_model_preferences": {
+            "planner": {"claude": ["opus", "fable"]},
+        },
+        "clients": {
+            "claude": {
+                "model_flag": "--model",
+                "prefer_aliases": True,
+                "aliases": {
+                    "balanced": "sonnet",
+                    "deep": "opus",
+                    "max": "fable",
+                },
+                "models": {
+                    "sonnet": "claude-sonnet-5",
+                    "opus": "claude-opus-4-8",
+                    "fable": "claude-fable-5",
+                },
+                "task_map": {"implementation": "sonnet"},
+            }
+        },
+    }
+    router = RulesRouter(config, AgentRegistry(config))
+    # Ordem explícita no JSON: opus antes de fable
+    assert router.resolve_model("claude", "implementation", role="planner") == (
+        "opus",
+        "--model",
+    )
