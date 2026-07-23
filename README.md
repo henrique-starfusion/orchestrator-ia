@@ -8,7 +8,7 @@ Projeto desenvolvido e mantido pela **StarFusion**.
 
 Pacote portátil para instalar, validar e manter um **ambiente multiagente genérico** e um **runtime persistente** em qualquer repositório. O orquestrador não pertence a uma aplicação específica: projetos-alvo são workspaces de execução.
 
-**Versão atual:** 0.4.6 — ver [`CHANGELOG.md`](CHANGELOG.md).
+**Versão atual:** 0.4.7 — ver [`CHANGELOG.md`](CHANGELOG.md).
 
 ---
 

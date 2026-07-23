@@ -53,6 +53,8 @@ orchestrator task artifacts <id>
 
 Opções comuns: `--project`, `--profile`, `--max-iterations`, `--timeout`, `--planner`, `--executor`, `--validator`, `--manager-provider`, `--fake-agents` (CI), `--json`, `--dry-run`.
 
+No `task list` em texto, o prompt vira preview de uma linha, limitado a 72 caracteres, cortado entre palavras e marcado com `…`. Use `task list --json` para obter o prompt integral. Desde 0.4.7, stdout/stdin/stderr do runtime usam UTF-8 explícito, inclusive em pipes Windows iniciados sob CP1252.
+
 Requer Python 3.11+.
 
 ---

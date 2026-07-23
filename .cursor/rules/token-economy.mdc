@@ -7,9 +7,10 @@ alwaysApply: true
 
 Canonical: `.orchestrator/config/models.json` + MCP `orchestrator-ia`.
 
-## Preferência
+## Ordem obrigatória
 
-1. Tarefas complexas → `orchestrator_run` (MCP) ou `orchestrator run` (CLI)
+1. Tarefa não-trivial (default — gatilhos em multiagent-orchestrator.mdc) →
+   `orchestrator_run` (MCP) ou `orchestrator run` (CLI), sem o usuário pedir
 2. Papel pontual → `orchestrator_delegate`
 3. `Task model=` só como fallback legado — sempre com `model=` explícito
 

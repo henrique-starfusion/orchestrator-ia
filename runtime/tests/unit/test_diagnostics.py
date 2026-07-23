@@ -27,4 +27,4 @@ def test_cli_version_json():
     result = runner.invoke(app, ["version", "--json"])
     assert result.exit_code == 0, result.output
     assert "code_fingerprint" in result.output
-    assert "0.4.6" in result.output or "version" in result.output
+    assert "0.4.7" in result.output or "version" in result.output

@@ -1,6 +1,6 @@
 # Orquestrador IA Multiagente
 
-Documento de referência do produto **Orquestrador IA Multiagente** (`@starfusion/orchestrator`, repositório `orchestrator-ia`, versão **0.4.6**).
+Documento de referência do produto **Orquestrador IA Multiagente** (`@starfusion/orchestrator`, repositório `orchestrator-ia`, versão **0.4.7**).
 
 Organização: **StarFusion** · Desenvolvedor: **Henrique Rodrigues**
 

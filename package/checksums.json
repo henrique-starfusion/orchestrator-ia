@@ -8,7 +8,7 @@
                   },
                   {
                       "path":  "template/.orchestrator/VERSION",
-                      "sha256":  "30c20b763e4558ab31ee6af4fe67c2b6626d8341c50660850fd829661b0cd1bb"
+                      "sha256":  "b908034df92dbedd142741ee10b5da8ac50837c4994e15c0840b47b022e8e263"
                   },
                   {
                       "path":  "template/.orchestrator/agents/capabilities.json",
@@ -304,7 +304,7 @@
                   },
                   {
                       "path":  "template/adapters/cursor/.cursor/rules/multiagent-orchestrator.mdc",
-                      "sha256":  "92e694ba5f2754ddd28e06aedcfa98ce14f5af80f4bbfe1bb532f527941d38d7"
+                      "sha256":  "5ea5b6e2c3e4c065d71d32398b428cac78908956ddb032567306d1d4136f72c5"
                   }
               ]
 }

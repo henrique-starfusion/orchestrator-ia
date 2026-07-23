@@ -68,7 +68,7 @@ try {
 
         $goldens = @(
             @{ Client = 'claude';   TaskClass = 'docs';  Pattern = '\[ETAPA\] claude --model sonnet -p PING' },
-            @{ Client = 'codex';    TaskClass = 'docs';  Pattern = '\[ETAPA\] codex exec -m gpt-5\.6-sol-medium PING' },
+            @{ Client = 'codex';    TaskClass = 'docs';  Pattern = '\[ETAPA\] codex exec -m gpt-5\.6-sol PING' },
             @{ Client = 'gemini';   TaskClass = 'docs';  Pattern = '\[ETAPA\] gemini -m gemini-3\.1-pro -p PING'; ExpectAviso = $true },
             @{ Client = 'opencode'; TaskClass = 'docs';  Pattern = '\[ETAPA\] opencode run --model default PING' }
         )

@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## 0.4.7 — 2026-07-23
+
+### Fixed
+
+- Windows/Cursor: runtime fixa stdin/stdout/stderr em UTF-8; descrições PT-BR não perdem `ç`, `ã`, `õ` quando Python herda CP1252 em pipe
+- Wrapper Node (`bin/orchestrator.js`) exporta `PYTHONUTF8=1` + `PYTHONIOENCODING=utf-8` ao spawnar o runtime Python
+- `task list` texto troca `prompt[:60]` por preview de uma linha, word-safe, com `…`; `--json` continua integral
+- Regressão cobre CLI argv → SQLite → MCP result → JSON/texto sob `PYTHONIOENCODING=cp1252`
+
+### Changed
+
+- Rules Cursor (`multiagent-orchestrator.mdc`, live + template + rule gerada por `cursor configure`): orquestrador vira **modo padrão obrigatório** ("sem o usuário pedir"), com seções Gatilhos/Exceções/Anti-padrões; proibido inventar preferência de projeto sem citação `arquivo:linha` (auditoria `docs/audits/2026-07-23-cursor-inline-bypass-audit.md`, F1–F8)
+- `token-economy.mdc`: seção "Preferência" → "Ordem obrigatória"
+- `docs/cursor-front-controller.md` + `CURSOR.md` (raiz e template): bug fix / mudança de lógica → `orchestrator_run` por default; removida a licença "edição trivial → resposta direta"
+
+### Added
+
+- Migration `0.4.6-to-0.4.7` (behavior-only; dados SQLite já estavam íntegros)
+- Testes: `runtime/tests/unit/test_cli_encoding.py` (pipeline UTF-8) e `tests/Test-CursorDefaultOrchestration.ps1` (wording default orquestrador live == template == `cursor configure`)
+
 ## 0.4.6 — 2026-07-23
 
 ### Added

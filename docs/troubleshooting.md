@@ -49,6 +49,22 @@ Cache do one-liner PowerShell:
 
 ## One-liner / CLI npm
 
+### Acentos somem ou viram `�` / `?` no Cursor ou PowerShell
+
+**Sintoma:** `correção` aparece como `correo`/`corre��o`, `botões` como `botes`/`bot�es`, ou a descrição termina no meio de uma palavra.
+
+**Causa até 0.4.6:** o Python herdava CP1252 em pipes Windows e a CLI emitia bytes CP1252; consumidores Cursor/Node os decodificavam como UTF-8. Além disso, `task list` cortava o prompt silenciosamente em 60 caracteres. A entrada MCP e o SQLite não alteravam o texto.
+
+**Solução:**
+
+1. Atualize o pacote/runtime para 0.4.7 ou superior.
+2. Reinicie o MCP/recarregue a janela do Cursor para descartar o processo antigo.
+3. Use `orchestrator task list --json` quando precisar do prompt integral; a saída texto é um preview explícito com `…`.
+
+Registros antigos não exigem migração se o prompt armazenado no SQLite estiver correto; o defeito era na saída. O runtime 0.4.7 fixa UTF-8 nos streams antes de Typer/FastMCP escreverem.
+
+---
+
 ### `npx` pede autenticação ou falha no clone
 
 **Causa:** repositório privado sem credencial Git configurada.

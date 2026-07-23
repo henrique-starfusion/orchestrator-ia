@@ -8,6 +8,14 @@ from pathlib import Path
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _isolate_child_agent_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Suite roda tambem dentro de dispatch (Invoke-RoutedAgent seta
+    ORCHESTRATOR_CHILD_AGENT=1); o guard anti-recursao de mcp/tools.py
+    nao pode vazar para os testes."""
+    monkeypatch.delenv("ORCHESTRATOR_CHILD_AGENT", raising=False)
+
+
 @pytest.fixture
 def project(tmp_path: Path) -> Path:
     orch = tmp_path / ".orchestrator"

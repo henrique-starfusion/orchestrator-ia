@@ -15,6 +15,10 @@ orchestrator task status <id>
 
 No chat, use MCP tools `orchestrator_run` / `orchestrator_delegate` (any model can be front controller).
 
+Non-trivial tasks DEFAULT to `orchestrator_run` — the user does not need to
+ask. Inline edits are limited to the exceptions in
+`.cursor/rules/multiagent-orchestrator.mdc`.
+
 Do **not** select Cursor as planner/executor/tester/validator.
 Do **not** rely on `Task model=` for the main multi-agent workflow.
 

@@ -1,6 +1,6 @@
 # Arquitetura do instalador — Orquestrador IA Multiagente
 
-Documentação técnica do **Orquestrador IA Multiagente** (pacote `@starfusion/orchestrator`, repositório `orchestrator-ia`, v0.4.6). Descreve o instalador e aponta para o runtime.
+Documentação técnica do **Orquestrador IA Multiagente** (pacote `@starfusion/orchestrator`, repositório `orchestrator-ia`, v0.4.7). Descreve o instalador e aponta para o runtime.
 
 Runtime: [`runtime-architecture.md`](runtime-architecture.md) · Guia completo: [`orquestrador.md`](orquestrador.md)
 
