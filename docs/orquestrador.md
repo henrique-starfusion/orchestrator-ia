@@ -442,7 +442,7 @@ Divisão de responsabilidade:
 | Arquivo | Papel |
 |---|---|
 | `agents/profiles/<cli>.json` | COMO invocar |
-| `config/models.json` | QUAL modelo por `task_class` |
+| `config/models.json` | QUAL modelo por `task_class` (+ `role_model_preferences`, ex. planner → fable/opus) |
 | `config/policies.json` | Limites de iteração / validação |
 
 ---
