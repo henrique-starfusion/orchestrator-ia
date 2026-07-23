@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.4.8 — 2026-07-23
+
+### Fixed
+
+- `cursor configure` / merge de `.cursor/mcp.json` tolera BOM UTF-8 (`utf-8-sig`)
+
+### Added
+
+- Migration `0.4.7-to-0.4.8`
 ## 0.4.7 — 2026-07-23
 
 ### Fixed

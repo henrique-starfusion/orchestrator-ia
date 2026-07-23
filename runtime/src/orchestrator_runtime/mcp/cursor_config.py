@@ -79,7 +79,7 @@ def write_cursor_mcp_config(
     path = cursor_dir / "mcp.json"
     existing = {}
     if path.is_file():
-        existing = json.loads(path.read_text(encoding="utf-8"))
+        existing = json.loads(path.read_text(encoding="utf-8-sig"))
     merged = merge_mcp_json(
         existing, transport=transport, command=command, url=url
     )
