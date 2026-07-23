@@ -27,7 +27,7 @@ Código em `runtime/src/orchestrator_runtime/`. CLI Node encaminha `run`/`task` 
 
 ## MCP (0.3.0)
 
-Transporte Cursor → Runtime: pacote `orchestrator_runtime.mcp` (`multiagent-orchestrator`).
+Transporte Cursor → Runtime: pacote `orchestrator_runtime.mcp` (`orchestrator-ia`).
 Não duplica `TaskService`; apenas expõe tools/resources.
 
 Ver [`mcp-integration.md`](mcp-integration.md).

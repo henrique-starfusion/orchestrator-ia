@@ -96,9 +96,10 @@
     "codex": {
       "cli": "codex",
       "model_flag": "-m",
+      "prefer_aliases": false,
       "models": {
-        "fast": "gpt-5.6-terra-medium",
-        "balanced": "gpt-5.6-sol-medium",
+        "fast": "gpt-5.6-sol",
+        "balanced": "gpt-5.6-sol",
         "deep": "gpt-5.6-sol",
         "max": "gpt-5.6-sol"
       },
@@ -118,8 +119,8 @@
         "long_agentic": "max",
         "orchestration_plan": "max"
       },
-      "notes": "Usar -m <modelo>. Evitar reasoning xhigh em tarefas fast/balanced.",
-      "invoke_example": "codex -m gpt-5.6-sol-medium \"...\""
+      "notes": "Usar -m <modelo>. Conta ChatGPT/Codex costuma aceitar gpt-5.6-sol (não *-terra-medium/*-sol-medium). Ajuste models[] ao host via `codex` + config.toml.",
+      "invoke_example": "codex exec --sandbox workspace-write -m gpt-5.6-sol \"...\""
     },
     "cursor": {
       "cli": null,

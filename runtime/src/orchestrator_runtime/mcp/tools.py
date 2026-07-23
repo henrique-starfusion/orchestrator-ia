@@ -25,6 +25,7 @@ from orchestrator_runtime.mcp.schemas import (
     RunInput,
     TaskIdInput,
 )
+from orchestrator_runtime.tasks.models import TaskRecord
 from orchestrator_runtime.tasks.service import TaskService, build_service
 from orchestrator_runtime.tasks.state_machine import TaskState, can_resume
 
@@ -114,6 +115,89 @@ class OrchestratorMcpTools:
             )
         return self._services[key]
 
+    def _selected_agents_for_task(
+        self, service: TaskService, task: TaskRecord
+    ) -> dict[str, str]:
+        """Mapa role→agent a partir do plano ou overrides/MVP."""
+        plan = task.plan or {}
+        roles = plan.get("roles") or {}
+        if roles.get("planner") and roles.get("executor") and roles.get("validator"):
+            return {
+                "planner": str(roles["planner"]),
+                "executor": str(roles["executor"]),
+                "validator": str(roles["validator"]),
+            }
+        steps = plan.get("steps") or []
+        from_steps = {
+            str(s.get("role")): str(s.get("agent"))
+            for s in steps
+            if s.get("role") in {"planner", "executor", "validator"} and s.get("agent")
+        }
+        if len(from_steps) >= 3:
+            return from_steps
+        c = task.constraints
+        planner = c.planner or (service.registry.prefer_mvp_order("planner") or ["claude"])[0]
+        executor = c.executor or (service.registry.prefer_mvp_order("executor") or ["codex"])[0]
+        validator = c.validator or (
+            service.registry.prefer_mvp_order("validator") or ["claude"]
+        )[0]
+        if validator == executor:
+            for alt in service.registry.prefer_mvp_order("validator"):
+                if alt != executor:
+                    validator = alt
+                    break
+        return {"planner": planner, "executor": executor, "validator": validator}
+
+    def _selected_models_for_task(
+        self, service: TaskService, task: TaskRecord, agents: dict[str, str]
+    ) -> dict[str, str | None]:
+        task_type = task.task_type or "implementation"
+        if isinstance(task.analysis, dict) and task.analysis.get("task_type"):
+            task_type = str(task.analysis["task_type"])
+        out: dict[str, str | None] = {}
+        for role, agent in agents.items():
+            model, _flag = service.router.resolve_model(agent, task_type)
+            out[role] = model
+        return out
+
+    @staticmethod
+    def _model_from_events(
+        events: list[dict[str, Any]],
+        *,
+        agent: str | None,
+        role: str | None,
+    ) -> str | None:
+        """Último model em agent_started/completed para agent/role."""
+        for e in reversed(events):
+            et = str(e.get("type") or "").lower()
+            if et not in {"agent_started", "agent_completed"}:
+                continue
+            if agent and e.get("agent") and e.get("agent") != agent:
+                continue
+            if role and e.get("role"):
+                erole = e.get("role")
+                if role == "executor" and erole in {"executor", "corrector"}:
+                    pass
+                elif erole != role:
+                    continue
+            data = e.get("data") or {}
+            model = data.get("model")
+            if model:
+                return str(model)
+        return None
+
+    @staticmethod
+    def _active_role_for_status(status_value: str) -> str | None:
+        mapping = {
+            "PLANNING": "planner",
+            "SELECTING_AGENTS": "planner",
+            "EXECUTING": "executor",
+            "CORRECTING": "executor",
+            "VALIDATING": "validator",
+            "TESTING": "tester",
+        }
+        return mapping.get(status_value)
+
     def health(self) -> dict[str, Any]:
         warnings: list[str] = []
         try:
@@ -144,6 +228,11 @@ class OrchestratorMcpTools:
         from orchestrator_runtime.diagnostics import code_fingerprint
 
         fp = code_fingerprint()
+        if fp.get("modules_stale"):
+            status = "degraded" if status == "healthy" else status
+            warnings.append(
+                "runtime modules stale vs disk; reload MCP server / Cursor"
+            )
         return {
             "status": status,
             "runtime": {
@@ -152,6 +241,8 @@ class OrchestratorMcpTools:
                 "db_path": str(service.config.db_path),
                 "db_exists": service.config.db_path.is_file(),
                 "code_fingerprint": fp["sha256_16"],
+                "disk_fingerprint": fp.get("disk_sha256_16"),
+                "modules_stale": bool(fp.get("modules_stale")),
                 "features": fp["features"],
                 "module_path": fp["module_path"],
             },
@@ -164,6 +255,11 @@ class OrchestratorMcpTools:
             "message": (
                 f"healthy={status} version={runtime_version} "
                 f"fingerprint={fp['sha256_16']}"
+                + (
+                    f" disk={fp.get('disk_sha256_16')} STALE"
+                    if fp.get("modules_stale")
+                    else ""
+                )
             ),
         }
 
@@ -416,14 +512,22 @@ class OrchestratorMcpTools:
         import threading
 
         threading.Thread(target=_bg, daemon=True).start()
+        selected_agents = self._selected_agents_for_task(service, task)
+        selected_models = self._selected_models_for_task(service, task, selected_agents)
+        agents_msg = " | ".join(
+            f"{role}={selected_agents.get(role)}/{selected_models.get(role) or '?'}"
+            for role in ("planner", "executor", "validator")
+        )
         return {
             "task_id": task.id,
             "status": "RECEIVED",
             "message": (
-                "Workflow iniciado. Poll orchestrator_status a cada "
-                "next_poll_after_seconds; use orchestrator_events para detalhe; "
+                f"Orquestrador iniciado — task={task.id} | {agents_msg}. "
+                "Poll orchestrator_status; use orchestrator_events para detalhe; "
                 "só declare sucesso após orchestrator_result."
             ),
+            "selected_agents": selected_agents,
+            "selected_models": selected_models,
             "status_resource": f"orchestrator://tasks/{task.id}",
             "events_resource": f"orchestrator://tasks/{task.id}/events",
             "next_poll_after_seconds": 5,
@@ -447,24 +551,34 @@ class OrchestratorMcpTools:
                 or e.get("type"),
                 "role": e.get("role"),
                 "agent": e.get("agent"),
+                "model": (e.get("data") or {}).get("model"),
             }
             for e in events[-12:]
         ]
         last = events[-1] if events else {}
         last_data = last.get("data") or {}
-        plan = task.plan or {}
-        steps = plan.get("steps") or []
-        active_step = None
-        for step in steps:
-            if step.get("role") in {"planner", "executor", "validator"} and task.status.value in {
-                "SELECTING_AGENTS",
-                "PLANNING",
-                "EXECUTING",
-                "VALIDATING",
-                "CORRECTING",
-            }:
-                active_step = step
-                break
+        selected_agents = self._selected_agents_for_task(service, task)
+        selected_models = self._selected_models_for_task(service, task, selected_agents)
+
+        active_role = self._active_role_for_status(task.status.value)
+        if active_role == "tester":
+            active_agent = "runtime"
+            active_model = None
+            active_provider = "runtime"
+        elif active_role:
+            active_agent = selected_agents.get(active_role) or last.get("agent")
+            active_provider = active_agent
+            active_model = self._model_from_events(
+                events, agent=active_agent, role=active_role
+            ) or selected_models.get(active_role)
+        else:
+            active_agent = last.get("agent")
+            active_role = last.get("role")
+            active_provider = active_agent
+            active_model = self._model_from_events(
+                events, agent=active_agent, role=active_role
+            ) or (last_data.get("model") and str(last_data.get("model")))
+
         blocking = []
         if isinstance(task.analysis, dict):
             blocking = list(task.analysis.get("blocking_issues") or [])
@@ -481,12 +595,16 @@ class OrchestratorMcpTools:
         message_parts = [f"Estado: {task.status.value}"]
         if task.iteration:
             message_parts.append(f"iter={task.iteration}")
-        if active_step:
-            message_parts.append(
-                f"agente={active_step.get('agent')}/{active_step.get('role')}"
-            )
+        if active_provider and active_role:
+            part = f"provider={active_provider} role={active_role}"
+            if active_model:
+                part += f" model={active_model}"
+            message_parts.append(part)
         elif last.get("agent"):
-            message_parts.append(f"ultimo={last.get('agent')}/{last.get('role')}")
+            part = f"ultimo={last.get('agent')}/{last.get('role')}"
+            if last_data.get("model"):
+                part += f" model={last_data.get('model')}"
+            message_parts.append(part)
         if last_data.get("summary"):
             message_parts.append(str(last_data.get("summary")))
         if task.error:
@@ -499,14 +617,12 @@ class OrchestratorMcpTools:
             "status": task.status.value,
             "current_state": task.status.value,
             "current_iteration": task.iteration,
-            "selected_agents": plan.get("roles")
-            or {
-                s.get("role"): s.get("agent")
-                for s in steps
-                if s.get("role") and s.get("agent")
-            },
-            "active_agent": (active_step or {}).get("agent"),
-            "active_role": (active_step or {}).get("role"),
+            "selected_agents": selected_agents,
+            "selected_models": selected_models,
+            "active_agent": active_agent,
+            "active_provider": active_provider,
+            "active_role": active_role,
+            "active_model": active_model,
             "progress": progress,
             "blocking_issues": blocking,
             "documentation": task.documentation_review or {},

@@ -60,6 +60,9 @@ class ProfileCliAdapter(AgentAdapter):
         args: list[str] = [self.id]
         for part in invoke.get("subcommand") or []:
             args.append(str(part))
+        # Flags de sandbox/automação do profile (ex.: codex --full-auto)
+        for part in invoke.get("sandbox_flags") or []:
+            args.append(str(part))
         if request.model and request.model_flag:
             args.extend([request.model_flag, request.model])
         elif request.model and self.profile.get("model_flag"):
@@ -85,6 +88,11 @@ class ProfileCliAdapter(AgentAdapter):
         self, session: AgentSession, request: AgentRequest
     ) -> AgentResult:
         command = self.build_command(request)
+        # Preferir path absoluto do detect() — evita WinError 2 quando o PATH
+        # do processo MCP não resolve nomes nus (.CMD / PATHEXT).
+        status = self.detect()
+        if status.path and command:
+            command = [status.path, *command[1:]]
         started = datetime.now(timezone.utc).isoformat()
         timeout = int(self.profile.get("timeout_default_s") or request.timeout_s)
         result = self.executor.run(

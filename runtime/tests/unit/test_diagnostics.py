@@ -14,6 +14,11 @@ def test_code_fingerprint_stable_shape():
     assert "runtime_code_fingerprint" in fp["features"]
     assert set(FEATURES).issubset(set(fp["features"]))
     assert fp["module_path"]
+    assert "disk_sha256_16" in fp
+    assert "modules_stale" in fp
+    # Neste processo de teste, disco == módulos carregados
+    assert fp["modules_stale"] is False
+    assert fp["disk_sha256_16"] == fp["sha256_16"]
     assert code_fingerprint()["sha256_16"] == fp["sha256_16"]
 
 
@@ -22,4 +27,4 @@ def test_cli_version_json():
     result = runner.invoke(app, ["version", "--json"])
     assert result.exit_code == 0, result.output
     assert "code_fingerprint" in result.output
-    assert "0.4.3" in result.output or "version" in result.output
+    assert "0.4.4" in result.output or "version" in result.output

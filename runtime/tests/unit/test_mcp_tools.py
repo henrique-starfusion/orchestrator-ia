@@ -198,6 +198,80 @@ def test_mcp_status_includes_error_and_message(tools):
     assert st["next_poll_after_seconds"] == 0
 
 
+def test_mcp_status_includes_provider_and_model(tools):
+    from orchestrator_runtime.events import EventType, RuntimeEvent
+
+    service = tools._service()
+    task = service.create_task(
+        "implement feature",
+        planner="claude",
+        executor="codex",
+        validator="claude",
+    )
+    task.task_type = "implementation"
+    task.plan = {
+        "roles": {
+            "planner": "claude",
+            "executor": "codex",
+            "validator": "claude",
+            "tester": "runtime",
+        },
+        "steps": [
+            {"role": "planner", "agent": "claude"},
+            {"role": "executor", "agent": "codex"},
+            {"role": "validator", "agent": "claude"},
+        ],
+    }
+    service.repo.save(task)
+    service.repo.transition(task, TaskState.ANALYZING, reason="t")
+    service.repo.transition(task, TaskState.RETRIEVING_MEMORY, reason="t")
+    service.repo.transition(task, TaskState.PLANNING, reason="t")
+    service.repo.transition(task, TaskState.SELECTING_AGENTS, reason="t")
+    service.repo.transition(
+        task, TaskState.EXECUTING, reason="start", agent="codex"
+    )
+    ev = RuntimeEvent(
+        task_id=task.id,
+        type=EventType.AGENT_STARTED,
+        role="executor",
+        agent="codex",
+        data={"model": "gpt-5.6-sol"},
+    )
+    service.bus.emit(ev)
+    service.repo.add_event(ev)
+
+    st = tools.status({"task_id": task.id})
+    assert st["active_provider"] == "codex"
+    assert st["active_role"] == "executor"
+    assert st["active_model"] == "gpt-5.6-sol"
+    assert st["selected_agents"]["executor"] == "codex"
+    assert "gpt-5.6-sol" in (st["selected_models"].get("executor") or "")
+    assert "provider=codex" in st["message"]
+    assert "model=gpt-5.6-sol" in st["message"]
+    assert any(p.get("model") == "gpt-5.6-sol" for p in st["progress"])
+
+
+def test_mcp_run_returns_selected_models_snapshot(tools):
+    out = tools.run(
+        {
+            "objective": "Crie um modulo Python com funcao soma e testes",
+            "planner": "claude",
+            "executor": "codex",
+            "validator": "opencode",
+            "wait": False,
+        }
+    )
+    assert out["task_id"]
+    assert out["selected_agents"]["planner"] == "claude"
+    assert out["selected_agents"]["executor"] == "codex"
+    assert out["selected_agents"]["validator"] == "opencode"
+    assert "selected_models" in out
+    assert out["selected_models"].get("planner")
+    assert "Orquestrador iniciado" in out["message"]
+    assert "planner=claude/" in out["message"]
+    tools.cancel({"task_id": out["task_id"], "reason": "test cleanup"})
+
+
 def test_mcp_delegate_read_only_blocks_executor(tools):
     with pytest.raises(McpSecurityError, match="read_only"):
         tools.delegate(
@@ -238,9 +312,22 @@ def test_cursor_config_merge(project):
     }
     merged = merge_mcp_json(existing, transport="stdio")
     assert "other" in merged["mcpServers"]
-    assert "multiagent-orchestrator" in merged["mcpServers"]
+    assert "orchestrator-ia" in merged["mcpServers"]
     path = write_cursor_mcp_config(project, transport="stdio")
     assert path.is_file()
+
+
+def test_cursor_config_migrates_legacy_server_key():
+    existing = {
+        "mcpServers": {
+            "multiagent-orchestrator": {"command": "old", "enabled": True},
+            "other": {"command": "npx", "args": ["-y", "x"]},
+        }
+    }
+    merged = merge_mcp_json(existing, transport="stdio")
+    assert "orchestrator-ia" in merged["mcpServers"]
+    assert "multiagent-orchestrator" not in merged["mcpServers"]
+    assert "other" in merged["mcpServers"]
 
 
 def test_cursor_rule_generated(project):

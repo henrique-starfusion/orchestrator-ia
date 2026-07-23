@@ -8,6 +8,7 @@ from typing import Any
 
 # Arquivos cujo conteúdo muda o comportamento observável do MCP.
 _FINGERPRINT_FILES = (
+    "diagnostics.py",
     "planning/analyzer.py",
     "mcp/tools.py",
     "execution/locks.py",
@@ -29,12 +30,7 @@ def runtime_package_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def code_fingerprint() -> dict[str, Any]:
-    """Hash curto do código crítico + features.
-
-    Use para comparar CLI local vs processo MCP: mesma VERSION pode servir
-    módulos já importados (stale) até o Cursor reiniciar o servidor MCP.
-    """
+def _hash_fingerprint_files() -> str:
     src_root = Path(__file__).resolve().parent
     digest = hashlib.sha256()
     for rel in _FINGERPRINT_FILES:
@@ -44,8 +40,28 @@ def code_fingerprint() -> dict[str, Any]:
         if path.is_file():
             digest.update(path.read_bytes())
         digest.update(b"\0")
+    return digest.hexdigest()[:16]
+
+
+# Snapshot do código efetivamente carregado neste processo Python.
+# Health/CLI devem reportar ESTE valor — não o hash “ao vivo” do disco —
+# senão um MCP longo-lived parece fresco após edits no disco sem reload.
+_LOADED_SHA256_16 = _hash_fingerprint_files()
+
+
+def code_fingerprint() -> dict[str, Any]:
+    """Fingerprint do código carregado neste processo + check vs disco.
+
+    `sha256_16` = módulos já importados (comportamento real do MCP/CLI).
+    Compare CLI vs MCP: se diferirem, o processo MCP está stale.
+    Se `modules_stale` for True neste processo, o disco avançou sem reload.
+    """
+    src_root = Path(__file__).resolve().parent
+    disk_sha = _hash_fingerprint_files()
     return {
-        "sha256_16": digest.hexdigest()[:16],
+        "sha256_16": _LOADED_SHA256_16,
+        "disk_sha256_16": disk_sha,
+        "modules_stale": disk_sha != _LOADED_SHA256_16,
         "files": list(_FINGERPRINT_FILES),
         "features": list(FEATURES),
         "module_path": str(src_root),

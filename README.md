@@ -8,7 +8,7 @@ Projeto desenvolvido e mantido pela **StarFusion**.
 
 Pacote portátil para instalar, validar e manter um **ambiente multiagente genérico** e um **runtime persistente** em qualquer repositório. O orquestrador não pertence a uma aplicação específica: projetos-alvo são workspaces de execução.
 
-**Versão atual:** 0.4.3 — ver [`CHANGELOG.md`](CHANGELOG.md).
+**Versão atual:** 0.4.4 — ver [`CHANGELOG.md`](CHANGELOG.md).
 
 ---
 
@@ -104,7 +104,7 @@ orchestrator init
 Equivalente curto: `mao init` (alias do mesmo binário).
 
 > **Nota:** com origem `github:`, o npm usa fragmento git (`#latest`), **não** `...@latest` (sintaxe de registry).  
-> `github:henrique-starfusion/orchestrator-ia@latest` **não funciona**. Alternativas: `#latest`, `#v0.4.3`, `#semver:*` ou tip de `#main`.
+> `github:henrique-starfusion/orchestrator-ia@latest` **não funciona**. Alternativas: `#latest`, `#v0.4.4`, `#semver:*` ou tip de `#main`.
 
 ### PowerShell (Windows, com `gh` autenticado)
 

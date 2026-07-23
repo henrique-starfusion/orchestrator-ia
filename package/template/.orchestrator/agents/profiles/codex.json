@@ -6,7 +6,7 @@
     "subcommand": ["exec"],
     "prompt_via": "arg",
     "prompt_flag": null,
-    "sandbox_flags": ["--full-auto"]
+    "sandbox_flags": ["--sandbox", "workspace-write", "--skip-git-repo-check"]
   },
   "output": {
     "format": "text",

@@ -99,18 +99,28 @@ _SOMA_MODULE_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Remove cláusulas negadas ("não criar módulo soma") antes do match positivo
+# Remove cláusulas negadas / meta-instruções antes do match positivo
+# ("não criar módulo soma", "IGNORAR template de função soma", "avoid soma(a,b)")
 _NEGATED_CLAUSE_RE = re.compile(
-    r"\b(n[aã]o|not|never|nunca|sem)\b[^.!?;:\n—–-]{0,100}",
+    r"\b("
+    r"n[aã]o|not|never|nunca|sem|"
+    r"ignorar|ignore|ignores|ignored|"
+    r"evitar|evite|avoid|avoids|avoiding|"
+    r"skip|skipping"
+    r")\b[^.!?;:\n—–-]{0,120}",
     re.IGNORECASE,
+)
+
+_AUDIT_TASK_TYPES = frozenset(
+    {"complex_analysis", "security_review", "architecture"}
 )
 
 
 def wants_soma_module(prompt: str) -> bool:
     """True só para intent positivo de módulo/função soma|sum.
 
-    Ignora substring em resume/summary e menções sob negação
-    (ex.: "não criar módulo soma").
+    Ignora substring em resume/summary e menções sob negação/meta
+    (ex.: "não criar módulo soma", "IGNORAR template de função soma").
     """
     cleaned = _NEGATED_CLAUSE_RE.sub(" ", prompt or "")
     return bool(_SOMA_MODULE_RE.search(cleaned))
@@ -154,53 +164,57 @@ class CriteriaBuilder:
                 CriterionKind.TESTS_PASS,
                 params={"mention": "soma"},
             )
+            if re.search(r"\b(docs?|document\w*|readme)\b", lowered):
+                add(
+                    "README ou docs descrevem uso com exemplo executável",
+                    CriterionKind.DOCS_EXAMPLE,
+                    params={"path": "README.md", "must_contain": ["soma"]},
+                )
+            return criteria
+
+        if analysis.task_type in _AUDIT_TASK_TYPES:
+            # Auditorias/reviews: não deixar "testes"/"docs" no prompt
+            # trocarem ACs de evidência por README/suite de produto.
+            add(
+                "Entregável da análise presente no workspace (relatório/docs)",
+                CriterionKind.WORKSPACE_CHANGES,
+            )
+            add(
+                "Achados com evidência verificável no workspace",
+                CriterionKind.EVIDENCE,
+            )
+            add(
+                "Recomendações priorizadas documentadas",
+                CriterionKind.EVIDENCE,
+            )
+            return criteria
+
+        # Implementation / docs: workspace sempre; testes/docs por keyword ou fallback
+        add(
+            "Alterações solicitadas no prompt estão presentes no workspace",
+            CriterionKind.WORKSPACE_CHANGES,
+        )
         if re.search(r"\b(test|pytest|teste|testes)\b", lowered):
             add(
                 "Suite de testes determinística passa com exit code 0",
                 CriterionKind.TESTS_PASS,
             )
         if re.search(r"\b(docs?|document\w*|readme)\b", lowered):
-            params: dict[str, Any] = {"path": "README.md"}
-            if wants_soma_module(prompt):
-                params["must_contain"] = ["soma"]
             add(
                 "README ou docs descrevem uso com exemplo executável",
                 CriterionKind.DOCS_EXAMPLE,
-                params=params,
+                params={"path": "README.md"},
             )
-        if not criteria:
-            if analysis.task_type in {
-                "complex_analysis",
-                "security_review",
-                "architecture",
-            }:
-                # Auditorias/reviews: não exigir README de produto nem suite de testes
-                add(
-                    "Entregável da análise presente no workspace (relatório/docs)",
-                    CriterionKind.WORKSPACE_CHANGES,
-                )
-                add(
-                    "Achados com evidência verificável no workspace",
-                    CriterionKind.EVIDENCE,
-                )
-                add(
-                    "Recomendações priorizadas documentadas",
-                    CriterionKind.EVIDENCE,
-                )
-            else:
-                add(
-                    "Alterações solicitadas no prompt estão presentes no workspace",
-                    CriterionKind.WORKSPACE_CHANGES,
-                )
-                add(
-                    "Testes determinísticos relevantes passam ou estão justificados",
-                    CriterionKind.TESTS_PASS,
-                )
-                add(
-                    "Documentação afetada foi revisada e atualizada se necessário",
-                    CriterionKind.DOCS_EXAMPLE,
-                    params={"path": "README.md"},
-                )
+        if len(criteria) == 1:
+            add(
+                "Testes determinísticos relevantes passam ou estão justificados",
+                CriterionKind.TESTS_PASS,
+            )
+            add(
+                "Documentação afetada foi revisada e atualizada se necessário",
+                CriterionKind.DOCS_EXAMPLE,
+                params={"path": "README.md"},
+            )
         return criteria
 
 

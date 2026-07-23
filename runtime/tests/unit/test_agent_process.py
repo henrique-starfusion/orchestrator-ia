@@ -1,4 +1,8 @@
+import os
+import sys
 from pathlib import Path
+
+import pytest
 
 from orchestrator_runtime.agents.process import CliExecutor, redact
 
@@ -8,6 +12,19 @@ def test_redact_secrets():
     out = redact(text)
     assert "REDACTED" in out
     assert "ok line" in out
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="PATHEXT/.CMD resolution is Windows-specific")
+def test_cli_executor_resolves_cmd_via_which(project, tmp_path, monkeypatch):
+    """CreateProcess não resolve PATHEXT; CliExecutor deve usar shutil.which."""
+    bat = tmp_path / "fake-agent.cmd"
+    bat.write_text("@echo off\r\necho fake-ok\r\n", encoding="utf-8")
+    monkeypatch.setenv("PATH", str(tmp_path) + os.pathsep + os.environ.get("PATH", ""))
+    exe = CliExecutor(project, echo=False)
+    result = exe.run(["fake-agent"], cwd=project, timeout_s=30, allow_nested=True)
+    assert result.exit_code == 0
+    assert "fake-ok" in result.stdout
+    assert Path(result.command[0]).suffix.lower() in {".cmd", ".bat", ".exe"}
 
 
 def test_cli_executor_echo(project, tmp_path):

@@ -1,4 +1,4 @@
-"""Servidor MCP multiagent-orchestrator (transporte sobre TaskService)."""
+"""Servidor MCP orchestrator-ia (transporte sobre TaskService)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from orchestrator_runtime.mcp.resources import OrchestratorMcpResources
 from orchestrator_runtime.mcp.tools import OrchestratorMcpTools
 
 
-SERVER_NAME = "multiagent-orchestrator"
+SERVER_NAME = "orchestrator-ia"
 
 
 def build_tools(

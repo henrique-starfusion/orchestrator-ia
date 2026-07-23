@@ -94,9 +94,6 @@ class RulesManager:
                 issues=[i.get("id", str(i)) if isinstance(i, dict) else str(i) for i in blocking],
                 score=score,
             )
-        if task.last_score is not None and score < task.last_score + 0.03 and blocking:
-            # stagnation check handled by caller with same_issue_repeat; here suggest correct once more
-            pass
         if blocking:
             return IterationDecision(
                 action="correct",

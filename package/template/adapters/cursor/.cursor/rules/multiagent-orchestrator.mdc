@@ -29,14 +29,18 @@ Campos úteis em `orchestrator_status`: `error`, `blocking_issues`, `active_agen
 Após `orchestrator update|install` que altere o runtime:
 
 1. Compare `orchestrator version --json` → `code_fingerprint` com
-   `orchestrator_health` → `runtime.code_fingerprint`.
-2. Probe `orchestrator_analyze` com prompt contendo semver (ex.: `0.4.1`) e
+   `orchestrator_health` → `runtime.code_fingerprint` (hash do código
+   **carregado no processo**, não só o disco).
+2. Se `orchestrator_health.runtime.modules_stale` for true (ou warning
+   “modules stale vs disk”), o MCP leu código novo no disco mas ainda
+   executa módulos antigos — reload obrigatório.
+3. Probe `orchestrator_analyze` com prompt contendo semver (ex.: `0.4.1`) e
    a palavra `auditoria` — espere `task_type=complex_analysis` e `0.4.1` intacto
    nos `requirements`.
-3. Se fingerprints diferirem **ou** o probe falhar: diga que o processo MCP está
-   stale; peça reload do Cursor / reinício do servidor MCP. **Não** declare
-   “MCP verificado” só porque o pytest local passou.
-4. Só afirme sucesso no MCP depois do probe passar na sessão atual.
+4. Se fingerprints diferirem, `modules_stale`, **ou** o probe falhar: diga que
+   o processo MCP está stale; peça reload do Cursor / reinício do servidor MCP.
+   **Não** declare “MCP verificado” só porque o pytest local passou.
+5. Só afirme sucesso no MCP depois do probe passar na sessão atual.
 
 ## Regras duras
 
@@ -54,3 +58,11 @@ Após `orchestrator update|install` que altere o runtime:
 - Traduza estados técnicos (`SELECTING_AGENTS`, `EXECUTING`, …) em frases curtas.
 - Se `error` ou `blocking_issues` existirem, mostre-os de imediato.
 - Em `requires_input`, apresente `question`/`options` e use `orchestrator_message`.
+- **Visibilidade orquestrador / provedor / modelo (obrigatório):**
+  1. Ao iniciar `orchestrator_run`, anuncie no chat uma linha com os campos do retorno MCP  
+     (`selected_agents` + `selected_models`), no formato:  
+     `Orquestrador iniciado — task=<id> | planner=<p>/<model> | executor=<e>/<model> | validator=<v>/<model>`
+  2. A cada `orchestrator_status`, anuncie:  
+     `Orquestrador — <estado> | <provider>/<role> | model=<model> | iter=N`  
+     (use `active_provider`, `active_role`, `active_model`, `current_iteration` / `message`).
+  3. Nunca invente provedor/modelo: só o que veio do MCP (`run` / `status` / `events` / `result`).

@@ -7,7 +7,7 @@ Status: **implementado** (stdio) · HTTP: **experimental**
 ```mermaid
 flowchart LR
   User[Usuario no Cursor] --> Front[Modelo do chat\nfront controller]
-  Front -->|MCP tools| MCP[multiagent-orchestrator]
+  Front -->|MCP tools| MCP[orchestrator-ia]
   MCP --> Runtime[TaskService / SQLite]
   Runtime --> Claude[Claude CLI]
   Runtime --> Codex[Codex CLI]
@@ -46,6 +46,7 @@ orchestrator cursor configure
 orchestrator cursor configure --cursor-mcp-scope user    # só global
 orchestrator cursor configure --cursor-mcp-scope project # só projeto (default)
 orchestrator agents --json                              # registry CLI
+orchestrator agents list --json                         # alias aceito
 ```
 
 Ver também: [`cursor-front-controller.md`](cursor-front-controller.md), [`mcp-tool-reference.md`](mcp-tool-reference.md).

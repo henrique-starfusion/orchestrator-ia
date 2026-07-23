@@ -52,6 +52,16 @@ def test_wants_soma_module_intent():
         "validar critérios com resume/cancel — não criar módulo soma"
     )
     assert not wants_soma_module("do not create module soma please")
+    # Meta-instrução no prompt NÃO deve acionar o demo de soma
+    assert not wants_soma_module(
+        "IGNORAR qualquer template genérico de função soma"
+    )
+    assert not wants_soma_module(
+        "Implementar rename MCP. Ignore the generic soma(a,b) acceptance criteria."
+    )
+    assert not wants_soma_module(
+        "evitar critérios de função soma; foque no rename orchestrator-ia"
+    )
 
 
 def test_criteria_builder_skips_resume_false_positive():
@@ -77,3 +87,47 @@ def test_criteria_builder_keeps_soma_demo():
     assert CriterionKind.SOMA_MODULE in kinds
     assert CriterionKind.TESTS_PASS in kinds
     assert all(c.check is not None and c.check.kind == c.kind for c in criteria)
+
+
+def test_ignore_soma_meta_does_not_inject_soma_acs():
+    prompt = (
+        "Rename MCP multiagent-orchestrator para orchestrator-ia. "
+        "Testes e documentação. IGNORAR qualquer template genérico de função soma."
+    )
+    analysis = TaskAnalyzer().analyze(prompt)
+    criteria = CriteriaBuilder().build(prompt, analysis)
+    kinds = {c.kind for c in criteria}
+    assert CriterionKind.SOMA_MODULE not in kinds
+    descs = " ".join(c.description for c in criteria)
+    assert "soma(a, b)" not in descs
+    assert "soma(2,3)" not in descs
+
+
+def test_audit_with_testes_docs_keeps_analysis_acs():
+    prompt = (
+        "Auditoria do runtime: resume/cancel, documentação e testes. "
+        "Produza relatório em docs/audits/."
+    )
+    analysis = TaskAnalyzer().analyze(prompt)
+    assert analysis.task_type == "complex_analysis"
+    criteria = CriteriaBuilder().build(prompt, analysis)
+    kinds = {c.kind for c in criteria}
+    assert CriterionKind.SOMA_MODULE not in kinds
+    assert CriterionKind.EVIDENCE in kinds
+    assert CriterionKind.WORKSPACE_CHANGES in kinds
+    # Não exigir README de produto / suite genérica em auditoria
+    assert CriterionKind.DOCS_EXAMPLE not in kinds
+
+
+def test_non_audit_keeps_workspace_changes_with_test_docs_keywords():
+    prompt = (
+        "Renomear chave MCP para orchestrator-ia; atualizar testes e docs"
+    )
+    analysis = TaskAnalyzer().analyze(prompt)
+    assert analysis.task_type in {"implementation", "docs"}
+    criteria = CriteriaBuilder().build(prompt, analysis)
+    kinds = {c.kind for c in criteria}
+    assert CriterionKind.SOMA_MODULE not in kinds
+    assert CriterionKind.WORKSPACE_CHANGES in kinds
+    assert CriterionKind.TESTS_PASS in kinds
+    assert CriterionKind.DOCS_EXAMPLE in kinds

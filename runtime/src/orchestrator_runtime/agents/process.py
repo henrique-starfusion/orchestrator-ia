@@ -109,16 +109,31 @@ class CliExecutor:
         if self.echo:
             _live(f"[exec] {redact(' '.join(resolved_command))}")
 
-        proc = subprocess.Popen(
-            resolved_command,
-            cwd=str(workdir),
-            env=merged,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
+        try:
+            # stdin=DEVNULL: CLIs como `codex exec` leem prompt do stdin se
+            # herdarem pipe/TTY vazio ("Reading additional input from stdin...").
+            proc = subprocess.Popen(
+                resolved_command,
+                cwd=str(workdir),
+                env=merged,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+        except FileNotFoundError as exc:
+            # Ainda sem executável resolvido (PATH do MCP/Cursor incompleto).
+            return ProcessResult(
+                exit_code=127,
+                stdout="",
+                stderr=f"FileNotFoundError: {exc} (command={resolved_command!r})",
+                timed_out=False,
+                duration_s=time.monotonic() - started,
+                command=resolved_command,
+                cwd=str(workdir),
+            )
 
         stop_heartbeat = threading.Event()
 

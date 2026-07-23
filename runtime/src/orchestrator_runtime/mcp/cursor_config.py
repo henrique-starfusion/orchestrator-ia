@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any
 
 
-SERVER_KEY = "multiagent-orchestrator"
+SERVER_KEY = "orchestrator-ia"
+LEGACY_SERVER_KEY = "multiagent-orchestrator"
 
 
 def stdio_server_entry(command: str = "orchestrator") -> dict[str, Any]:
@@ -60,6 +61,7 @@ def merge_mcp_json(
         servers[SERVER_KEY] = http_server_entry(url or "http://127.0.0.1:8765/mcp")
     else:
         servers[SERVER_KEY] = stdio_server_entry(command)
+    servers.pop(LEGACY_SERVER_KEY, None)
     root["mcpServers"] = servers
     return root
 

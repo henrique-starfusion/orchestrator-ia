@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "multiagent-orchestrator": {
+    "orchestrator-ia": {
       "command": "cmd",
       "args": [
         "/c",

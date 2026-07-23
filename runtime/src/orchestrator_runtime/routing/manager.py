@@ -132,9 +132,19 @@ class RulesRouter:
             alias = aliases.get(tier)
         if not alias:
             return None, None
-        # Prefer alias when prefer_aliases
-        if client.get("prefer_aliases", True):
-            return str(alias), str(model_flag) if model_flag else None
         models = client.get("models") or {}
-        concrete = models.get(alias, alias)
-        return str(concrete), str(model_flag) if model_flag else None
+        aliases_map = client.get("aliases") or {}
+        flag = str(model_flag) if model_flag else None
+        # task_map pode apontar para alias de CLI (sonnet) ou tier (balanced).
+        token = str(alias)
+        if token in aliases_map:
+            token = str(aliases_map[token])
+        prefer_aliases = bool(client.get("prefer_aliases", True))
+        if prefer_aliases:
+            # Codex-like: sem mapa de aliases, keys de models são tiers → concreto.
+            alias_names = {str(v) for v in aliases_map.values()}
+            if token in models and token not in alias_names and not aliases_map:
+                return str(models[token]), flag
+            return token, flag
+        concrete = models.get(token, models.get(str(alias), token))
+        return str(concrete), flag

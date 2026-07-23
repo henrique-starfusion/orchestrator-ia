@@ -18,7 +18,7 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 task_app = typer.Typer(help="Gerenciamento de tarefas")
-mcp_app = typer.Typer(help="Servidor MCP multiagent-orchestrator")
+mcp_app = typer.Typer(help="Servidor MCP orchestrator-ia")
 cursor_app = typer.Typer(help="Integração Cursor (front controller)")
 app.add_typer(task_app, name="task")
 app.add_typer(mcp_app, name="mcp")
@@ -58,10 +58,18 @@ def version_cmd(
 
 @app.command("agents")
 def agents_cmd(
+    action: Optional[str] = typer.Argument(
+        None,
+        help="Opcional: 'list' ou 'ls' (alias; mesmo efeito sem argumento)",
+    ),
     project: Optional[Path] = typer.Option(None, "--project", help="Caminho do projeto"),
     json_out: bool = typer.Option(True, "--json/--text"),
 ) -> None:
     """Lista agentes do registry (equivalente a orchestrator_agents no MCP)."""
+    if action is not None and action.lower() not in {"list", "ls"}:
+        raise typer.BadParameter(
+            "use 'list'/'ls' ou omita o argumento", param_hint="ACTION"
+        )
     from orchestrator_runtime.mcp.tools import OrchestratorMcpTools
 
     tools = OrchestratorMcpTools(

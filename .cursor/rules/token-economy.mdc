@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Token economy + orquestração
 
-Canonical: `.orchestrator/config/models.json` + MCP `multiagent-orchestrator`.
+Canonical: `.orchestrator/config/models.json` + MCP `orchestrator-ia`.
 
 ## Preferência
 

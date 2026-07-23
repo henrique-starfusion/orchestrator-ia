@@ -48,6 +48,8 @@ class TaskService:
         self.det_validator = DeterministicValidator()
         self.llm_validator = LlmReviewValidator()
         self.gate = CompletionGate(config.limits.minimum_validation_score)
+        # task_ids com _execute_loop ativo neste processo (anti double-start MCP)
+        self._running_tasks: set[str] = set()
         self.docs = DocumentationUpdater()
         self.lock = WriteLock(
             config.orchestrator_root / "runtime" / "locks" / "workspace.write.lock"
@@ -138,11 +140,34 @@ class TaskService:
             return task
         if task.status in {TaskState.COMPLETED, TaskState.FAILED, TaskState.INCOMPLETE}:
             return task
+        if task_id in self._running_tasks:
+            # Segunda invocação (MCP retry / poll) enquanto o loop já roda —
+            # não contender o WriteLock nem marcar FAILED.
+            return task
         if task.constraints.dry_run:
             return await self._dry_run(task)
         try:
             with self.lock:
-                return await self._execute_loop(task)
+                self._running_tasks.add(task_id)
+                try:
+                    return await self._execute_loop(task)
+                finally:
+                    self._running_tasks.discard(task_id)
+        except TimeoutError as exc:
+            # Lock ocupado por outra execução: NÃO envenenar a tarefa em andamento.
+            task = self.get(task_id)
+            self.bus.emit(
+                RuntimeEvent(
+                    task_id=task.id,
+                    type=EventType.TASK_FAILED,
+                    data={
+                        "error": str(exc),
+                        "non_fatal": True,
+                        "reason": "workspace_lock_busy",
+                    },
+                )
+            )
+            return task
         except Exception as exc:  # noqa: BLE001
             task = self.get(task_id)
             if can_resume(task.status):
@@ -263,6 +288,7 @@ class TaskService:
 
         changed_files: list[str] = []
         last_validation: dict[str, Any] = {}
+        last_test_results: list[dict[str, Any]] = []
         issue_counts: dict[str, int] = {}
 
         while True:
@@ -304,10 +330,123 @@ class TaskService:
                 raise RuntimeError(f"Estado inesperado antes de executar: {task.status}")
 
             role = "corrector" if task.iteration > 1 else "executor"
-            exec_prompt = self._build_executor_prompt(task, last_validation, memories)
-            exec_result = await self._run_agent(
-                plan_roles.executor, role, exec_prompt, task
+            exec_prompt = self._build_executor_prompt(
+                task, last_validation, memories, test_results=last_test_results
             )
+            try:
+                exec_result = await self._run_agent(
+                    plan_roles.executor, role, exec_prompt, task
+                )
+            except Exception as exec_exc:  # noqa: BLE001
+                # Spawn/CLI falhou: não abortar o workflow — tratar como iteração
+                # rejeitada para entrar em CORRECTING / fallback na próxima volta.
+                task = self.get(task.id)
+                self.bus.emit(
+                    RuntimeEvent(
+                        task_id=task.id,
+                        type=EventType.AGENT_COMPLETED,
+                        role=role,
+                        agent=plan_roles.executor,
+                        data={"status": "failed", "error": str(exec_exc)},
+                    )
+                )
+                last_validation = {
+                    "status": "rejected",
+                    "score": 0.0,
+                    "blocking_issues": [
+                        {
+                            "id": "EXEC-FAIL",
+                            "severity": "blocking",
+                            "description": f"Falha ao executar {role}/{plan_roles.executor}: {exec_exc}",
+                        }
+                    ],
+                    "summary": f"executor failed: {exec_exc}",
+                }
+                decision = await self.manager.evaluate_iteration(
+                    task, last_validation, task.iteration
+                )
+                self.repo.add_iteration(
+                    task.id,
+                    task.iteration,
+                    0.0,
+                    decision.action,
+                    {"reason": decision.reason, "error": str(exec_exc)},
+                )
+                if decision.action in {"stop_incomplete", "fail"}:
+                    target = (
+                        TaskState.FAILED
+                        if decision.action == "fail"
+                        else TaskState.INCOMPLETE
+                    )
+                    self.repo.transition(task, target, reason=decision.reason, error=str(exec_exc))
+                    self._persist_episode(task, success=False)
+                    return task
+                self.repo.transition(
+                    task,
+                    TaskState.CORRECTING,
+                    reason=f"executor error → correct: {exec_exc}",
+                    agent=plan_roles.executor,
+                )
+                continue
+
+            spawn_failed = exec_result.exit_code == 127 or (
+                exec_result.status == "failed"
+                and "FileNotFoundError" in (exec_result.stderr or "")
+            )
+            if spawn_failed:
+                last_validation = {
+                    "status": "rejected",
+                    "score": 0.0,
+                    "blocking_issues": [
+                        {
+                            "id": "EXEC-SPAWN",
+                            "severity": "blocking",
+                            "description": (
+                                f"Falha ao iniciar CLI {plan_roles.executor}: "
+                                f"{(exec_result.stderr or '')[:300]}"
+                            ),
+                        }
+                    ],
+                    "summary": "executor spawn failed",
+                }
+                decision = await self.manager.evaluate_iteration(
+                    task, last_validation, task.iteration
+                )
+                self.repo.add_iteration(
+                    task.id,
+                    task.iteration,
+                    0.0,
+                    decision.action,
+                    {"reason": decision.reason, "spawn_failed": True},
+                )
+                if decision.action in {"stop_incomplete", "fail"}:
+                    target = (
+                        TaskState.FAILED
+                        if decision.action == "fail"
+                        else TaskState.INCOMPLETE
+                    )
+                    self.repo.transition(
+                        task,
+                        target,
+                        reason=decision.reason,
+                        error=exec_result.stderr,
+                    )
+                    self._persist_episode(task, success=False)
+                    return task
+                # Tentar fallback de executor na próxima iteração
+                fallbacks = (task.plan or {}).get("fallbacks", {}).get("executor") or []
+                for fb in fallbacks:
+                    if fb != plan_roles.executor and self.registry.get(fb):
+                        plan_roles.executor = fb
+                        break
+                self.repo.transition(
+                    task,
+                    TaskState.CORRECTING,
+                    reason="executor spawn failed → correct/fallback",
+                    agent=plan_roles.executor,
+                )
+                continue
+
             changed_files = list(
                 dict.fromkeys(changed_files + exec_result.changed_files)
             )
@@ -317,6 +456,7 @@ class TaskService:
             self.repo.transition(task, TaskState.TESTING, reason="deterministic tests")
             self.bus.emit(RuntimeEvent(task_id=task.id, type=EventType.TEST_STARTED))
             test_results = self.tests.run_all(self.config.project_path)
+            last_test_results = test_results
             for tr in test_results:
                 self.repo.add_test_run(task_id=task.id, **tr)
             self.bus.emit(
@@ -375,6 +515,31 @@ class TaskService:
                 last_validation["score"] = min(
                     float(last_validation.get("score") or 1.0), float(det["score"])
                 )
+            # Testes falhos sempre forçam ciclo de correção (mesmo se o LLM aprovou)
+            if not tests_passed:
+                failed = [
+                    t
+                    for t in test_results
+                    if t.get("status") not in {"passed", "skipped"}
+                ]
+                last_validation["status"] = "rejected"
+                issues = list(last_validation.get("blocking_issues") or [])
+                issues.append(
+                    {
+                        "id": "TEST-FAIL",
+                        "severity": "blocking",
+                        "description": (
+                            "Suite determinística falhou: "
+                            + ", ".join(
+                                f"{t.get('command')}:{t.get('status')}" for t in failed
+                            )
+                        ),
+                    }
+                )
+                last_validation["blocking_issues"] = issues
+                last_validation["score"] = min(
+                    float(last_validation.get("score") or 0.0), 0.4
+                )
 
             self.repo.add_validation_round(
                 task_id=task.id,
@@ -428,6 +593,9 @@ class TaskService:
 
             if decision.action == "approve" and tests_passed:
                 break
+            if decision.action == "approve" and not tests_passed:
+                decision.action = "correct"
+                decision.reason = "tests_failed"
             if decision.action in {"stop_incomplete", "fail"}:
                 target = (
                     TaskState.FAILED
@@ -508,7 +676,12 @@ class TaskService:
         return task
 
     def _build_executor_prompt(
-        self, task: TaskRecord, validation: dict[str, Any], memories: list[dict]
+        self,
+        task: TaskRecord,
+        validation: dict[str, Any],
+        memories: list[dict],
+        *,
+        test_results: list[dict[str, Any]] | None = None,
     ) -> str:
         parts = [
             f"Tarefa: {task.prompt}",
@@ -522,6 +695,19 @@ class TaskService:
                     parts.append(f"- {issue.get('id')}: {issue.get('description')}")
                 else:
                     parts.append(f"- {issue}")
+        if test_results:
+            failed = [
+                t
+                for t in test_results
+                if t.get("status") not in {"passed", "skipped"}
+            ]
+            if failed:
+                parts.append("Testes que falharam (corrija até passarem):")
+                for t in failed:
+                    parts.append(
+                        f"- cmd={t.get('command')} status={t.get('status')} "
+                        f"exit={t.get('exit_code')}"
+                    )
         if memories:
             parts.append("Memória relevante:")
             for m in memories[:3]:

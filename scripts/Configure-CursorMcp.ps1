@@ -97,12 +97,13 @@ function Merge-CursorMcpFile {
         }
     }
 
-    if ($servers.Contains('multiagent-orchestrator') -and -not $Force) {
-        # Atualiza entry do orquestrador mesmo sem -Force (config conhecida)
-        $servers['multiagent-orchestrator'] = $ServerEntry
-    }
-    else {
-        $servers['multiagent-orchestrator'] = $ServerEntry
+    $mcpServerKey = 'orchestrator-ia'
+    $legacyMcpServerKey = 'multiagent-orchestrator'
+
+    # Atualiza entry do orquestrador (com ou sem -Force) e migra chave legada
+    $servers[$mcpServerKey] = $ServerEntry
+    if ($servers.Contains($legacyMcpServerKey)) {
+        $servers.Remove($legacyMcpServerKey)
     }
 
     $outObj = [ordered]@{ mcpServers = $servers }

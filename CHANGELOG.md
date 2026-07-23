@@ -2,8 +2,32 @@
 
 ## Unreleased
 
+## 0.4.4 — 2026-07-23
+
+### Added
+
+- MCP chat visibility: `orchestrator_run`/`orchestrator_status` expõem `selected_agents`, `selected_models`, `active_provider`, `active_model`; `message` inclui `provider=`/`model=`; regra Cursor obriga anúncio no chat a cada poll
+- Migration `0.4.3-to-0.4.4`
+
+### Fixed
+
+- Codex `models.json`: IDs alinhados a conta ChatGPT (`gpt-5.6-sol`); resolução de tier→modelo concreto; `sandbox_flags` do profile aplicados (`--sandbox workspace-write`, `--skip-git-repo-check`)
+- `CliExecutor` usa `stdin=DEVNULL` (evita `codex exec` ficar lendo stdin vazio)
+- Repair loop: falha de spawn/CLI do executor não aborta mais em `FAILED` na 1ª iteração — entra em `CORRECTING` (com fallback de executor) até `maximum_iterations`
+- Repair loop: testes determinísticos falhos forçam `correct` mesmo se o validator LLM aprovar; issues `TEST-FAIL` vão no prompt do corrector
+- Concorrência: `TimeoutError` do WriteLock e double-start MCP **não** marcam a tarefa em andamento como `FAILED`
+- CLI adapters usam path absoluto do `detect()` (mitiga WinError 2 / PATHEXT no processo MCP)
+- `CliExecutor`: `FileNotFoundError` vira exit 127 em vez de derrubar o workflow
+- Acceptance criteria: meta-instruções (`IGNORAR`/`ignore`/`evitar` … função soma) não disparam mais o demo `soma_module`
+- Acceptance criteria: auditorias (`complex_analysis`/`security_review`/`architecture`) mantêm ACs de evidência mesmo quando o prompt menciona “testes”/“docs”
+- Acceptance criteria: tarefas não-auditoria sempre incluem `workspace_changes` (antes, keywords test/docs omitiam esse AC)
+- CLI: `orchestrator agents list` (e `ls`) aceito como alias de `orchestrator agents`
+- Teste de regressão Windows: `CliExecutor` resolve `.CMD` via `shutil.which` (PATHEXT / WinError 2)
+- Fingerprint MCP: `code_fingerprint` reporta o hash **carregado no processo** (não só o disco); `modules_stale` + warning em `orchestrator_health` quando o disco avançou sem reload
+
 ### Changed
 
+- Nome do servidor MCP Cursor: `multiagent-orchestrator` → **`orchestrator-ia`** (install/configure migra `mcp.json` e remove a chave legada; arquivo de rule `multiagent-orchestrator.mdc` e path de cache inalterados)
 - Instalação npm/docs passam a usar `#latest` (tag git móvel de release); `github:...@latest` não é suportado pelo npm
 - Política de segurança GitHub em `.github/SECURITY.md`; `docs/security.md` atualizado (Orquestrador IA Multiagente)
 - Licença do projeto alterada para **MIT** (uso comercial e não comercial por qualquer pessoa)
