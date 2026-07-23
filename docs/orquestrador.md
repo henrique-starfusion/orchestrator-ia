@@ -415,7 +415,7 @@ Declaram **como** chamar cada CLI (mecânica). Modelo por tarefa fica em `config
 
 \* `verified: false` = flags extraídas de docs, não testadas neste host.
 
-Campos úteis do profile: `invoke.subcommand`, `invoke.prompt_flag` (`null` = prompt posicional), `invoke.sandbox_flags` (só se o usuário pedir), `timeout_default_s`, `output.json_flags`.
+Campos úteis do profile: `invoke.subcommand`, `invoke.prompt_flag` (`null` = prompt posicional), `invoke.sandbox_flags` (só se o usuário pedir), `timeout_default_s` (fallback para `orchestrator dispatch` e quando o request não traz timeout; no `orchestrator run` o orçamento vem de `policies.agent_timeout_by_role`), `output.json_flags`.
 
 ### Skill `call-agent` + `dispatch`
 
@@ -455,9 +455,17 @@ Divisão de responsabilidade:
 - Limite de repetir o mesmo issue: **2**
 - Score mínimo: **0.9**
 - Melhoria mínima: **0.03**
+- Duração máxima da tarefa: **3600s** (`maximum_duration_seconds`) — orçamento total do loop
+- Timeout por invocação de agente (não confundir com a duração da tarefa):
+  - `agent_timeout_default_s`: **1800**
+  - `agent_timeout_by_role`: planner **900**, executor/corrector **2400**, validator **1200**, tester **600**
+  - Cada CLI recebe `min(timeout_do_role, tempo_restante_da_tarefa)` (mínimo útil **60s**); abaixo disso a tarefa encerra com `maximum_duration_seconds`
+  - O `TaskService` passa `timeout_s` no request; o profile `timeout_default_s` só é fallback se o request vier sem valor
 - Validação independente + determinística
 - Parallel read-only: permitido; parallel writes: **não**
 - Token economy ligada; `forbid_max_tier_for`: trivial/classify/docs
+
+Se o agente CLI estourar o timeout, o runtime emite `AGENT-TIMEOUT` e **não** conta issues `VAL-*` de workspace/evidence vazios no `same_issue_repeat_limit` naquela iteração (evita `INCOMPLETE` falso). Arquivos alterados no disco entram via `git status --porcelain` quando o CLI não reporta `changed_files`.
 
 ### `config/validation.json`
 

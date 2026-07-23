@@ -3,17 +3,27 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
 from typing import Any
 
 from orchestrator_runtime.agents import AgentRegistry
-from orchestrator_runtime.agents.base import AgentRequest
+from orchestrator_runtime.agents.base import AgentRequest, AgentResult
 from orchestrator_runtime.agents.process import CliExecutor
 from orchestrator_runtime.config import RuntimeConfig, load_config
 from orchestrator_runtime.documentation import DocumentationUpdater
 from orchestrator_runtime.errors import TaskNotFoundError
 from orchestrator_runtime.events import EventBus, EventType, RuntimeEvent
+from orchestrator_runtime.execution.git_workspace import (
+    GitBaseline,
+    capture_baseline,
+    changed_files_since,
+)
 from orchestrator_runtime.execution.locks import WriteLock
+from orchestrator_runtime.execution.timeouts import (
+    MIN_AGENT_TIMEOUT_S,
+    resolve_agent_timeout,
+)
 from orchestrator_runtime.manager_model import build_manager
 from orchestrator_runtime.memory.database import dumps
 from orchestrator_runtime.planning.analyzer import Planner
@@ -54,6 +64,8 @@ class TaskService:
         self.lock = WriteLock(
             config.orchestrator_root / "runtime" / "locks" / "workspace.write.lock"
         )
+        self._loop_started_monotonic: float | None = None
+        self._git_baseline: GitBaseline = GitBaseline()
 
     def create_task(
         self,
@@ -217,6 +229,9 @@ class TaskService:
         return task
 
     async def _execute_loop(self, task: TaskRecord) -> TaskRecord:
+        self._loop_started_monotonic = time.monotonic()
+        self._git_baseline = capture_baseline(self.config.project_path)
+
         # RECEIVED -> ANALYZING
         if task.status == TaskState.RECEIVED:
             self.repo.transition(task, TaskState.ANALYZING, reason="start analysis")
@@ -295,6 +310,23 @@ class TaskService:
             task = self.get(task.id)
             if task.cancel_requested:
                 return self.cancel(task.id)
+
+            remaining = self._remaining_duration_s(task)
+            if remaining < MIN_AGENT_TIMEOUT_S:
+                self.repo.transition(
+                    task,
+                    TaskState.INCOMPLETE,
+                    reason="maximum_duration_seconds",
+                    error=(
+                        f"Orçamento de tempo esgotado "
+                        f"(restante={remaining}s < {MIN_AGENT_TIMEOUT_S}s)"
+                    ),
+                )
+                self.bus.emit(
+                    RuntimeEvent(task_id=task.id, type=EventType.TASK_INCOMPLETE)
+                )
+                self._persist_episode(task, success=False)
+                return task
 
             if task.iteration >= task.constraints.maximum_iterations:
                 self.repo.transition(
@@ -450,6 +482,7 @@ class TaskService:
             changed_files = list(
                 dict.fromkeys(changed_files + exec_result.changed_files)
             )
+            agent_timed_out = bool(exec_result.timed_out)
 
             # TESTING
             task = self.get(task.id)
@@ -541,6 +574,26 @@ class TaskService:
                     float(last_validation.get("score") or 0.0), 0.4
                 )
 
+            if agent_timed_out:
+                last_validation["status"] = "rejected"
+                timeout_issues = list(last_validation.get("blocking_issues") or [])
+                timeout_issues.insert(
+                    0,
+                    {
+                        "id": "AGENT-TIMEOUT",
+                        "severity": "blocking",
+                        "description": (
+                            f"{role}/{plan_roles.executor} atingiu timeout "
+                            f"({exec_result.duration_s:.0f}s). Retome a partir dos "
+                            f"arquivos já no disco; não reinvente o inventário."
+                        ),
+                    },
+                )
+                last_validation["blocking_issues"] = timeout_issues
+                last_validation["score"] = min(
+                    float(last_validation.get("score") or 0.0), 0.2
+                )
+
             self.repo.add_validation_round(
                 task_id=task.id,
                 iteration=task.iteration,
@@ -557,6 +610,10 @@ class TaskService:
                     severity="blocking",
                     description=desc or "",
                 )
+                # Timeout: não contar VAL-* de workspace/evidence vazios no
+                # same_issue_repeat (evita INCOMPLETE falso por entrega "vazia").
+                if agent_timed_out and self._is_empty_delivery_issue(issue):
+                    continue
                 issue_counts[iid] = issue_counts.get(iid, 0) + 1
 
             task.last_score = float(last_validation.get("score") or 0)
@@ -695,6 +752,15 @@ class TaskService:
                     parts.append(f"- {issue.get('id')}: {issue.get('description')}")
                 else:
                     parts.append(f"- {issue}")
+            if any(
+                isinstance(i, dict) and i.get("id") == "AGENT-TIMEOUT"
+                for i in validation["blocking_issues"]
+            ):
+                parts.append(
+                    "Atenção: a iteração anterior estourou timeout. "
+                    "Inspecione o disco (git status) e continue o trabalho; "
+                    "não recomece do zero."
+                )
         if test_results:
             failed = [
                 t
@@ -733,6 +799,51 @@ class TaskService:
             f"Validação determinística: {dumps(det)}\n"
         )
 
+    def _remaining_duration_s(self, task: TaskRecord) -> int:
+        started = self._loop_started_monotonic
+        if started is None:
+            return int(task.constraints.maximum_duration_seconds)
+        elapsed = time.monotonic() - started
+        return max(0, int(task.constraints.maximum_duration_seconds - elapsed))
+
+    def _resolve_agent_timeout(self, role: str, task: TaskRecord) -> int:
+        return resolve_agent_timeout(
+            role,
+            remaining_s=self._remaining_duration_s(task),
+            by_role=self.config.limits.agent_timeout_by_role,
+            default_s=self.config.limits.agent_timeout_default_s,
+        )
+
+    @staticmethod
+    def _is_empty_delivery_issue(issue: Any) -> bool:
+        """VAL de workspace/evidence vazio — não deve acelerar same_issue após timeout."""
+        if not isinstance(issue, dict):
+            return False
+        if issue.get("id") == "AGENT-TIMEOUT":
+            return False
+        kind = str(issue.get("kind") or "").lower()
+        if kind in {"workspace_changes", "evidence"}:
+            return True
+        desc = str(issue.get("description") or "").lower()
+        markers = (
+            "workspace_changes",
+            "entregável",
+            "entregavel",
+            "arquivos vazio",
+            "diff/arquivos vazio",
+            "nenhum entregável",
+            "changed_files",
+        )
+        return any(m in desc for m in markers)
+
+    def _enrich_changed_files(self, result: AgentResult) -> AgentResult:
+        if result.changed_files:
+            return result
+        from_git = changed_files_since(self.config.project_path, self._git_baseline)
+        if from_git:
+            result.changed_files = list(from_git)
+        return result
+
     async def _run_agent(
         self, agent_id: str, role: str, prompt: str, task: TaskRecord
     ):
@@ -750,6 +861,13 @@ class TaskService:
         if adapter is None or not adapter.detect().available:
             raise RuntimeError(f"Agente indisponivel para papel {role}: {agent_id}")
 
+        timeout_s = self._resolve_agent_timeout(role, task)
+        if timeout_s < MIN_AGENT_TIMEOUT_S:
+            raise RuntimeError(
+                f"Orçamento de tempo insuficiente para {role} "
+                f"(timeout_s={timeout_s})"
+            )
+
         model, model_flag = self.router.resolve_model(agent_id, task.task_type)
         self.bus.emit(
             RuntimeEvent(
@@ -757,7 +875,7 @@ class TaskService:
                 type=EventType.AGENT_STARTED,
                 role=role,
                 agent=agent_id,
-                data={"model": model},
+                data={"model": model, "timeout_s": timeout_s},
             )
         )
         request = AgentRequest(
@@ -766,9 +884,10 @@ class TaskService:
             model=model,
             model_flag=model_flag,
             cwd=str(self.config.project_path),
-            timeout_s=min(600, task.constraints.maximum_duration_seconds),
+            timeout_s=timeout_s,
         )
         result = await adapter.run(request)
+        result = self._enrich_changed_files(result)
         self.repo.add_agent_run(
             task_id=task.id,
             role=role,
@@ -803,7 +922,12 @@ class TaskService:
                 type=EventType.AGENT_COMPLETED,
                 role=role,
                 agent=agent_id,
-                data={"status": result.status, "exit_code": result.exit_code},
+                data={
+                    "status": result.status,
+                    "exit_code": result.exit_code,
+                    "timed_out": result.timed_out,
+                    "timeout_s": timeout_s,
+                },
             )
         )
         return result

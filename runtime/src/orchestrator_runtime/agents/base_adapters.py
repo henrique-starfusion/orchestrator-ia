@@ -94,7 +94,12 @@ class ProfileCliAdapter(AgentAdapter):
         if status.path and command:
             command = [status.path, *command[1:]]
         started = datetime.now(timezone.utc).isoformat()
-        timeout = int(self.profile.get("timeout_default_s") or request.timeout_s)
+        # Request é autoridade (TaskService já aplicou policies + remaining budget).
+        # Profile só entra se o request não trouxer valor útil.
+        if request.timeout_s and int(request.timeout_s) > 0:
+            timeout = int(request.timeout_s)
+        else:
+            timeout = int(self.profile.get("timeout_default_s") or 1800)
         result = self.executor.run(
             command,
             cwd=Path(request.cwd),

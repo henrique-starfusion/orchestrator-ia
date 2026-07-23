@@ -13,6 +13,6 @@
     "json_flags": ["--json"]
   },
   "exit_codes": { "success": 0 },
-  "timeout_default_s": 600,
+  "timeout_default_s": 2400,
   "notes": "codex exec = modo nao-interativo; prompt posicional. model_flag -m vem de config/models.json."
 }

@@ -16,6 +16,16 @@ class RuntimeLimits(BaseModel):
     minimum_validation_score: float = 0.9
     minimum_score_improvement: float = 0.03
     maximum_duration_seconds: int = 3600
+    agent_timeout_default_s: int = 1800
+    agent_timeout_by_role: dict[str, int] = Field(
+        default_factory=lambda: {
+            "planner": 900,
+            "executor": 2400,
+            "corrector": 2400,
+            "validator": 1200,
+            "tester": 600,
+        }
+    )
     require_independent_validation: bool = True
     require_deterministic_validation: bool = True
     require_documentation_review: bool = True
@@ -131,6 +141,21 @@ def load_config(
     policies = _load_json(orch / "config" / "policies.json")
     models = _load_json(orch / "config" / "models.json")
     manager_raw = _load_json(orch / "config" / "manager_model.json")
+    default_by_role = {
+        "planner": 900,
+        "executor": 2400,
+        "corrector": 2400,
+        "validator": 1200,
+        "tester": 600,
+    }
+    raw_by_role = policies.get("agent_timeout_by_role") or {}
+    by_role: dict[str, int] = dict(default_by_role)
+    if isinstance(raw_by_role, dict):
+        for key, value in raw_by_role.items():
+            try:
+                by_role[str(key)] = int(value)
+            except (TypeError, ValueError):
+                continue
     limits = RuntimeLimits(
         maximum_iterations=int(policies.get("maximum_iterations", 3)),
         same_issue_repeat_limit=int(policies.get("same_issue_repeat_limit", 2)),
@@ -139,6 +164,10 @@ def load_config(
         maximum_duration_seconds=int(
             policies.get("maximum_duration_seconds", 3600)
         ),
+        agent_timeout_default_s=int(
+            policies.get("agent_timeout_default_s", 1800)
+        ),
+        agent_timeout_by_role=by_role,
         require_independent_validation=bool(
             policies.get("require_independent_validation", True)
         ),

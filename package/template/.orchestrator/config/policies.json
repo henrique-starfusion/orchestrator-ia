@@ -4,6 +4,14 @@
   "minimum_validation_score": 0.9,
   "minimum_score_improvement": 0.03,
   "maximum_duration_seconds": 3600,
+  "agent_timeout_default_s": 1800,
+  "agent_timeout_by_role": {
+    "planner": 900,
+    "executor": 2400,
+    "corrector": 2400,
+    "validator": 1200,
+    "tester": 600
+  },
   "require_independent_validation": true,
   "require_deterministic_validation": true,
   "require_documentation_review": true,
