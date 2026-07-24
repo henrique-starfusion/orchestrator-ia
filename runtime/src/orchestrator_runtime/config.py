@@ -24,6 +24,7 @@ class RuntimeLimits(BaseModel):
             "corrector": 2400,
             "validator": 1200,
             "tester": 600,
+            "skill_selector": 120,
         }
     )
     require_independent_validation: bool = True
@@ -32,6 +33,10 @@ class RuntimeLimits(BaseModel):
     allow_parallel_read_only_analysis: bool = True
     allow_parallel_workspace_writes: bool = False
     caveman_enabled: bool = True
+    skill_selection_enabled: bool = True
+    skill_selection_max_skills: int = 5
+    skill_selection_timeout_s: int = 120
+    skill_selection_include_user_global: bool = True
 
 
 class ManagerModelConfig(BaseModel):
@@ -123,6 +128,27 @@ def resolve_default_workspace(explicit: Path | str | None = None) -> Path:
     return cwd
 
 
+def _skill_selection_limits(policies: dict[str, Any]) -> dict[str, Any]:
+    """Extract skill_selection overrides from policies.json (0.4.13)."""
+    ss = policies.get("skill_selection") or {}
+    out: dict[str, Any] = {}
+    if "enabled" in ss:
+        out["skill_selection_enabled"] = bool(ss["enabled"])
+    if "max_skills" in ss:
+        try:
+            out["skill_selection_max_skills"] = int(ss["max_skills"])
+        except (TypeError, ValueError):
+            pass
+    if "timeout_s" in ss:
+        try:
+            out["skill_selection_timeout_s"] = int(ss["timeout_s"])
+        except (TypeError, ValueError):
+            pass
+    if "include_user_global" in ss:
+        out["skill_selection_include_user_global"] = bool(ss["include_user_global"])
+    return out
+
+
 def load_config(
     project_path: Path | str | None = None,
     *,
@@ -147,6 +173,7 @@ def load_config(
         "corrector": 2400,
         "validator": 1200,
         "tester": 600,
+        "skill_selector": 120,
     }
     raw_by_role = policies.get("agent_timeout_by_role") or {}
     by_role: dict[str, int] = dict(default_by_role)
@@ -186,6 +213,7 @@ def load_config(
         caveman_enabled=bool(
             (policies.get("token_economy") or {}).get("caveman_enabled", True)
         ),
+        **_skill_selection_limits(policies),
     )
     manager = ManagerModelConfig(
         provider=manager_raw.get("provider", "rules"),

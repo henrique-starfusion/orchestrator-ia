@@ -40,6 +40,28 @@ A partir de 0.4.12, quatro ferramentas são **obrigatórias** em todos os prompt
 - Código, paths, JSON, logs e erros: nunca abreviar (regra mantida)
 - Config: `policies.json → token_economy.caveman_enabled` — pode ser sobrescrito por `false` para desabilitar
 
+## Seleção de skills por modelo leve (0.4.13+)
+
+Antes de chamar modelos pesados (planner/executor/validator), o runtime executa uma **fase de skill selection** com modelo tier `fast` (haiku/gpt-sol):
+
+1. **Discovery**: varre `{project}/.orchestrator/skills`, `.claude/skills`, `.codex/skills`, `.agents/skills` e equivalentes globais do usuário (`~/.agents/skills`, `~/.claude/skills`, `~/.codex/skills`). Apenas skills em disco — nenhum ID fabricado.
+2. **Seleção**: envia catálogo ao modelo leve com timeout 120s. Resposta JSON `{"skills":["id1","id2"]}` validada contra o catálogo — IDs inventados são descartados.
+3. **Fallback determinístico**: se o CLI falhar, heurística keyword-match seleciona skills cujos id+descrição contêm palavras do prompt.
+4. **Injeção**: lista selecionada injetada nos prompts de planner, executor e validator ("use APENAS estas").
+
+Config em `policies.json → skill_selection`:
+```json
+{
+  "enabled": true,
+  "model_tier": "fast",
+  "max_skills": 5,
+  "timeout_s": 120,
+  "include_user_global": true
+}
+```
+
+Role `skill_selector` mapeado para haiku/fast em `models.json → role_model_preferences.skill_selector`.
+
 ## Tiers (capacidade × custo)
 
 | Tier | Uso | Claude (alias) | Cursor (slug, fallback Task) |

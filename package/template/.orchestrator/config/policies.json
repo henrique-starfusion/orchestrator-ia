@@ -10,7 +10,8 @@
     "executor": 2400,
     "corrector": 2400,
     "validator": 1200,
-    "tester": 600
+    "tester": 600,
+    "skill_selector": 120
   },
   "require_independent_validation": true,
   "require_deterministic_validation": true,
@@ -20,6 +21,13 @@
   "documentation_policy": {
     "required_before_completion": true,
     "message": "Ao final de cada tarefa, revisar e atualizar a documentacao afetada antes da conclusao."
+  },
+  "skill_selection": {
+    "enabled": true,
+    "model_tier": "fast",
+    "max_skills": 5,
+    "timeout_s": 120,
+    "include_user_global": true
   },
   "token_economy": {
     "enabled": true,
@@ -42,7 +50,7 @@
       "superpowers": {
         "always_on": true,
         "entry_skill": "using-superpowers",
-        "instruction": "Invoque a skill `using-superpowers` antes de qualquer ação; aplique skills de processo relevantes (brainstorming, systematic-debugging, etc.)."
+        "instruction": "Invoque a skill `using-superpowers` antes de qualquer ação; use as skills listadas em 'Skills selecionadas' (0.4.13); não invoque skills fora dessa lista."
       },
       "caveman": {
         "always_on": true,

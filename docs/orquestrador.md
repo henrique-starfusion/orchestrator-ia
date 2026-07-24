@@ -237,11 +237,14 @@ Biblioteca compartilhada: `scripts/Orchestrator.Common.ps1`.
 
 ## 7. Skills do orquestrador (workspace)
 
-Registradas em `.orchestrator/skills/registry.json` e instaladas a partir do template:
+Registradas em `.orchestrator/skills/registry.json` e instaladas a partir do template.
+A partir de **0.4.13**, o runtime **descobre skills instaladas** (projeto + globais do usuário)
+e usa um **modelo leve (tier fast / haiku)** para escolher quais enviar aos agentes complexos —
+só IDs presentes em disco; inventados são descartados. Config: `policies.json → skill_selection`.
 
 | Skill | O que faz |
 |---|---|
-| `economize-tokens` | Roteamento cost-aware; caveman opcional |
+| `economize-tokens` | Roteamento cost-aware; caveman always-on (0.4.12+) |
 | `orchestrate` | Coordena o pipeline multiagente |
 | `analyze-project` | Inspeciona estrutura e convenções do repo |
 | `analyze-task` | Decompõe o pedido e define `task_class` |

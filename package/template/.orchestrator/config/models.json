@@ -324,6 +324,13 @@
         "max",
         "deep"
       ]
+    },
+    "skill_selector": {
+      "claude": ["haiku"],
+      "codex": ["fast"],
+      "gemini": ["fast"],
+      "opencode": ["fast"],
+      "kimi": ["fast"]
     }
   },
   "escalation": {

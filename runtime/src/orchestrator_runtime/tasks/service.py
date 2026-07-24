@@ -304,6 +304,9 @@ class TaskService:
             )
         )
 
+        # SKILL SELECTION (0.4.13): fast model picks installed skills before heavy models
+        await self._select_skills(task)
+
         self.repo.transition(task, TaskState.PLANNING, reason="planning")
         plan_roles = await self.manager.select_strategy(task, analysis)
         task.plan = self.planner.plan(task, analysis, plan_roles)
@@ -329,8 +332,11 @@ class TaskService:
         # Planner agent (Claude no MVP) — refina plano; falha nao aborta se dry artifacts ok
         try:
             _tooling = self._required_tooling_block()
+            _skills = self._skills_block(task)
             plan_prompt = (
                 f"{_tooling}\n" if _tooling else ""
+            ) + (
+                f"{_skills}\n" if _skills else ""
             ) + (
                 f"Refine o plano para: {task.prompt}\n"
                 f"Plano atual: {dumps(task.plan)}\n"
@@ -898,6 +904,97 @@ class TaskService:
             "NUNCA abreviar JSON, logs, erros, planos, docs ou código."
         )
 
+    def _pick_selector_agent(self) -> str | None:
+        """Return best available CLI agent for skill selection (fast-tier capable)."""
+        for name in ("claude", "codex", "opencode", "gemini", "kimi"):
+            adapter = self.registry.get(name)
+            if adapter and adapter.detect().available:
+                return name
+        return None
+
+    async def _select_skills(self, task: TaskRecord) -> None:
+        """Discover installed skills and select relevant ones with a fast model (0.4.13).
+
+        Result stored in task.analysis["selected_skills"]. Fails silently so
+        the workflow continues even when skill discovery or the CLI call fails.
+        """
+        if not self.config.limits.skill_selection_enabled:
+            return
+        from orchestrator_runtime.skills.discovery import discover_skills
+        from orchestrator_runtime.skills.selector import (
+            build_selector_prompt,
+            parse_and_validate,
+            select_skills_heuristic,
+        )
+        try:
+            catalog = discover_skills(
+                self.config.project_path,
+                include_user_global=self.config.limits.skill_selection_include_user_global,
+            )
+        except Exception:  # noqa: BLE001
+            return
+        if not catalog:
+            return
+        max_skills = self.config.limits.skill_selection_max_skills
+        selected: list[str] = []
+        selector_agent = self._pick_selector_agent()
+        if selector_agent:
+            sel_prompt = build_selector_prompt(task.prompt, catalog, max_skills)
+            try:
+                sel_result = await self._run_agent(
+                    selector_agent,
+                    "skill_selector",
+                    sel_prompt,
+                    task,
+                    timeout_cap_s=self.config.limits.skill_selection_timeout_s,
+                )
+                selected = parse_and_validate(sel_result.stdout, catalog, max_skills)
+            except Exception:  # noqa: BLE001
+                pass
+        if not selected:
+            selected = select_skills_heuristic(
+                catalog,
+                task.prompt,
+                task.task_type,
+                max_skills=max_skills,
+            )
+        if selected:
+            analysis_d = dict(task.analysis or {})
+            analysis_d["selected_skills"] = selected
+            task.analysis = analysis_d
+            self.repo.save(task)
+            self.bus.emit(
+                RuntimeEvent(
+                    task_id=task.id,
+                    type=EventType.ROUTING_DECIDED,
+                    data={"selected_skills": selected, "skill_count": len(selected)},
+                )
+            )
+
+    def _skills_block(self, task: TaskRecord) -> str:
+        """Render selected skills for injection into prompts (0.4.13)."""
+        analysis_d = task.analysis if isinstance(task.analysis, dict) else {}
+        selected: list[str] = list(analysis_d.get("selected_skills") or [])
+        if not selected:
+            return ""
+        from orchestrator_runtime.skills.discovery import discover_skills
+        try:
+            catalog = discover_skills(
+                self.config.project_path,
+                include_user_global=self.config.limits.skill_selection_include_user_global,
+            )
+        except Exception:  # noqa: BLE001
+            catalog = []
+        desc_map = {e.skill_id: e.description for e in catalog}
+        lines = []
+        for sid in selected:
+            desc = desc_map.get(sid, "")
+            lines.append(f"- {sid}: {desc}" if desc else f"- {sid}")
+        return (
+            "Skills selecionadas (instaladas; use APENAS estas, não invente outras):\n"
+            + "\n".join(lines)
+        )
+
     def _build_executor_prompt(
         self,
         task: TaskRecord,
@@ -950,6 +1047,9 @@ class TaskService:
         )
         if user_answer:
             parts.append(f"Decisão do usuário (já autorizada): {user_answer}")
+        skills = self._skills_block(task)
+        if skills:
+            parts.append(skills)
         tooling = self._required_tooling_block()
         if tooling:
             parts.append(tooling)
@@ -1020,6 +1120,8 @@ class TaskService:
     ) -> str:
         tooling = self._required_tooling_block()
         tooling_section = f"{tooling}\n" if tooling else ""
+        skills = self._skills_block(task)
+        skills_section = f"{skills}\n" if skills else ""
         return (
             "Valide a tarefa e responda APENAS JSON com status/score/blocking_issues.\n"
             f"Prompt original: {task.prompt}\n"
@@ -1028,6 +1130,7 @@ class TaskService:
             f"Testes: {dumps([{k: t.get(k) for k in ('command','status','exit_code')} for t in tests])}\n"
             f"Validação determinística: {dumps(det)}\n"
             f"{self._stack_hint()}\n"
+            f"{skills_section}"
             f"{tooling_section}"
         )
 

@@ -42,6 +42,8 @@ FEATURES: tuple[str, ...] = (
     "planner_refine_cap",
     # 0.4.12 — OpenWolf/Graphify/Superpowers/Caveman always-on nos prompts
     "always_on_agent_tooling",
+    # 0.4.13 — skill selection com modelo leve antes dos complexos
+    "skill_selection_fast_model",
 )
 
 
