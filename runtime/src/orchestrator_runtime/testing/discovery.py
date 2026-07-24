@@ -17,15 +17,28 @@ class DiscoveredTest:
 
 
 class TestDiscovery:
+    @staticmethod
+    def _is_python_project(project_path: Path) -> bool:
+        """Marcador Python real — sem varrer **/test_*.py (em repos Node isso
+        apanha node_modules e inventa pytest em projeto Angular; era o bug do
+        validator pedindo pytest no PrintBee). `tests/` só conta com .py dentro."""
+        if any(
+            (project_path / f).is_file()
+            for f in ("pyproject.toml", "setup.py", "setup.cfg", "requirements.txt")
+        ):
+            return True
+        tests_dir = project_path / "tests"
+        if tests_dir.is_dir() and any(tests_dir.rglob("*.py")):
+            return True
+        return any(project_path.glob("test_*.py"))
+
     def discover(self, project_path: Path) -> list[DiscoveredTest]:
         found: list[DiscoveredTest] = []
         if (project_path / "package.json").is_file():
             found.append(
                 DiscoveredTest(["npm", "test"], "unit", "package.json")
             )
-        if (project_path / "pyproject.toml").is_file() or list(
-            project_path.glob("**/test_*.py")
-        ) or (project_path / "tests").is_dir():
+        if self._is_python_project(project_path):
             if which("pytest"):
                 found.append(
                     DiscoveredTest(["pytest", "-q"], "unit", "pytest")
@@ -55,6 +68,12 @@ class TestDiscovery:
             if "test:" in text:
                 found.append(DiscoveredTest(["make", "test"], "unit", "Makefile"))
         return found
+
+
+def stack_test_commands(project_path: Path) -> list[str]:
+    """Comandos de teste da stack detectada — para injetar nos prompts de
+    executor/validator e impedir harness inventado (pytest em Angular)."""
+    return [" ".join(t.command) for t in TestDiscovery().discover(project_path)]
 
 
 class TestRunner:

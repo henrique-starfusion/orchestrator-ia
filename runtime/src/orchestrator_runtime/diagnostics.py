@@ -13,6 +13,11 @@ _FINGERPRINT_FILES = (
     "mcp/tools.py",
     "execution/locks.py",
     "validation/deterministic.py",
+    # 0.4.11 — o grosso do comportamento do workflow vive aqui
+    "tasks/service.py",
+    "tasks/state_machine.py",
+    "testing/discovery.py",
+    "agents/process.py",
 )
 
 # Capabilities estáveis para o cliente IDE checar sem depender só de VERSION.
@@ -27,6 +32,14 @@ FEATURES: tuple[str, ...] = (
     "agent_empty_output_guard",
     "validator_infra_not_merit",
     "delegate_finalizes_task",
+    # 0.4.11 — transcrições PrintBee 2026-07-24
+    "requires_input_structured",
+    "impl_intent_overrides_analysis",
+    "stack_aware_test_harness",
+    "cancel_kills_children",
+    "blocked_by_lock_visible",
+    "timeout_no_output_rotation",
+    "planner_refine_cap",
 )
 
 

@@ -8,7 +8,7 @@
         },
         {
             "path": "template/.orchestrator/VERSION",
-            "sha256": "0fc23e16b8890add73b56d156b56dd07318a07ea6c0d5f2dbb3040261935207f"
+            "sha256": "07ce142af9edc6149ac02398590e3b03438b8ba179170bbab93716a3a9707d7b"
         },
         {
             "path": "template/.orchestrator/agents/capabilities.json",

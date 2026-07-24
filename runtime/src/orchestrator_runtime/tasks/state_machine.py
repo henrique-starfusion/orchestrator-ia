@@ -71,6 +71,8 @@ ALLOWED_TRANSITIONS: dict[TaskState, set[TaskState]] = {
         TaskState.CANCELLED,
         TaskState.FAILED,
         TaskState.INCOMPLETE,
+        # executor emitiu REQUIRES_INPUT estruturado — pausa sem queimar iteração
+        TaskState.WAITING_FOR_USER,
     },
     TaskState.TESTING: {
         TaskState.VALIDATING,
@@ -110,6 +112,8 @@ ALLOWED_TRANSITIONS: dict[TaskState, set[TaskState]] = {
         TaskState.EXECUTING,
         TaskState.CANCELLED,
         TaskState.INCOMPLETE,
+        # resume após resposta do usuário reentra o pipeline completo
+        TaskState.ANALYZING,
     },
     TaskState.COMPLETED: set(),
     TaskState.INCOMPLETE: set(),

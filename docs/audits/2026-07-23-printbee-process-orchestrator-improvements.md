@@ -69,6 +69,11 @@ artefatos locais.
 ### F7 (informativo) — MCP health stale 0.4.8 vs disco
 - O `health()` já detecta e avisa (`mcp/tools.py:230-235`, `modules_stale` + fingerprint). O caso "MCP reporta 0.4.8 com disco 0.4.9" é o processo MCP antigo vivo no Cursor — mitigação operacional: reload da janela/MCP após `orchestrator update` (mesma instrução da release 0.4.7). Nenhum patch necessário; comportamento correto.
 
+### F8 (P0) — suite `npm test` não-hermética sob o runtime: toda validação rejeitava com VAL-002/TEST-FAIL
+- **Evidência:** DB `.orchestrator/data/orchestrator.db` — execuções recentes da suite gravadas no blob de `test_results` mostram `Total: 26 | Passed: 25 | Failed: 1` com `Test-AgentProfiles FAIL` em todas as iterações das tasks 3f17d5095cc0, 987c44623b8d, d511b77505a0 e 7684b598dced; a mesma suite passa rodada interativamente.
+- **Causa:** `CliExecutor.run` (`agents/process.py:91`) exporta `ORCHESTRATOR_CHILD_AGENT=1` para TODO filho — inclusive o `npm test` do VALIDATING (`testing/discovery.py:87`, `allow_nested=True` pula o guard mas mantém a var). A suite herda a var; o golden de dispatch de `Test-AgentProfiles` chama `Invoke-RoutedAgent.ps1`, cujo guard anti-recursão (`scripts/Invoke-RoutedAgent.ps1:24`) lança `[ERRO] ORCHESTRATOR_CHILD_AGENT presente`. Resultado: **toda task validada pelo runtime falhava `npm test`** → VAL-002 + TEST-FAIL em série, independente do mérito. `Test-DispatchMonitoring` só passa porque limpa a var localmente (`tests/Test-DispatchMonitoring.ps1:66`); o pytest teve o mesmo bug, corrigido via `runtime/tests/conftest.py:16` (`monkeypatch.delenv`).
+- **Patch (0.4.10):** `tests/Run-AllTests.ps1` limpa `$env:ORCHESTRATOR_CHILD_AGENT` no início da suite (mesmo padrão do conftest do pytest). Um ponto, cobre todos os testes atuais e futuros.
+
 ## 4. Priorização
 
 | Prioridade | Achado | Status |
@@ -77,6 +82,7 @@ artefatos locais.
 | P0 | F2 AGENT-EMPTY-OUTPUT | **Implementado 0.4.10** |
 | P0 | F3 validator infra ≠ mérito + parse robusto | **Implementado 0.4.10** |
 | P0 | F4 delegate órfão RECEIVED | **Implementado 0.4.10** |
+| P0 | F8 suite hermética (`ORCHESTRATOR_CHILD_AGENT`) | **Implementado 0.4.10** |
 | P1 | F5 orçamento de duração por perfil | Recomendado (decisão de política) |
 | P1 | F6 teto do artefato de stdout | Recomendado (patch trivial futuro) |
 | — | F7 MCP stale | Já coberto por fingerprint/health |
@@ -89,6 +95,7 @@ Código:
 - `runtime/src/orchestrator_runtime/tasks/service.py` — `empty_output` guard, `_reject_iteration_infra`, `_validator_infra_failure`, `_next_validator_fallback`
 - `runtime/src/orchestrator_runtime/tasks/state_machine.py` — RECEIVED→{COMPLETED, INCOMPLETE} (delegate)
 - `runtime/src/orchestrator_runtime/mcp/tools.py` — `delegate()` finaliza a task
+- `tests/Run-AllTests.ps1` — limpa `ORCHESTRATOR_CHILD_AGENT` no início da suite (F8)
 
 Testes novos/ajustados (verificação estática nesta sessão; execução pendente):
 - `test_git_changed_files.py::test_git_hang_returns_unavailable_baseline`

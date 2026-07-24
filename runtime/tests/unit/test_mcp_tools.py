@@ -135,7 +135,7 @@ def test_mcp_message(tools):
     service.repo.transition(task, TaskState.PLANNING, reason="t")
     service.repo.transition(task, TaskState.WAITING_FOR_USER, reason="ask")
     out = tools.message({"task_id": task.id, "message": "proceed"})
-    assert out["status"] == "PLANNING"
+    assert out["status"] == "RESUMING"
 
 
 def test_mcp_resources(tools):

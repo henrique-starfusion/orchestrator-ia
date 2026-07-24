@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## 0.4.11 - 2026-07-24
+
+Auditoria das transcrições reais PrintBee (Cursor 2026-07-24) -> correções P0 do runtime
+(`docs/audits/2026-07-24-printbee-transcripts-orchestrator-fixes.md`).
+
+### Fixed
+
+- Executor que pergunta em vez de implementar: prompt proíbe perguntas abertas quando o objetivo já define o escopo; se genuinamente bloqueado, emite linha estruturada `REQUIRES_INPUT: {"question": ..., "options": [...]}` — runtime pausa em WAITING_FOR_USER SEM queimar a iteração (pergunta/opções expostas em `orchestrator_status`); pergunta repetida após resposta vira `AGENT-REQUIRES-INPUT` (infra) com rotação de executor e stop por `same_issue_repeat_limit`
+- Classificação: pedido de implementação que também cita "analisar" não vira mais `complex_analysis` com ACs de auditoria — verbo de implementação (implementar/criar/corrigir/mudar/alterar/ajustar/fix...) vence a keyword de análise; negações ("não criar X") continuam ignoradas
+- Refino de plano pelo planner (advisory — o plano determinístico já existe) com teto duro de 300s; `SELECTING_AGENTS` não fica mais preso 15 min no fable
+- Harness por stack: descoberta de pytest exige marcador Python real (pyproject/setup/requirements ou `.py` em `tests/`); fim do `**/test_*.py` que varria `node_modules` e inventava pytest em projeto Angular; prompts de executor e validator recebem os comandos de teste detectados ("use SOMENTE estes")
+- Cancel propaga kill para os CLIs filhos ativos (`CliExecutor.kill_active`); Codex órfão não segue rodando após cancelamento
+- Task barrada pelo `workspace.write.lock` grava `error = "blocked_by_lock: ..."` (visível em status/list) em vez de ficar RECEIVED muda; o erro é limpo quando a task finalmente executa
+- Timeout do executor sem NENHUM arquivo alterado (padrão Codex/PowerShell no Windows) rejeita como infra `AGENT-TIMEOUT-NO-OUTPUT` com rotação de executor, em vez de mandar "continue do disco" vazio; prompt no Windows orienta evitar heredoc/quoting PowerShell (preferir tools de escrita/`python -c`/arquivo temp)
+- `orchestrator_message`: não transiciona mais para PLANNING (transição que quebrava o resume); resume reentra o pipeline via WAITING_FOR_USER -> ANALYZING preservando resposta do usuário na análise
+
+### Added
+
+- `orchestrator_run` avisa (`warnings: ["mcp_modules_stale"]` + mensagem) quando o processo MCP está stale vs disco
+- Fingerprint de stale agora cobre `tasks/service.py`, `tasks/state_machine.py`, `testing/discovery.py`, `agents/process.py`; features novas: `requires_input_structured`, `impl_intent_overrides_analysis`, `stack_aware_test_harness`, `cancel_kills_children`, `blocked_by_lock_visible`, `timeout_no_output_rotation`, `planner_refine_cap`
+- Migration `0.4.10-to-0.4.11`
+- Testes `runtime/tests/unit/test_transcript_p0_fixes.py` (17 casos: classificação, requires_input pause/resume/repeat, discovery Node vs Python, stack hint nos prompts, timeout sem output, lock visível, cancel-kill, teto do planner)
+
 ## 0.4.10 - 2026-07-23
 
 Auditoria do processo PrintBee -> correcoes de confiabilidade do runtime
@@ -14,6 +37,7 @@ Auditoria do processo PrintBee -> correcoes de confiabilidade do runtime
 - `LlmReviewValidator.parse`: extracao de JSON tolerante a logs com chaves soltas (`raw_decode` por candidato); so `approved`/`rejected` contam como veredito - `{"status":"validating"}` e ruido de CLI nao rejeitam mais por engano; `score: null` cai no score deterministico
 - Validator que falha por infra (ex.: sandbox Windows erro 740 "requer elevacao") nao conta como rejeicao de merito: runtime tenta um validator alternativo e, sem veredito, usa apenas a validacao deterministica marcada com `validator_infra_failure`
 - `orchestrator_delegate` finaliza a task criada (COMPLETED/INCOMPLETE/FAILED); fim dos orfaos RECEIVED acumulados no DB (state machine permite RECEIVED->COMPLETED/INCOMPLETE para single-role)
+- Suite `npm test` hermetica: `Run-AllTests.ps1` limpa `ORCHESTRATOR_CHILD_AGENT` herdada do runtime (VALIDATING roda testes via `CliExecutor`, que marca o filho com a var); sem isso o golden de dispatch do `Test-AgentProfiles` abortava por anti-recursao em `Invoke-RoutedAgent.ps1` - mesmo isolamento ja aplicado ao pytest em `runtime/tests/conftest.py`
 
 ### Added
 

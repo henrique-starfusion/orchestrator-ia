@@ -538,13 +538,28 @@ class OrchestratorMcpTools:
             f"{role}={selected_agents.get(role)}/{selected_models.get(role) or '?'}"
             for role in ("planner", "executor", "validator")
         )
+        stale_msg = ""
+        warnings: list[str] = []
+        try:
+            from orchestrator_runtime.diagnostics import code_fingerprint
+
+            if code_fingerprint().get("modules_stale"):
+                warnings.append("mcp_modules_stale")
+                stale_msg = (
+                    " [AVISO: runtime MCP em memória difere do disco — "
+                    "recarregue o servidor MCP/Cursor]"
+                )
+        except Exception:  # noqa: BLE001
+            pass
         return {
             "task_id": task.id,
             "status": "RECEIVED",
+            "warnings": warnings,
             "message": (
                 f"Orquestrador iniciado — task={task.id} | {agents_msg}. "
                 "Poll orchestrator_status; use orchestrator_events para detalhe; "
                 "só declare sucesso após orchestrator_result."
+                f"{stale_msg}"
             ),
             "selected_agents": selected_agents,
             "selected_models": selected_models,
@@ -784,9 +799,8 @@ class OrchestratorMcpTools:
         analysis["user_message"] = data.message
         task.analysis = analysis
         service.repo.save(task)
-        service.repo.transition(
-            task, TaskState.PLANNING, reason="user message received"
-        )
+        # Não transiciona aqui: o resume reentra o pipeline via
+        # WAITING_FOR_USER -> ANALYZING dentro do _execute_loop.
         import threading
 
         def _bg() -> None:
@@ -798,7 +812,7 @@ class OrchestratorMcpTools:
         threading.Thread(target=_bg, daemon=True).start()
         return {
             "task_id": task.id,
-            "status": "PLANNING",
+            "status": "RESUMING",
             "message": (
                 "mensagem aceita; workflow retomado — "
                 "poll orchestrator_status"
