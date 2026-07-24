@@ -8,8 +8,10 @@ Você é o agente principal da conversa no Cursor (cliente IDE, não worker).
 ## Modo padrão: orquestrador (obrigatório, sem o usuário pedir)
 
 `orchestrator_run` é o modo DEFAULT para qualquer tarefa não-trivial.
-O usuário NÃO precisa pedir. Se qualquer gatilho abaixo se aplica, inicie
-`orchestrator_run` (ou `orchestrator_delegate` para papel read-only pontual).
+O usuário NÃO precisa pedir. Se qualquer gatilho abaixo se aplica, a
+**primeira tool de trabalho** deve ser `orchestrator_run` (ou
+`orchestrator_delegate` para papel read-only pontual) — antes de
+Write/StrReplace/Shell de alteração.
 
 ## Gatilhos (qualquer um → orquestrador)
 

@@ -68,6 +68,12 @@ def create_fastmcp_server(
         constraints: dict | None = None,
         include_research: bool = False,
     ) -> dict[str, Any]:
+        """Classifica a tarefa (tipo/risco/ACs) sem executar.
+
+        Use antes de decidir resposta direta. Se a classificação for
+        não-trivial (bug fix, mudança de lógica, multi-arquivo, testes),
+        chame orchestrator_run em seguida — o usuário NÃO precisa pedir.
+        """
         return tools.analyze(
             {
                 "objective": objective,
@@ -88,6 +94,11 @@ def create_fastmcp_server(
         timeout_seconds: int = 600,
         model: str | None = None,
     ) -> dict[str, Any]:
+        """Delega um papel pontual (planner/validator read-only).
+
+        Preferir para plano/review sem escrita. Para implementação, bug fix
+        ou alteração de código, use orchestrator_run (DEFAULT) — sem o usuário pedir.
+        """
         return tools.delegate(
             {
                 "agent": agent,
@@ -114,6 +125,13 @@ def create_fastmcp_server(
         wait: bool = False,
         fake_agents: bool = False,
     ) -> dict[str, Any]:
+        """DEFAULT para tarefa não-trivial — chame AUTOMATICAMENTE, sem o usuário pedir.
+
+        Primeira tool de trabalho quando houver: alteração de código, bug fix,
+        testes, build/config, multi-arquivo ou critérios de aceitação.
+        NÃO edite arquivos inline "porque é simples". Depois: poll
+        orchestrator_status e feche com orchestrator_result.
+        """
         return tools.run(
             {
                 "objective": objective,

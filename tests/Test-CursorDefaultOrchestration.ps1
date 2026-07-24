@@ -37,6 +37,7 @@ try {
     Assert-Test -Condition ($liveRule.Contains('## Gatilhos')) -Message 'secao Gatilhos ausente'
     Assert-Test -Condition ($liveRule.Contains($exceptionsHeading)) -Message 'secao Excecoes ausente'
     Assert-Test -Condition ($liveRule.Contains($antiHeading)) -Message 'secao Anti-padroes ausente'
+    Assert-Test -Condition ($liveRule.Contains('primeira tool de trabalho')) -Message 'rule nao exige primeira tool = orchestrator_run'
     Assert-Test -Condition ($liveRule.Contains('bug fix NUNCA')) -Message 'bug fix ainda pode ser classificado como trivial'
     Assert-Test -Condition ($liveRule.Contains('arquivo:linha')) -Message 'rule nao exige evidencia para preferencias de projeto'
     Assert-Test -Condition ($liveRule -eq $templateRule) -Message 'rule Cursor live diverge do template do pacote'

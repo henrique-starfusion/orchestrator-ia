@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.4.9 — 2026-07-23
+
+### Fixed
+
+- Auto-dispatch: docstrings MCP de `orchestrator_run`/`delegate`/`analyze` declaram DEFAULT obrigatório (sem o usuário pedir)
+- Rule Cursor: primeira tool de trabalho = `orchestrator_run` antes de editar
+- Gap documentado em `docs/audits/2026-07-23-cursor-orchestrator-auto-dispatch-gap.md`
+
+### Added
+
+- Migration `0.4.8-to-0.4.9`
+
 ## 0.4.8 — 2026-07-23
 
 ### Fixed
@@ -11,6 +23,7 @@
 ### Added
 
 - Migration `0.4.7-to-0.4.8`
+
 ## 0.4.7 — 2026-07-23
 
 ### Fixed
