@@ -18,10 +18,16 @@ Canonical: `.orchestrator/config/models.json` + MCP `orchestrator-ia`.
 
 `Task` sem `model=` herda o modelo do pai. Proibido omitir `model=` nesse fallback.
 
-## Caveman
+## Always-on pelos modelos (0.4.12+)
 
-Opcional. Runtime desabilita por padrão (`caveman_enabled: false`).
-Não abreviar JSON, logs, erros, planos ou documentação.
+Runtime injeta em todos os prompts (quando `caveman_enabled: true`, default):
+
+1. **OpenWolf** — `.wolf/STATUS.md`, `cerebrum.md`, `anatomy.md`
+2. **Graphify** — `codegraph explore` se `.codegraph/` existir
+3. **Superpowers** — skill `using-superpowers` + skills de processo
+4. **Caveman** — intensidade `full` na prosa
+
+Não abreviar JSON, logs, erros, planos, documentação ou código.
 
 ## Modelos
 

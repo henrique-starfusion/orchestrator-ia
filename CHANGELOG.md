@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 0.4.12 - 2026-07-24
+
+Always-on tooling: OpenWolf, Graphify, Superpowers e Caveman obrigatórios em todos os prompts do orquestrador.
+
+### Changed
+
+- `policies.json` (live + template): `caveman_enabled` `false→true`, `caveman_default` `"off"→"full"`; novo bloco `required_agent_tooling` documenta as 4 ferramentas obrigatórias (openwolf, graphify, superpowers, caveman) com instrução e condição por ferramenta
+- `models.json`: novo bloco `required_agent_tooling` + `always_on_skills` declara obrigatoriedade e scope de cada ferramenta
+- `config.py`: `RuntimeLimits.caveman_enabled` default `False→True`; `load_config` default do token_economy `False→True` (sem override explícito no JSON, caveman fica ativo)
+- `tasks/service.py`: novo método `_required_tooling_block()` (retorna bloco non-empty quando `caveman_enabled=True`) injetado no início do prompt do planner, antes do bloco de escopo no executor/corrector, e ao final do prompt do validator
+- `docs/global-tools.md`: Caveman de "opcional/desabilitado" para "obrigatório por padrão (0.4.12+)"
+- `docs/model-routing.md`: seção Caveman atualizada — de opt-in para always-on
+
+### Added
+
+- Migration `0.4.11-to-0.4.12`
+- Testes `runtime/tests/unit/test_global_tooling_always_on.py`: caveman_enabled default True, prompts contêm OpenWolf/Graphify/Superpowers/Caveman quando config exige; tooling block ausente quando caveman_enabled=False
+
 ## 0.4.11 - 2026-07-24
 
 Auditoria das transcrições reais PrintBee (Cursor 2026-07-24) -> correções P0 do runtime

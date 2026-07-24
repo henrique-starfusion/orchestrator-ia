@@ -21,7 +21,7 @@ Instalador e mantenedor de um **ambiente multiagente genérico** em qualquer rep
 1. Instalar de forma **determinística** (PowerShell + templates), sem depender de IA para montar pastas.
 2. Manter a estrutura **por versão** (`update` incremental).
 3. Configurar **ferramentas globais** (MCPs, plugins, skills, CLIs) no perfil do usuário, reutilizáveis em vários projetos.
-4. Orientar **roteamento de modelos** (custo × capacidade) e **economia de tokens** (caveman opcional).
+4. Orientar **roteamento de modelos** (custo × capacidade) e **ferramentas obrigatórias** (OpenWolf, Graphify, Superpowers, Caveman — sempre ativas em 0.4.12+).
 5. Fornecer skills de orquestração (analisar → planejar → delegar → validar → aprender).
 
 ### Fluxo conceitual do ciclo multiagente

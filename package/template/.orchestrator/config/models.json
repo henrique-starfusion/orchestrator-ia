@@ -1,6 +1,6 @@
 {
   "version": "0.1.0",
-  "updated": "2026-07-19",
+  "updated": "2026-07-24",
   "principles": [
     "Preferir o modelo mais novo dentro do tier adequado; nunca o mais caro por padrao.",
     "Casar capacidade com a tarefa; escalar so se validacao falhar.",
@@ -24,39 +24,150 @@
     "fast": {
       "cost": 1,
       "capability": 2,
-      "use_for": ["trivial", "classify", "format", "short_fix", "status"]
+      "use_for": [
+        "trivial",
+        "classify",
+        "format",
+        "short_fix",
+        "status"
+      ]
     },
     "balanced": {
       "cost": 3,
       "capability": 4,
-      "use_for": ["docs", "documentation", "implementation", "refactor_simple", "code_review", "tests"]
+      "use_for": [
+        "docs",
+        "documentation",
+        "implementation",
+        "refactor_simple",
+        "code_review",
+        "tests"
+      ]
     },
     "deep": {
       "cost": 4,
       "capability": 5,
-      "use_for": ["architecture", "debugging_hard", "security_review", "complex_refactor"]
+      "use_for": [
+        "architecture",
+        "debugging_hard",
+        "security_review",
+        "complex_refactor"
+      ]
     },
     "max": {
       "cost": 5,
       "capability": 6,
-      "use_for": ["complex_analysis", "long_agentic", "orchestration_plan", "multi_repo_reasoning"]
+      "use_for": [
+        "complex_analysis",
+        "long_agentic",
+        "orchestration_plan",
+        "multi_repo_reasoning"
+      ]
     }
   },
   "task_classes": {
-    "trivial": { "tier": "fast", "examples": ["rename", "typo", "status check"] },
-    "classify": { "tier": "fast", "examples": ["triage issue", "label PR"] },
-    "docs": { "tier": "balanced", "examples": ["README", "changelog", "JSDoc"] },
-    "documentation": { "tier": "balanced", "examples": ["guides", "API docs"] },
-    "implementation": { "tier": "balanced", "examples": ["feature slice", "bugfix known"] },
-    "refactor_simple": { "tier": "balanced", "examples": ["extract function", "rename symbol"] },
-    "code_review": { "tier": "balanced", "examples": ["PR review", "diff review"] },
-    "tests": { "tier": "balanced", "examples": ["unit tests", "fix fixture"] },
-    "architecture": { "tier": "deep", "examples": ["module boundaries", "API design"] },
-    "debugging_hard": { "tier": "deep", "examples": ["heisenbug", "race", "perf root cause"] },
-    "security_review": { "tier": "deep", "examples": ["authz", "secrets", "injection"] },
-    "complex_analysis": { "tier": "max", "examples": ["cross-cutting diagnosis", "ambiguous failure"] },
-    "long_agentic": { "tier": "max", "examples": ["multi-step autonomy", "large migration"] },
-    "orchestration_plan": { "tier": "max", "examples": ["multi-agent plan", "wave planning"] }
+    "trivial": {
+      "tier": "fast",
+      "examples": [
+        "rename",
+        "typo",
+        "status check"
+      ]
+    },
+    "classify": {
+      "tier": "fast",
+      "examples": [
+        "triage issue",
+        "label PR"
+      ]
+    },
+    "docs": {
+      "tier": "balanced",
+      "examples": [
+        "README",
+        "changelog",
+        "JSDoc"
+      ]
+    },
+    "documentation": {
+      "tier": "balanced",
+      "examples": [
+        "guides",
+        "API docs"
+      ]
+    },
+    "implementation": {
+      "tier": "balanced",
+      "examples": [
+        "feature slice",
+        "bugfix known"
+      ]
+    },
+    "refactor_simple": {
+      "tier": "balanced",
+      "examples": [
+        "extract function",
+        "rename symbol"
+      ]
+    },
+    "code_review": {
+      "tier": "balanced",
+      "examples": [
+        "PR review",
+        "diff review"
+      ]
+    },
+    "tests": {
+      "tier": "balanced",
+      "examples": [
+        "unit tests",
+        "fix fixture"
+      ]
+    },
+    "architecture": {
+      "tier": "deep",
+      "examples": [
+        "module boundaries",
+        "API design"
+      ]
+    },
+    "debugging_hard": {
+      "tier": "deep",
+      "examples": [
+        "heisenbug",
+        "race",
+        "perf root cause"
+      ]
+    },
+    "security_review": {
+      "tier": "deep",
+      "examples": [
+        "authz",
+        "secrets",
+        "injection"
+      ]
+    },
+    "complex_analysis": {
+      "tier": "max",
+      "examples": [
+        "cross-cutting diagnosis",
+        "ambiguous failure"
+      ]
+    },
+    "long_agentic": {
+      "tier": "max",
+      "examples": [
+        "multi-step autonomy",
+        "large migration"
+      ]
+    },
+    "orchestration_plan": {
+      "tier": "max",
+      "examples": [
+        "multi-agent plan",
+        "wave planning"
+      ]
+    }
   },
   "clients": {
     "claude": {
@@ -205,13 +316,24 @@
   },
   "role_model_preferences": {
     "planner": {
-      "claude": ["fable", "opus"],
-      "cursor": ["max", "deep"]
+      "claude": [
+        "fable",
+        "opus"
+      ],
+      "cursor": [
+        "max",
+        "deep"
+      ]
     }
   },
   "escalation": {
     "on_validation_fail": "upgrade_one_tier",
-    "tier_order": ["fast", "balanced", "deep", "max"],
+    "tier_order": [
+      "fast",
+      "balanced",
+      "deep",
+      "max"
+    ],
     "max_escalations": 1,
     "never_downgrade_mid_critical_path": true
   },
@@ -222,5 +344,52 @@
     "4. Aplicar caveman (full) na comunicação do orquestrador/agentes.",
     "5. Invocar CLI com model_flag + modelo resolvido.",
     "6. Se validate-result falhar e allow escalate: subir um tier e repetir (máx. 1)."
-  ]
+  ],
+  "required_agent_tooling": {
+    "always_on": true,
+    "note": "Todas as ferramentas abaixo são obrigatórias em todos os prompts quando caveman_enabled=true (0.4.12+).",
+    "tools": [
+      "openwolf",
+      "graphify",
+      "superpowers",
+      "caveman"
+    ]
+  },
+  "always_on_skills": {
+    "openwolf": {
+      "entry": ".wolf/STATUS.md",
+      "also": [
+        ".wolf/cerebrum.md",
+        ".wolf/anatomy.md"
+      ],
+      "when": "sempre — antes de qualquer ação no projeto"
+    },
+    "graphify": {
+      "entry": "codegraph explore",
+      "when": "quando .codegraph/ existe — antes de ler arquivos para localizar símbolos"
+    },
+    "superpowers": {
+      "entry": "using-superpowers",
+      "process_skills": [
+        "brainstorming",
+        "systematic-debugging",
+        "writing-plans",
+        "verification-before-completion"
+      ],
+      "when": "sempre — antes de qualquer ação; skill de processo adequada antes de implementar"
+    },
+    "caveman": {
+      "intensity": "full",
+      "scope": "prosa",
+      "never_abbreviate": [
+        "JSON",
+        "logs",
+        "erros",
+        "planos",
+        "docs",
+        "código"
+      ],
+      "when": "sempre ativo"
+    }
+  }
 }

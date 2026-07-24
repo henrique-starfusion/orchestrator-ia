@@ -23,10 +23,32 @@
   },
   "token_economy": {
     "enabled": true,
-    "caveman_enabled": false,
-    "caveman_default": "off",
+    "caveman_enabled": true,
+    "caveman_default": "full",
     "model_routing": "config/models.json",
     "forbid_max_tier_for": ["trivial", "classify", "docs", "documentation"],
-    "require_task_class_before_call_agent": true
+    "require_task_class_before_call_agent": true,
+    "required_agent_tooling": {
+      "openwolf": {
+        "always_on": true,
+        "files": [".wolf/STATUS.md", ".wolf/cerebrum.md", ".wolf/anatomy.md"],
+        "instruction": "Leia .wolf/STATUS.md ANTES de qualquer ação; consulte .wolf/cerebrum.md (Do-Not-Repeat) antes de gerar código; use .wolf/anatomy.md como índice de arquivos."
+      },
+      "graphify": {
+        "always_on": true,
+        "condition": ".codegraph/ exists",
+        "instruction": "Se .codegraph/ existir, use `codegraph explore` para localizar símbolos antes de ler arquivos."
+      },
+      "superpowers": {
+        "always_on": true,
+        "entry_skill": "using-superpowers",
+        "instruction": "Invoque a skill `using-superpowers` antes de qualquer ação; aplique skills de processo relevantes (brainstorming, systematic-debugging, etc.)."
+      },
+      "caveman": {
+        "always_on": true,
+        "intensity": "full",
+        "instruction": "Prosa concisa sem artigos/enchimento. NUNCA abreviar JSON, logs, erros, planos, docs ou código."
+      }
+    }
   }
 }

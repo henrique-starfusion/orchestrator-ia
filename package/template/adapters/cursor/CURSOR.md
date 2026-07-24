@@ -29,5 +29,6 @@ Ao final de cada tarefa, revisar e atualizar a documentação afetada antes da c
 ## Token economy + models (legacy Task fallback only)
 
 - Rules: `.cursor/rules/` + `.orchestrator/config/models.json`.
-- Caveman is **off** by default for runtime/logs; optional for presentation replies.
+- Caveman is **on** by default (full) for agent prose; never abbreviate JSON/logs/errors/plans/docs/code.
+- OpenWolf, Graphify and Superpowers are always-on via runtime prompts (0.4.12+).
 - If you must use Task, always pass `model=` (never inherit parent).

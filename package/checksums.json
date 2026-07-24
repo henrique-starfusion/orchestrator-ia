@@ -8,7 +8,7 @@
         },
         {
             "path": "template/.orchestrator/VERSION",
-            "sha256": "07ce142af9edc6149ac02398590e3b03438b8ba179170bbab93716a3a9707d7b"
+            "sha256": "5e27e62c00873b2bdee3c7cefc43e1b4271ec121b20a298418214eb44ad2d54c"
         },
         {
             "path": "template/.orchestrator/agents/capabilities.json",
@@ -36,11 +36,11 @@
         },
         {
             "path": "template/.orchestrator/config/models.json",
-            "sha256": "c552a292627225d2ddd5b9ff810a5ced168db99c127b8550e89830b970c394bd"
+            "sha256": "80a17f7f8d59376eab793a9ea6f3eee00125044c218fecfe6916f7e507962f5d"
         },
         {
             "path": "template/.orchestrator/config/policies.json",
-            "sha256": "8bd44b718bae3acc7cad768ad1534da94cb5106f3c76668a727eff8179c3d806"
+            "sha256": "01f7b71fb86df989761d221d49c6748a605c6d25645bfdd0f9a0e2b27acea523"
         },
         {
             "path": "template/.orchestrator/config/routing.json",
@@ -212,7 +212,7 @@
         },
         {
             "path": "template/.orchestrator/skills/economize-tokens/SKILL.md",
-            "sha256": "7a0444b737479d07ece5e3f092ea3008d3c2fffaec995f88d065fe57b0ef7f86"
+            "sha256": "d7f21707ef34796713c9436623f7a9cff70aa28fee21f2f16dce050a769151ba"
         },
         {
             "path": "template/.orchestrator/skills/analyze-project/SKILL.md",
@@ -224,7 +224,7 @@
         },
         {
             "path": "template/.orchestrator/skills/call-agent/SKILL.md",
-            "sha256": "a181d8ac5a1317e60d2b1822a46a3ba30c8de2951f8a294370a22b79c9dbf48e"
+            "sha256": "b29cb0d450d9bddb777cf7e9d271794748312ec0c4b51339bbab0ab2cb1a9d84"
         },
         {
             "path": "template/.orchestrator/skills/correction-loop/SKILL.md",
@@ -236,7 +236,7 @@
         },
         {
             "path": "template/.orchestrator/skills/orchestrate/SKILL.md",
-            "sha256": "a71905429bbdfeabe261c7bd89113734dc32d1ea9259991d43bf9bbd5fe5923f"
+            "sha256": "9bcb14a4437515a484557ea65b3bc95e6bd287bcc44e595d7296ab3776fd6ec9"
         },
         {
             "path": "template/.orchestrator/skills/plan-task/SKILL.md",
@@ -252,7 +252,7 @@
         },
         {
             "path": "template/.orchestrator/skills/save-knowledge/SKILL.md",
-            "sha256": "c45906da0e0082dd667c1585c06d5150d5ef609b53d6d2c82bf0656050e80557"
+            "sha256": "c48a3b53382ff986cfc15b5d5aed57f3041179b0dbcf55bf3c2015ebb8aeeb7d"
         },
         {
             "path": "template/.orchestrator/skills/select-agents/SKILL.md",
@@ -260,7 +260,7 @@
         },
         {
             "path": "template/.orchestrator/skills/validate-result/SKILL.md",
-            "sha256": "c138a4b3809ed5722e359ceaafc9f384a04d756c3bfed6fcb69841cf6dee4a2f"
+            "sha256": "0981c144135ec80133b89a7e8f107552bd09cf7bb7d172950019241747757419"
         },
         {
             "path": "template/.orchestrator/tools/registry.json",
@@ -280,27 +280,27 @@
         },
         {
             "path": "template/.orchestrator/agents/profiles/claude.json",
-            "sha256": "788794fb1216135f23154ea3f546ec98073876e828f2a5bc92d378d46e89b5f1"
+            "sha256": "b49d32d02ff516e6f37d7a9677fca529293cd4b72dac7519c7e71af64d046bac"
         },
         {
             "path": "template/.orchestrator/agents/profiles/codex.json",
-            "sha256": "308b3846cd0adf8d925d49ea3842663ab80da24ed60f670b81425dad5511c022"
+            "sha256": "5201c7c9f411c1fb4741b2b4ffb57a6521f089856461ba81079add0607a28586"
         },
         {
             "path": "template/.orchestrator/agents/profiles/gemini.json",
-            "sha256": "af4e32c56a3cd85a68cce7e87bfec15812014d127c391e5881704134974b09c7"
+            "sha256": "9ec466a566b50ca4d1cb4fec04cb940f191ab7a8d2308f2812b841297306a3ef"
         },
         {
             "path": "template/.orchestrator/agents/profiles/opencode.json",
-            "sha256": "aebe381e59cc108cb0a899060b595e9606af2da3912feea157755ffada53c21c"
+            "sha256": "aa1f8530090d17413ee2b2fec43dd276ef68e40624120dcb88fe966950ea2b12"
         },
         {
             "path": "template/.orchestrator/agents/profiles/kimi.json",
-            "sha256": "8bee2e96c8047b6bcafa3dab3eb29528db48a41f560734b5e88cf76fdfc3e45c"
+            "sha256": "a38b59cd6f9560ea8d1c73364497c86d6e3cfc34c306ed03df242f6e4bbff08f"
         },
         {
             "path": "template/.orchestrator/agents/profiles/cursor.json",
-            "sha256": "1b11c8d8a34bd25d8dd855b942d69b0b5f1334ded1859b539fa80364dacb6f13"
+            "sha256": "480166ff83c69a07a123ff47950ac7e066d8cf1fdd641b0c6d1269fa2cf9573f"
         },
         {
             "path": "template/adapters/cursor/.cursor/rules/multiagent-orchestrator.mdc",

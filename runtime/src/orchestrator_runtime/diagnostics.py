@@ -40,6 +40,8 @@ FEATURES: tuple[str, ...] = (
     "blocked_by_lock_visible",
     "timeout_no_output_rotation",
     "planner_refine_cap",
+    # 0.4.12 — OpenWolf/Graphify/Superpowers/Caveman always-on nos prompts
+    "always_on_agent_tooling",
 )
 
 

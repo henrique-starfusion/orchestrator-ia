@@ -29,7 +29,7 @@ orchestrator init --global-tools
 orchestrator init --init-tools
 ```
 
-Caveman permanece opcional e está **desabilitado** por padrão no runtime.
+A partir de **0.4.12**, Caveman, OpenWolf, Graphify e Superpowers são **obrigatórios por padrão** — `caveman_enabled=true` em `policies.json`; o runtime injeta o bloco de ferramentas em todos os prompts de planner/executor/validator.
 
 Relatório: `.orchestrator/tools/global-status.json`
 

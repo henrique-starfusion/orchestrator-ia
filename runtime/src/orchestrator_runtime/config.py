@@ -31,7 +31,7 @@ class RuntimeLimits(BaseModel):
     require_documentation_review: bool = True
     allow_parallel_read_only_analysis: bool = True
     allow_parallel_workspace_writes: bool = False
-    caveman_enabled: bool = False
+    caveman_enabled: bool = True
 
 
 class ManagerModelConfig(BaseModel):
@@ -184,7 +184,7 @@ def load_config(
             policies.get("allow_parallel_workspace_writes", False)
         ),
         caveman_enabled=bool(
-            (policies.get("token_economy") or {}).get("caveman_enabled", False)
+            (policies.get("token_economy") or {}).get("caveman_enabled", True)
         ),
     )
     manager = ManagerModelConfig(

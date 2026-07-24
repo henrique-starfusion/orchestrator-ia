@@ -328,7 +328,10 @@ class TaskService:
 
         # Planner agent (Claude no MVP) — refina plano; falha nao aborta se dry artifacts ok
         try:
+            _tooling = self._required_tooling_block()
             plan_prompt = (
+                f"{_tooling}\n" if _tooling else ""
+            ) + (
                 f"Refine o plano para: {task.prompt}\n"
                 f"Plano atual: {dumps(task.plan)}\n"
                 "Responda com passos objetivos sem abreviação."
@@ -878,6 +881,23 @@ class TaskService:
         self._export_memory_markdown(task)
         return task
 
+    def _required_tooling_block(self) -> str:
+        """Bloco de ferramentas obrigatórias injetado em todos os prompts (0.4.12)."""
+        if not self.config.limits.caveman_enabled:
+            return ""
+        return (
+            "Ferramentas obrigatórias (always-on, 0.4.12):\n"
+            "- OpenWolf: leia .wolf/STATUS.md ANTES de qualquer ação; "
+            "consulte .wolf/cerebrum.md (Do-Not-Repeat) antes de gerar código; "
+            "use .wolf/anatomy.md como índice de arquivos.\n"
+            "- Graphify: se .codegraph/ existir, use `codegraph explore` "
+            "para localizar símbolos antes de ler arquivos.\n"
+            "- Superpowers: invoque a skill `using-superpowers` antes de qualquer ação; "
+            "aplique skills de processo relevantes (brainstorming, systematic-debugging, etc.).\n"
+            "- Caveman (full): prosa concisa sem artigos/enchimento. "
+            "NUNCA abreviar JSON, logs, erros, planos, docs ou código."
+        )
+
     def _build_executor_prompt(
         self,
         task: TaskRecord,
@@ -930,6 +950,9 @@ class TaskService:
         )
         if user_answer:
             parts.append(f"Decisão do usuário (já autorizada): {user_answer}")
+        tooling = self._required_tooling_block()
+        if tooling:
+            parts.append(tooling)
         parts.append(
             "Escopo: o objetivo acima já define o que fazer. NÃO faça perguntas "
             "abertas nem pare para pedir decisão de negócio — implemente o "
@@ -948,7 +971,8 @@ class TaskService:
                 "de arquivos do agente, `python -c` ou arquivo temporário."
             )
         parts.append(
-            "Não use abreviação caveman. Não declare sucesso sem evidências."
+            "Caveman full na prosa; NUNCA abreviar JSON/logs/erros/planos/docs/código. "
+            "Não declare sucesso sem evidências."
         )
         return "\n".join(parts)
 
@@ -994,6 +1018,8 @@ class TaskService:
         tests: list[dict],
         changed_files: list[str],
     ) -> str:
+        tooling = self._required_tooling_block()
+        tooling_section = f"{tooling}\n" if tooling else ""
         return (
             "Valide a tarefa e responda APENAS JSON com status/score/blocking_issues.\n"
             f"Prompt original: {task.prompt}\n"
@@ -1002,6 +1028,7 @@ class TaskService:
             f"Testes: {dumps([{k: t.get(k) for k in ('command','status','exit_code')} for t in tests])}\n"
             f"Validação determinística: {dumps(det)}\n"
             f"{self._stack_hint()}\n"
+            f"{tooling_section}"
         )
 
     def _remaining_duration_s(self, task: TaskRecord) -> int:
