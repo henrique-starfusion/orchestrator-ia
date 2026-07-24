@@ -644,6 +644,16 @@ class OrchestratorMcpTools:
             message_parts.append(str(last_data.get("summary")))
         if task.error:
             message_parts.append(f"erro={task.error}")
+        session_digest = (
+            task.analysis.get("session_digest")
+            if isinstance(task.analysis, dict)
+            else None
+        )
+        if terminal and session_digest:
+            message_parts.append(
+                "terminal — retenha só o session_digest + learning_path "
+                "(descarte histórico de polls)"
+            )
         if not terminal:
             message_parts.append("poll orchestrator_status / orchestrator_events")
 
@@ -665,6 +675,7 @@ class OrchestratorMcpTools:
             "updated_at": task.updated_at,
             "requires_input": requires_input,
             "error": task.error,
+            "session_digest": session_digest,
             "message": " | ".join(message_parts),
             "next_poll_after_seconds": 0 if terminal else 5,
             "acceptance_criteria": [
@@ -710,19 +721,40 @@ class OrchestratorMcpTools:
         service = self._service()
         task = service.get(data.task_id)
         arts = service.artifacts(data.task_id)
+        analysis = task.analysis if isinstance(task.analysis, dict) else {}
+        digest = analysis.get("session_digest")
+        learning_saved = bool(digest)
+        learning_path = f".orchestrator/memory/learnings/{task.id}.md"
         return {
             "task_id": task.id,
             "status": task.status.value,
-            "summary": (task.analysis or {}).get("summary") or task.prompt[:240],
+            "summary": analysis.get("summary") or task.prompt[:240],
+            # 0.4.14 — digest compacto: o cliente IDE deve DESCARTAR o histórico
+            # verboso de polls e reter apenas este digest + os paths de memória.
+            "session_digest": digest,
+            "context_compaction": {
+                "keep": ["session_digest", "learning_path"],
+                "discard": "verbose poll/events history after terminal",
+                "learning_path": learning_path,
+            },
             "plan": task.plan,
             "agents": (task.plan or {}).get("roles") or {},
             "changes": [a for a in arts if a.get("kind") == "agent_output"],
             "tests": "see runtime DB test_runs",
             "validation": {"last_score": task.last_score},
             "documentation": task.documentation_review,
-            "memory": {"episode_saved": task.status.value in {"COMPLETED", "INCOMPLETE", "FAILED"}},
+            "memory": {
+                "episode_saved": task.status.value
+                in {"COMPLETED", "INCOMPLETE", "FAILED", "CANCELLED"},
+                "learning_saved": learning_saved,
+                "learning_path": learning_path if learning_saved else None,
+            },
             "remaining_issues": [],
             "error": task.error,
+            "message": (
+                "Tarefa terminal. Retenha apenas session_digest + learning_path; "
+                "descarte o histórico verboso de polls/eventos."
+            ),
         }
 
     def cancel(self, payload: dict[str, Any]) -> dict[str, Any]:

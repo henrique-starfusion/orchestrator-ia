@@ -8,7 +8,7 @@
         },
         {
             "path": "template/.orchestrator/VERSION",
-            "sha256": "083d107c19ab49997a5b099f3073fbc018285e191539534e48c8b6752db9ea69"
+            "sha256": "8376ab5670060d06bd1041a2a75f8ed9f68afa3ef66d5ff9c152d950b0512880"
         },
         {
             "path": "template/.orchestrator/agents/capabilities.json",
@@ -40,7 +40,7 @@
         },
         {
             "path": "template/.orchestrator/config/policies.json",
-            "sha256": "67afbdf7051fe4b4b423a3bc3fd106f79dfd166e2146f0706dc472b51d79ad3e"
+            "sha256": "5a94f3459c8a8d036e3572c489a8c558d56c60cb7d52ba8516dafa5a0d2d072f"
         },
         {
             "path": "template/.orchestrator/config/routing.json",
@@ -304,7 +304,7 @@
         },
         {
             "path": "template/adapters/cursor/.cursor/rules/multiagent-orchestrator.mdc",
-            "sha256": "c04466f2deb442617bf7ef52555b3bc68dec274aa1d4464eeefda99544a30d4d"
+            "sha256": "557dbb5712d47fe0356930e8565ba84b35fbee20aefd6c5e7e0e2ac2fa450e57"
         }
     ]
 }

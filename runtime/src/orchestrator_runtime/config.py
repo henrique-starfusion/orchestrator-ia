@@ -37,6 +37,12 @@ class RuntimeLimits(BaseModel):
     skill_selection_max_skills: int = 5
     skill_selection_timeout_s: int = 120
     skill_selection_include_user_global: bool = True
+    # 0.4.14 — learn-then-compact context
+    context_compaction_enabled: bool = True
+    save_learning_before_compact: bool = True
+    digest_max_chars: int = 1500
+    truncate_result_artifacts_chars: int = 20000
+    update_wolf_status: bool = True
 
 
 class ManagerModelConfig(BaseModel):
@@ -149,6 +155,28 @@ def _skill_selection_limits(policies: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _context_compaction_limits(policies: dict[str, Any]) -> dict[str, Any]:
+    """Extract context_compaction overrides from policies.json (0.4.14)."""
+    cc = policies.get("context_compaction") or {}
+    out: dict[str, Any] = {}
+    if "enabled" in cc:
+        out["context_compaction_enabled"] = bool(cc["enabled"])
+    if "save_learning_before_compact" in cc:
+        out["save_learning_before_compact"] = bool(cc["save_learning_before_compact"])
+    if "update_wolf_status" in cc:
+        out["update_wolf_status"] = bool(cc["update_wolf_status"])
+    for key, field in (
+        ("digest_max_chars", "digest_max_chars"),
+        ("truncate_result_artifacts_chars", "truncate_result_artifacts_chars"),
+    ):
+        if key in cc:
+            try:
+                out[field] = int(cc[key])
+            except (TypeError, ValueError):
+                pass
+    return out
+
+
 def load_config(
     project_path: Path | str | None = None,
     *,
@@ -214,6 +242,7 @@ def load_config(
             (policies.get("token_economy") or {}).get("caveman_enabled", True)
         ),
         **_skill_selection_limits(policies),
+        **_context_compaction_limits(policies),
     )
     manager = ManagerModelConfig(
         provider=manager_raw.get("provider", "rules"),

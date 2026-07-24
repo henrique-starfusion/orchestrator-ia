@@ -242,6 +242,32 @@ A partir de **0.4.13**, o runtime **descobre skills instaladas** (projeto + glob
 e usa um **modelo leve (tier fast / haiku)** para escolher quais enviar aos agentes complexos —
 só IDs presentes em disco; inventados são descartados. Config: `policies.json → skill_selection`.
 
+**Exemplo executável** — habilitar/ajustar seleção de skills:
+
+```json
+// .orchestrator/config/policies.json
+{
+  "skill_selection": {
+    "enabled": true,
+    "model_tier": "fast",
+    "max_skills": 5,
+    "timeout_s": 120,
+    "include_user_global": true
+  }
+}
+```
+
+```bash
+# Rodar tarefa normalmente — seleção acontece automaticamente antes do planner
+orchestrator run --prompt "implementar login OAuth"
+# runtime descobre skills em .orchestrator/skills/ (+ globais do usuário se include_user_global=true)
+# usa modelo leve (haiku/fast) para selecionar ≤max_skills relevantes
+# planner/executor/validator recebem apenas as skills selecionadas no bloco de contexto
+```
+
+Fallback determinístico (sem CLI disponível): keyword-match automático por score.
+Para desabilitar: `"skill_selection": { "enabled": false }` em `policies.json`.
+
 | Skill | O que faz |
 |---|---|
 | `economize-tokens` | Roteamento cost-aware; caveman always-on (0.4.12+) |
@@ -558,6 +584,19 @@ Testes: `tests/Run-AllTests.ps1` (fixtures temporárias; usam `-SkipGlobalTools`
 | [`troubleshooting.md`](troubleshooting.md) | Problemas comuns |
 | [`legacy-migration.md`](legacy-migration.md) | Migração `.claude` → `.orchestrator` |
 | [`legacy/`](legacy/) | Material deprecado |
+
+---
+
+## 16b. Learn-then-compact de contexto (0.4.14)
+
+Ao terminar cada tarefa (`COMPLETED`/`INCOMPLETE`/`FAILED`/`CANCELLED` **após execução**), o runtime executa, nesta ordem obrigatória:
+
+1. **Salva aprendizado durável PRIMEIRO** — extrai objetivo, decisões, arquivos tocados, testes, blockers, recomendações, skills usadas, status/score; persiste memória SQLite `kind=learning` (meta rico + `session_digest`), exporta `.orchestrator/memory/learnings/{task_id}.md`, atualiza `memory/index.json` e, se `.wolf/` existir, atualiza `.wolf/STATUS.md` (seção "Last orchestrator task") e registra pitfall em `.wolf/cerebrum.md` (Do-Not-Repeat) quando a task falha.
+2. **Só então compacta** — trunca artefatos grandes (`runtime/results/{id}/*.txt`) em `truncate_result_artifacts_chars` (teto 20k + `[TRUNCATED]`). Nunca compacta/apaga sem o learning já gravado.
+
+O `orchestrator_result` e o `orchestrator_status` devolvem um **`session_digest`** compacto (≤ `digest_max_chars`, padrão 1500): `task_id`, status, objetivo, arquivos-chave, testes, blockers, next steps e `learning_path`. **Após uma tarefa terminal, o agente do chat DEVE descartar o histórico verboso de polls/eventos e reter apenas o digest + o ponteiro de memória** (`memory/learnings/{task_id}.md`). Na próxima conversa/tarefa, a fase `RETRIEVING_MEMORY` recupera os aprendizados (`kind=learning`) e os injeta nos prompts do planner/executor como "Aprendizados de tarefas anteriores".
+
+Config em `policies.json → context_compaction`: `enabled`, `save_learning_before_compact`, `digest_max_chars`, `truncate_result_artifacts_chars`, `update_wolf_status`. Feature: `learn_then_compact_context`.
 
 ---
 

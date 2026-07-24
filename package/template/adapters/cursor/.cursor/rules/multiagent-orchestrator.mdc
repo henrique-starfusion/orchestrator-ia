@@ -90,3 +90,4 @@ Após `orchestrator update|install` que altere o runtime:
      `Orquestrador — <estado> | <provider>/<role> | model=<model> | iter=N`  
      (use `active_provider`, `active_role`, `active_model`, `current_iteration` / `message`).
   3. Nunca invente provedor/modelo: só o que veio do MCP (`run` / `status` / `events` / `result`).
+- **Após tarefa terminal (0.4.14):** o `orchestrator_result` traz `session_digest` + `memory.learning_path`. Retenha no chat apenas o digest + o ponteiro de memória; descarte o histórico verboso de polls/eventos. O aprendizado durável já está em `.orchestrator/memory/learnings/{task_id}.md`.

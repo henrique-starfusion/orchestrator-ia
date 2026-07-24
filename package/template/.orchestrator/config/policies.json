@@ -29,6 +29,13 @@
     "timeout_s": 120,
     "include_user_global": true
   },
+  "context_compaction": {
+    "enabled": true,
+    "save_learning_before_compact": true,
+    "digest_max_chars": 1500,
+    "truncate_result_artifacts_chars": 20000,
+    "update_wolf_status": true
+  },
   "token_economy": {
     "enabled": true,
     "caveman_enabled": true,

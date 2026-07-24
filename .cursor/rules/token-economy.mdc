@@ -32,3 +32,7 @@ Não abreviar JSON, logs, erros, planos, documentação ou código.
 ## Modelos
 
 Nunca Fable/Opus para docs/typos. Preferir tier adequado via `orchestrator route`.
+
+## Compactação de contexto (0.4.14)
+
+Após uma tarefa terminal, o `orchestrator_result`/`orchestrator_status` trazem `session_digest` + `memory.learning_path`. **Descarte o histórico verboso de polls/eventos e retenha só o digest + o ponteiro de memória** (`.orchestrator/memory/learnings/{task_id}.md`). O aprendizado durável já foi gravado ANTES da compactação — não recopie dumps de `changes` para o histórico do chat.

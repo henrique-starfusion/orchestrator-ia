@@ -74,6 +74,9 @@ class TaskService:
         )
         self._loop_started_monotonic: float | None = None
         self._git_baseline: GitBaseline = GitBaseline()
+        # Contexto do run corrente para o learning (locals do loop não
+        # persistidos na task): changed_files, test_results, last_validation.
+        self._run_ctx: dict[str, Any] = {}
 
     def create_task(
         self,
@@ -136,12 +139,16 @@ class TaskService:
                     )
                 )
         if can_resume(task.status):
+            started = task.status != TaskState.RECEIVED
             self.repo.transition(
                 task, TaskState.CANCELLED, reason="cancel requested", agent="runtime"
             )
             self.bus.emit(
                 RuntimeEvent(task_id=task.id, type=EventType.TASK_CANCELLED)
             )
+            # Learn-then-compact também no cancelamento após execução (0.4.14).
+            if started:
+                self._persist_episode(task, success=False)
         else:
             self.repo.save(task)
         return task
@@ -255,6 +262,7 @@ class TaskService:
     async def _execute_loop(self, task: TaskRecord) -> TaskRecord:
         self._loop_started_monotonic = time.monotonic()
         self._git_baseline = capture_baseline(self.config.project_path)
+        self._run_ctx = {}
 
         # RECEIVED -> ANALYZING (WAITING_FOR_USER -> ANALYZING no resume)
         if task.status == TaskState.RECEIVED:
@@ -296,11 +304,13 @@ class TaskService:
 
         self.repo.transition(task, TaskState.RETRIEVING_MEMORY, reason="memory lookup")
         memories = self.repo.search_memories(task.prompt, limit=5)
+        # 0.4.14 — aprendizados de tarefas anteriores (kind=learning) além dos episodes
+        learnings = self.repo.search_memories(task.prompt, limit=3, kind="learning")
         self.bus.emit(
             RuntimeEvent(
                 task_id=task.id,
                 type=EventType.MEMORY_UPDATED,
-                data={"retrieved": len(memories)},
+                data={"retrieved": len(memories), "learnings": len(learnings)},
             )
         )
 
@@ -310,6 +320,7 @@ class TaskService:
         self.repo.transition(task, TaskState.PLANNING, reason="planning")
         plan_roles = await self.manager.select_strategy(task, analysis)
         task.plan = self.planner.plan(task, analysis, plan_roles)
+        self._run_ctx["strategy"] = plan_roles.strategy
         self.repo.save(task)
         self.repo.add_routing_decision(task.id, plan_roles.strategy, plan_roles.model_dump())
         self.bus.emit(
@@ -333,10 +344,13 @@ class TaskService:
         try:
             _tooling = self._required_tooling_block()
             _skills = self._skills_block(task)
+            _learnings = self._learnings_block(learnings)
             plan_prompt = (
                 f"{_tooling}\n" if _tooling else ""
             ) + (
                 f"{_skills}\n" if _skills else ""
+            ) + (
+                f"{_learnings}\n" if _learnings else ""
             ) + (
                 f"Refine o plano para: {task.prompt}\n"
                 f"Plano atual: {dumps(task.plan)}\n"
@@ -425,7 +439,11 @@ class TaskService:
 
             role = "corrector" if task.iteration > 1 else "executor"
             exec_prompt = self._build_executor_prompt(
-                task, last_validation, memories, test_results=last_test_results
+                task,
+                last_validation,
+                memories,
+                test_results=last_test_results,
+                learnings=learnings,
             )
             try:
                 exec_result = await self._run_agent(
@@ -593,6 +611,7 @@ class TaskService:
             changed_files = list(
                 dict.fromkeys(changed_files + exec_result.changed_files)
             )
+            self._run_ctx["changed_files"] = changed_files
             agent_timed_out = bool(exec_result.timed_out)
             if agent_timed_out and not exec_result.changed_files:
                 # Padrão Codex/Windows (quoting/heredoc PowerShell): timeout sem
@@ -623,6 +642,7 @@ class TaskService:
             self.bus.emit(RuntimeEvent(task_id=task.id, type=EventType.TEST_STARTED))
             test_results = self.tests.run_all(self.config.project_path)
             last_test_results = test_results
+            self._run_ctx["test_results"] = test_results
             for tr in test_results:
                 self.repo.add_test_run(task_id=task.id, **tr)
             self.bus.emit(
@@ -772,6 +792,7 @@ class TaskService:
                 issue_counts[iid] = issue_counts.get(iid, 0) + 1
 
             task.last_score = float(last_validation.get("score") or 0)
+            self._run_ctx["last_validation"] = last_validation
             self.repo.save(task)
             self.bus.emit(
                 RuntimeEvent(
@@ -995,6 +1016,23 @@ class TaskService:
             + "\n".join(lines)
         )
 
+    @staticmethod
+    def _learnings_block(learnings: list[dict] | None) -> str:
+        """Render prior-task learnings for prompt injection (0.4.14)."""
+        if not learnings:
+            return ""
+        lines = [
+            "Aprendizados de tarefas anteriores (memória durável; use como contexto):"
+        ]
+        for m in learnings[:3]:
+            meta = m.get("meta") if isinstance(m, dict) else {}
+            digest = (meta or {}).get("session_digest")
+            if digest:
+                lines.append(f"- {str(digest)[:400]}")
+            else:
+                lines.append(f"- {str(m.get('content', ''))[:300]}")
+        return "\n".join(lines)
+
     def _build_executor_prompt(
         self,
         task: TaskRecord,
@@ -1002,6 +1040,7 @@ class TaskService:
         memories: list[dict],
         *,
         test_results: list[dict[str, Any]] | None = None,
+        learnings: list[dict] | None = None,
     ) -> str:
         parts = [
             f"Tarefa: {task.prompt}",
@@ -1041,6 +1080,9 @@ class TaskService:
             parts.append("Memória relevante:")
             for m in memories[:3]:
                 parts.append(f"- {m.get('content', '')[:200]}")
+        learnings_block = self._learnings_block(learnings)
+        if learnings_block:
+            parts.append(learnings_block)
         analysis_d = task.analysis if isinstance(task.analysis, dict) else {}
         user_answer = analysis_d.get("user_message") or analysis_d.get(
             "resume_instruction"
@@ -1206,6 +1248,7 @@ class TaskService:
             ],
             "summary": summary,
         }
+        self._run_ctx["last_validation"] = last_validation
         decision = await self.manager.evaluate_iteration(
             task, last_validation, task.iteration
         )
@@ -1397,6 +1440,79 @@ class TaskService:
         self.bus.emit(
             RuntimeEvent(task_id=task.id, type=EventType.MEMORY_UPDATED, data={"kind": "episode"})
         )
+        # 0.4.14 — learn-then-compact: grava aprendizado durável ANTES de qualquer
+        # compactação. Nunca compacta sem o learning já em disco.
+        self._learn_then_compact(task, success=success, strategy=strategy)
+
+    def _learn_then_compact(
+        self, task: TaskRecord, *, success: bool, strategy: str | None = None
+    ) -> None:
+        """Save enriched learning THEN compact result artifacts (0.4.14).
+
+        Ordem obrigatória: (1) extrair + persistir learning (SQLite kind=learning
+        com meta rico + digest), export markdown + index.json, atualizar .wolf/;
+        (2) só depois truncar artefatos grandes. Falha aqui nunca aborta a task.
+        """
+        limits = self.config.limits
+        if not limits.context_compaction_enabled:
+            return
+        from orchestrator_runtime.memory import learnings as L
+
+        try:
+            learning = L.extract_learning(
+                task,
+                success=success,
+                strategy=strategy,
+                run_ctx=self._run_ctx,
+            )
+            digest = L.build_digest(learning, max_chars=limits.digest_max_chars)
+            # Disponibiliza o digest para o result/status do MCP.
+            analysis_d = dict(task.analysis or {})
+            analysis_d["session_digest"] = digest
+            task.analysis = analysis_d
+            self.repo.save(task)
+
+            if limits.save_learning_before_compact:
+                # 1a. SQLite memory kind=learning (retrieval na próxima conversa)
+                self.repo.save_memory(
+                    "learning",
+                    L.memory_content(learning),
+                    task_id=task.id,
+                    meta={**learning, "session_digest": digest},
+                )
+                # 1b. Markdown + index
+                mem_root = self.config.orchestrator_root / "memory"
+                L.write_markdown(mem_root / "learnings", learning, digest)
+                L.update_index(mem_root, learning, digest)
+                # 1c. .wolf/ (STATUS + cerebrum Do-Not-Repeat em pitfall)
+                if limits.update_wolf_status:
+                    wolf_dir = self.config.project_path / ".wolf"
+                    L.update_wolf_status(wolf_dir, learning)
+                    L.append_cerebrum_pitfall(wolf_dir, learning)
+            self.bus.emit(
+                RuntimeEvent(
+                    task_id=task.id,
+                    type=EventType.MEMORY_UPDATED,
+                    data={"kind": "learning", "digest_chars": len(digest)},
+                )
+            )
+            # 2. Compactação dos artefatos grandes — SÓ depois do learning salvo.
+            # Invariante: nunca compacta sem o learning já em disco.
+            if limits.save_learning_before_compact:
+                results_dir = (
+                    self.config.orchestrator_root / "runtime" / "results" / task.id
+                )
+                L.compact_result_artifacts(
+                    results_dir, max_chars=limits.truncate_result_artifacts_chars
+                )
+        except Exception as exc:  # noqa: BLE001
+            self.bus.emit(
+                RuntimeEvent(
+                    task_id=task.id,
+                    type=EventType.MEMORY_UPDATED,
+                    data={"kind": "learning", "error": str(exc)},
+                )
+            )
 
     def _export_memory_markdown(self, task: TaskRecord) -> None:
         mem_dir = self.config.orchestrator_root / "memory" / "episodes"

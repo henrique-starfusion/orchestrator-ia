@@ -165,6 +165,14 @@ def create_fastmcp_server(
 
     @mcp.tool(name="orchestrator_result")
     def orchestrator_result(task_id: str) -> dict[str, Any]:
+        """Resultado final da tarefa + digest compacto de contexto (0.4.14).
+
+        Após uma tarefa terminal, o agente do chat DEVE descartar o histórico
+        verboso de polls/eventos e reter APENAS `session_digest` +
+        `memory.learning_path` (o aprendizado durável já está em
+        `.orchestrator/memory/learnings/{task_id}.md`). Não recopie os dumps de
+        `changes` para o histórico do chat.
+        """
         return tools.result({"task_id": task_id})
 
     @mcp.tool(name="orchestrator_cancel")

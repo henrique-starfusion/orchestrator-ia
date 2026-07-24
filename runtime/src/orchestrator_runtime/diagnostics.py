@@ -18,6 +18,8 @@ _FINGERPRINT_FILES = (
     "tasks/state_machine.py",
     "testing/discovery.py",
     "agents/process.py",
+    # 0.4.14 — learn-then-compact context
+    "memory/learnings.py",
 )
 
 # Capabilities estáveis para o cliente IDE checar sem depender só de VERSION.
@@ -44,6 +46,8 @@ FEATURES: tuple[str, ...] = (
     "always_on_agent_tooling",
     # 0.4.13 — skill selection com modelo leve antes dos complexos
     "skill_selection_fast_model",
+    # 0.4.14 — aprendizado durável antes da compactação de contexto do chat
+    "learn_then_compact_context",
 )
 
 

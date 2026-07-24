@@ -332,12 +332,15 @@ class TaskRepository:
             )
             s.commit()
 
-    def search_memories(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
+    def search_memories(
+        self, query: str, limit: int = 5, kind: str | None = None
+    ) -> list[dict[str, Any]]:
         q = query.lower()
         with self.session() as s:
-            rows = s.scalars(
-                select(MemoryRow).order_by(MemoryRow.id.desc()).limit(100)
-            ).all()
+            stmt = select(MemoryRow).order_by(MemoryRow.id.desc())
+            if kind is not None:
+                stmt = stmt.where(MemoryRow.kind == kind)
+            rows = s.scalars(stmt.limit(100)).all()
             scored = []
             for r in rows:
                 text = (r.content or "").lower()

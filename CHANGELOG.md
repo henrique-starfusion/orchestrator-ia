@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## 0.4.14 - 2026-07-24
+
+Learn-then-compact context: ao terminar cada tarefa (COMPLETED/INCOMPLETE/FAILED/CANCELLED após execução), o runtime PRIMEIRO grava um aprendizado durável e SÓ DEPOIS compacta artefatos. O `orchestrator_result`/`orchestrator_status` devolvem um `session_digest` compacto (≤ 1500 chars) para o cliente IDE reter apenas digest + ponteiro de memória e descartar o histórico verboso de polls. A próxima conversa/tarefa recupera esses aprendizados (memória `kind=learning`) e os injeta nos prompts do planner/executor.
+
+### Added
+
+- `runtime/src/orchestrator_runtime/memory/learnings.py`: novo módulo puro — `extract_learning` (objetivo, decisões, arquivos tocados, testes, blockers, recomendações, skills, status/score), `build_digest` (digest compacto com teto de chars + `[TRUNCATED]`), `render_markdown`/`memory_content`, `write_markdown` + `update_index` (`.orchestrator/memory/learnings/{task_id}.md` + `memory/index.json`), `update_wolf_status` (bloco gerenciado "Last orchestrator task" em `.wolf/STATUS.md`), `append_cerebrum_pitfall` (Do-Not-Repeat em `.wolf/cerebrum.md` quando a task falha com blockers), `compact_result_artifacts` (trunca `results/{id}/*.txt` grandes)
+- `TaskService._learn_then_compact`: choke point 0.4.14 — ordem obrigatória save learning → compact; grava SQLite `kind=learning` (meta rico + `session_digest`), markdown, index, `.wolf/`; só então trunca artefatos; falha nunca aborta a task
+- `TaskService._learnings_block`: renderiza aprendizados de tarefas anteriores ("use como contexto") para injeção nos prompts de planner/executor
+- `TaskRepository.search_memories(kind=...)`: filtro opcional por tipo de memória (`learning` vs `episode`)
+- `config.py`: campos `context_compaction_enabled`, `save_learning_before_compact`, `digest_max_chars`, `truncate_result_artifacts_chars`, `update_wolf_status` em `RuntimeLimits`; `_context_compaction_limits()` lê de `policies.json`
+- `policies.json` (live + template): bloco `context_compaction` (`enabled`, `save_learning_before_compact`, `digest_max_chars`, `truncate_result_artifacts_chars`, `update_wolf_status`)
+- `mcp/tools.py`: `orchestrator_result` expõe `session_digest`, `context_compaction` (keep/discard) e `memory.learning_saved`/`learning_path`; `orchestrator_status` expõe `session_digest` e, em estado terminal, orienta reter só digest + learning_path
+- Migration `0.4.13-to-0.4.14`
+- Feature `learn_then_compact_context` + fingerprint de `memory/learnings.py` em `diagnostics.py`
+- Testes `runtime/tests/unit/test_context_compaction.py` (14 casos: extract/digest/memory_content, compactação de artefatos, index dedupe, `.wolf/` STATUS+cerebrum, ordem save-antes-compact, digest presente no result, retrieval inclui learning, defaults/leitura de config, live policies)
+
+### Changed
+
+- `tasks/service.py`: `_execute_loop` reseta `self._run_ctx` e recupera aprendizados (`kind=learning`) além dos episodes em RETRIEVING_MEMORY; injeta o bloco de aprendizados nos prompts de planner e executor; `_persist_episode` chama `_learn_then_compact` após salvar o episode (aprendizado enriquecido, não substituído); `cancel()` grava learning quando a task já havia iniciado execução
+- `docs/orquestrador.md` e `docs/runtime-architecture.md`: seção de learn-then-compact + digest; `.cursor/rules/token-economy.mdc` e `multiagent-orchestrator.mdc`: após tarefa terminal, o chat retém só o digest + ponteiro de memória
+
 ## 0.4.13 - 2026-07-24
 
 Skill selection: o orquestrador agora descobre skills instaladas e usa um modelo leve (haiku/fast) para selecionar as mais relevantes antes de chamar modelos pesados (planner/executor/validator). Apenas skills em disco são enviadas; IDs inventados são descartados.
