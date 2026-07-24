@@ -22,6 +22,11 @@ FEATURES: tuple[str, ...] = (
     "analyze_warnings",
     "independent_validation_hard_reject",
     "runtime_code_fingerprint",
+    # 0.4.10 — auditoria PrintBee
+    "git_baseline_timeout",
+    "agent_empty_output_guard",
+    "validator_infra_not_merit",
+    "delegate_finalizes_task",
 )
 
 

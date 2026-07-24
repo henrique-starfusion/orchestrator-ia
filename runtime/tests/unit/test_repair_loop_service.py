@@ -76,6 +76,45 @@ def test_repair_loop_enters_correcting_then_completes(project):
     assert done.status == TaskState.COMPLETED
 
 
+class EmptyOutputExecutor(FakeAgentAdapter):
+    """Executor fake que 'completa' com stdout vazio e nenhum arquivo alterado."""
+
+    async def continue_session(self, session, request):  # type: ignore[no-untyped-def]
+        if request.role not in {"executor", "corrector"}:
+            return await super().continue_session(session, request)
+        return AgentResult(
+            session_id=session.id,
+            agent_id=self.id,
+            role=request.role,
+            status="completed",
+            exit_code=0,
+            stdout="\n",
+            stderr="",
+            changed_files=[],
+            started_at=datetime.now(timezone.utc).isoformat(),
+            finished_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+
+def test_empty_agent_output_stops_incomplete_with_clear_error(project):
+    """stdout vazio (2 bytes) não pode virar rejeição falsa de workspace_changes."""
+    config = load_config(project, fake_agents=True)
+    service = TaskService(config, verbose=False)
+    for name in ("claude", "codex", "opencode"):
+        service.registry._adapters[name] = EmptyOutputExecutor(name, project)
+
+    task = service.create_task(
+        "Crie um modulo Python com funcao soma, testes e documentacao",
+        max_iterations=3,
+    )
+    done = asyncio.run(service.run_task(task.id))
+    assert done.status == TaskState.INCOMPLETE
+    assert "AGENT-EMPTY-OUTPUT" in (done.error or "")
+    # parou pelo repeat-limit de infra, sem queimar todas as iterações em
+    # validações falsas de workspace_changes
+    assert done.iteration <= config.limits.same_issue_repeat_limit
+
+
 def test_lock_timeout_does_not_mark_task_failed(project, monkeypatch):
     config = load_config(project, fake_agents=True)
     service = TaskService(config, verbose=False)

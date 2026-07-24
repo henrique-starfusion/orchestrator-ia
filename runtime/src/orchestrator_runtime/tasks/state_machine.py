@@ -38,6 +38,10 @@ ALLOWED_TRANSITIONS: dict[TaskState, set[TaskState]] = {
         TaskState.ANALYZING,
         TaskState.CANCELLED,
         TaskState.FAILED,
+        # delegate (single-role) finaliza direto, sem passar pelo workflow —
+        # sem isso a task delegada fica órfã em RECEIVED para sempre.
+        TaskState.COMPLETED,
+        TaskState.INCOMPLETE,
     },
     TaskState.ANALYZING: {
         TaskState.RETRIEVING_MEMORY,

@@ -8,10 +8,17 @@ def test_valid_transition():
 
 def test_invalid_transition():
     try:
-        assert_transition(TaskState.RECEIVED, TaskState.COMPLETED)
+        assert_transition(TaskState.RECEIVED, TaskState.VALIDATING)
         assert False, "expected error"
     except InvalidTransitionError:
         pass
+
+
+def test_delegate_finalization_transitions():
+    """Delegate single-role finaliza direto de RECEIVED (anti-órfão)."""
+    assert_transition(TaskState.RECEIVED, TaskState.COMPLETED)
+    assert_transition(TaskState.RECEIVED, TaskState.INCOMPLETE)
+    assert_transition(TaskState.RECEIVED, TaskState.FAILED)
 
 
 def test_can_resume():

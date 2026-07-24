@@ -393,6 +393,24 @@ class OrchestratorMcpTools:
             status=result.status,
             changed_files_json=__import__("json").dumps(result.changed_files),
         )
+        # Finaliza a task delegada — sem isso ela fica órfã em RECEIVED no DB.
+        if result.timed_out:
+            final_state, final_reason = TaskState.INCOMPLETE, "delegate timeout"
+        elif result.status == "completed":
+            final_state, final_reason = TaskState.COMPLETED, "delegate completed"
+        else:
+            final_state, final_reason = TaskState.FAILED, f"delegate {result.status}"
+        service.repo.transition(
+            task,
+            final_state,
+            reason=final_reason,
+            agent=data.agent,
+            error=(
+                redact((result.stderr or "")[:500])
+                if final_state != TaskState.COMPLETED
+                else None
+            ),
+        )
         warnings = [
             "exit_code_0_not_quality_proof",
             "delegate_is_single_role_not_full_workflow",

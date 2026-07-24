@@ -425,58 +425,46 @@ class TaskService:
                 exec_result.status == "failed"
                 and "FileNotFoundError" in (exec_result.stderr or "")
             )
-            if spawn_failed:
-                last_validation = {
-                    "status": "rejected",
-                    "score": 0.0,
-                    "blocking_issues": [
-                        {
-                            "id": "EXEC-SPAWN",
-                            "severity": "blocking",
-                            "description": (
-                                f"Falha ao iniciar CLI {plan_roles.executor}: "
-                                f"{(exec_result.stderr or '')[:300]}"
-                            ),
-                        }
-                    ],
-                    "summary": "executor spawn failed",
-                }
-                decision = await self.manager.evaluate_iteration(
-                    task, last_validation, task.iteration
-                )
-                self.repo.add_iteration(
-                    task.id,
-                    task.iteration,
-                    0.0,
-                    decision.action,
-                    {"reason": decision.reason, "spawn_failed": True},
-                )
-                if decision.action in {"stop_incomplete", "fail"}:
-                    target = (
-                        TaskState.FAILED
-                        if decision.action == "fail"
-                        else TaskState.INCOMPLETE
+            # CLI "completou" mas não produziu nada (stdout vazio + nenhum arquivo
+            # alterado, mesmo após fallback git). Sem este guard a iteração segue
+            # para VALIDATING e vira rejeição falsa de AC workspace_changes.
+            empty_output = (
+                not spawn_failed
+                and exec_result.status == "completed"
+                and not (exec_result.stdout or "").strip()
+                and not exec_result.changed_files
+            )
+            if spawn_failed or empty_output:
+                if spawn_failed:
+                    issue_id = "EXEC-SPAWN"
+                    description = (
+                        f"Falha ao iniciar CLI {plan_roles.executor}: "
+                        f"{(exec_result.stderr or '')[:300]}"
                     )
-                    self.repo.transition(
-                        task,
-                        target,
-                        reason=decision.reason,
-                        error=exec_result.stderr,
+                    summary = "executor spawn failed"
+                    error_text = exec_result.stderr
+                else:
+                    issue_id = "AGENT-EMPTY-OUTPUT"
+                    description = (
+                        f"{role}/{plan_roles.executor} terminou exit=0 sem stdout "
+                        "e sem arquivos alterados (saída vazia do CLI)"
                     )
-                    self._persist_episode(task, success=False)
-                    return task
-                # Tentar fallback de executor na próxima iteração
-                fallbacks = (task.plan or {}).get("fallbacks", {}).get("executor") or []
-                for fb in fallbacks:
-                    if fb != plan_roles.executor and self.registry.get(fb):
-                        plan_roles.executor = fb
-                        break
-                self.repo.transition(
+                    summary = "agent empty output"
+                    error_text = (
+                        f"AGENT-EMPTY-OUTPUT: {role}/{plan_roles.executor} "
+                        "retornou saída vazia"
+                    )
+                terminal, last_validation = await self._reject_iteration_infra(
                     task,
-                    TaskState.CORRECTING,
-                    reason="executor spawn failed → correct/fallback",
-                    agent=plan_roles.executor,
+                    plan_roles,
+                    issue_id=issue_id,
+                    description=description,
+                    summary=summary,
+                    error_text=error_text,
+                    issue_counts=issue_counts,
                 )
+                if terminal is not None:
+                    return terminal
                 continue
 
             changed_files = list(
@@ -541,6 +529,28 @@ class TaskService:
             val_prompt = self._build_validator_prompt(task, det, test_results, changed_files)
             val_result = await self._run_agent(val_agent, "validator", val_prompt, task)
             last_validation = self.llm_validator.parse(val_result.stdout, det)
+            if last_validation is det and self._validator_infra_failure(val_result):
+                # Sem veredito LLM por falha de infra (ex.: sandbox Windows 740):
+                # tentar validator alternativo; nunca virar rejeição de mérito.
+                fb_agent = self._next_validator_fallback(task, plan_roles, val_agent)
+                if fb_agent:
+                    try:
+                        val_result = await self._run_agent(
+                            fb_agent, "validator", val_prompt, task
+                        )
+                        last_validation = self.llm_validator.parse(
+                            val_result.stdout, det
+                        )
+                    except Exception:  # noqa: BLE001
+                        last_validation = det
+                if last_validation is det:
+                    last_validation = dict(det)
+                    last_validation["validator_infra_failure"] = True
+                    last_validation["summary"] = (
+                        str(det.get("summary") or "")
+                        + " | validator infra failure — veredito LLM indisponível"
+                        " (não é rejeição de mérito)"
+                    )
             # Prefer stricter: if deterministic rejected, keep rejected
             if det["status"] != "approved":
                 last_validation["status"] = "rejected"
@@ -813,6 +823,102 @@ class TaskService:
             by_role=self.config.limits.agent_timeout_by_role,
             default_s=self.config.limits.agent_timeout_default_s,
         )
+
+    # Marcadores de falha de infra do validator (sandbox Windows sem elevação).
+    _VALIDATOR_INFRA_MARKERS = (
+        "createprocessasuserw failed: 740",
+        "windows error 740",
+        "requer elevação",
+        "requer elevacao",
+        "windows sandbox: runner failed",
+    )
+
+    @classmethod
+    def _validator_infra_failure(cls, result: AgentResult) -> bool:
+        """Validator falhou por infra (processo/sandbox), não por mérito."""
+        if result.status != "completed":
+            return True
+        blob = ((result.stdout or "") + (result.stderr or "")).lower()
+        return any(m in blob for m in cls._VALIDATOR_INFRA_MARKERS)
+
+    def _next_validator_fallback(
+        self, task: TaskRecord, plan_roles: Any, current: str
+    ) -> str | None:
+        fallbacks = (task.plan or {}).get("fallbacks", {}).get("validator") or []
+        for fb in fallbacks:
+            if fb in {current, plan_roles.executor}:
+                continue
+            adapter = self.registry.get(fb)
+            if adapter and adapter.detect().available:
+                return fb
+        return None
+
+    async def _reject_iteration_infra(
+        self,
+        task: TaskRecord,
+        plan_roles: Any,
+        *,
+        issue_id: str,
+        description: str,
+        summary: str,
+        error_text: str | None,
+        issue_counts: dict[str, int],
+    ) -> tuple[TaskRecord | None, dict[str, Any]]:
+        """Iteração rejeitada por falha de infra do executor (spawn/saída vazia).
+
+        Retorna (task_terminal | None, last_validation). None → caller continua
+        o loop em CORRECTING com fallback de executor aplicado.
+        """
+        last_validation: dict[str, Any] = {
+            "status": "rejected",
+            "score": 0.0,
+            "blocking_issues": [
+                {
+                    "id": issue_id,
+                    "severity": "blocking",
+                    "description": description,
+                }
+            ],
+            "summary": summary,
+        }
+        decision = await self.manager.evaluate_iteration(
+            task, last_validation, task.iteration
+        )
+        issue_counts[issue_id] = issue_counts.get(issue_id, 0) + 1
+        if issue_counts[issue_id] >= self.config.limits.same_issue_repeat_limit:
+            decision.action = "stop_incomplete"
+            decision.reason = "same_issue_repeat_limit"
+        self.repo.add_iteration(
+            task.id,
+            task.iteration,
+            0.0,
+            decision.action,
+            {"reason": decision.reason, "infra_issue": issue_id},
+        )
+        if decision.action in {"stop_incomplete", "fail"}:
+            target = (
+                TaskState.FAILED
+                if decision.action == "fail"
+                else TaskState.INCOMPLETE
+            )
+            self.repo.transition(
+                task, target, reason=decision.reason, error=error_text
+            )
+            self._persist_episode(task, success=False)
+            return task, last_validation
+        # Tentar fallback de executor na próxima iteração
+        fallbacks = (task.plan or {}).get("fallbacks", {}).get("executor") or []
+        for fb in fallbacks:
+            if fb != plan_roles.executor and self.registry.get(fb):
+                plan_roles.executor = fb
+                break
+        self.repo.transition(
+            task,
+            TaskState.CORRECTING,
+            reason=f"{issue_id} → correct/fallback",
+            agent=plan_roles.executor,
+        )
+        return None, last_validation
 
     @staticmethod
     def _is_empty_delivery_issue(issue: Any) -> bool:

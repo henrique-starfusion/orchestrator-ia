@@ -76,3 +76,16 @@ def test_capture_baseline_unavailable_outside_git(tmp_path: Path):
     baseline = capture_baseline(tmp_path)
     assert baseline.available is False
     assert changed_files_since(tmp_path, baseline) == []
+
+
+def test_git_hang_returns_unavailable_baseline(tmp_path: Path, monkeypatch):
+    """git status pendurado (Windows) não pode travar RECEIVED→ANALYZING."""
+    import orchestrator_runtime.execution.git_workspace as gw
+
+    def _hang(command, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=command, timeout=kwargs.get("timeout", 30))
+
+    monkeypatch.setattr(gw.subprocess, "run", _hang)
+    baseline = capture_baseline(tmp_path)
+    assert baseline.available is False
+    assert changed_files_since(tmp_path, GitBaseline(available=True)) == []

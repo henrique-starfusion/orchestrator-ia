@@ -1,6 +1,6 @@
 {
   "name": "@starfusion/orchestrator",
-  "version": "0.4.9",
+  "version": "0.4.10",
   "description": "Orquestrador IA Multiagente (StarFusion): instalador, runtime e MCP Cursor. Fonte canônica .orchestrator/",
   "license": "MIT",
   "author": "Henrique Rodrigues <StarFusion Consultoria, Tecnologia e Soluções em Informática LTDA.>",

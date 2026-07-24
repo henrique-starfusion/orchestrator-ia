@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 0.4.10 - 2026-07-23
+
+Auditoria do processo PrintBee -> correcoes de confiabilidade do runtime
+(`docs/audits/2026-07-23-printbee-process-orchestrator-improvements.md`).
+
+### Fixed
+
+- `git status`/`rev-parse` do baseline agora com timeout de 30s (`GIT_TIMEOUT_S`); hang do git no Windows nao trava mais a task em RECEIVED segurando o `workspace.write.lock`
+- Executor/corrector que "completa" com stdout vazio e zero arquivos alterados gera issue de infra `AGENT-EMPTY-OUTPUT` com fallback de executor e stop por `same_issue_repeat_limit`, em vez de rejeicao falsa do AC `workspace_changes`
+- `LlmReviewValidator.parse`: extracao de JSON tolerante a logs com chaves soltas (`raw_decode` por candidato); so `approved`/`rejected` contam como veredito - `{"status":"validating"}` e ruido de CLI nao rejeitam mais por engano; `score: null` cai no score deterministico
+- Validator que falha por infra (ex.: sandbox Windows erro 740 "requer elevacao") nao conta como rejeicao de merito: runtime tenta um validator alternativo e, sem veredito, usa apenas a validacao deterministica marcada com `validator_infra_failure`
+- `orchestrator_delegate` finaliza a task criada (COMPLETED/INCOMPLETE/FAILED); fim dos orfaos RECEIVED acumulados no DB (state machine permite RECEIVED->COMPLETED/INCOMPLETE para single-role)
+
+### Added
+
+- Migration `0.4.9-to-0.4.10` (inclui SQL opcional para limpar delegates RECEIVED antigos)
+- Testes: hang de git (baseline indisponivel), saida vazia do executor -> INCOMPLETE com `AGENT-EMPTY-OUTPUT`, parse de veredito em log ruidoso, finalizacao de delegate
+
 ## 0.4.9 — 2026-07-23
 
 ### Fixed

@@ -71,6 +71,9 @@ def test_mcp_delegate(tools):
     )
     assert out["status"] == "completed"
     assert out["agent"] == "claude"
+    # delegate finaliza a task (anti-órfão RECEIVED no DB)
+    st = tools.status({"task_id": out["task_id"]})
+    assert st["status"] == "COMPLETED"
 
 
 def test_mcp_run(tools):

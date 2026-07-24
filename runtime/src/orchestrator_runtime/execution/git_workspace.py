@@ -6,6 +6,10 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# git status pode pendurar no Windows (index.lock, credential prompt, drive de
+# rede). Sem timeout, a task fica presa em RECEIVED segurando o WriteLock.
+GIT_TIMEOUT_S = 30
+
 
 @dataclass
 class GitBaseline:
@@ -16,15 +20,25 @@ class GitBaseline:
 
 
 def _run_git(project_path: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["git", *args],
-        cwd=str(project_path),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
+    command = ["git", *args]
+    try:
+        return subprocess.run(
+            command,
+            cwd=str(project_path),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=GIT_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(
+            command,
+            returncode=124,
+            stdout="",
+            stderr=f"git timeout after {GIT_TIMEOUT_S}s",
+        )
 
 
 def _parse_porcelain(stdout: str) -> dict[str, str]:
