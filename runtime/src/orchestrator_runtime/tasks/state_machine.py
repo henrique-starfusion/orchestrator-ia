@@ -38,6 +38,10 @@ ALLOWED_TRANSITIONS: dict[TaskState, set[TaskState]] = {
         TaskState.ANALYZING,
         TaskState.CANCELLED,
         TaskState.FAILED,
+        # delegate (single-role) finaliza direto, sem passar pelo workflow —
+        # sem isso a task delegada fica órfã em RECEIVED para sempre.
+        TaskState.COMPLETED,
+        TaskState.INCOMPLETE,
     },
     TaskState.ANALYZING: {
         TaskState.RETRIEVING_MEMORY,
@@ -67,6 +71,8 @@ ALLOWED_TRANSITIONS: dict[TaskState, set[TaskState]] = {
         TaskState.CANCELLED,
         TaskState.FAILED,
         TaskState.INCOMPLETE,
+        # executor emitiu REQUIRES_INPUT estruturado — pausa sem queimar iteração
+        TaskState.WAITING_FOR_USER,
     },
     TaskState.TESTING: {
         TaskState.VALIDATING,
@@ -106,6 +112,8 @@ ALLOWED_TRANSITIONS: dict[TaskState, set[TaskState]] = {
         TaskState.EXECUTING,
         TaskState.CANCELLED,
         TaskState.INCOMPLETE,
+        # resume após resposta do usuário reentra o pipeline completo
+        TaskState.ANALYZING,
     },
     TaskState.COMPLETED: set(),
     TaskState.INCOMPLETE: set(),

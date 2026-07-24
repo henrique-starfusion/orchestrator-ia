@@ -3,17 +3,30 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import os
+import re
+import time
 from pathlib import Path
 from typing import Any
 
 from orchestrator_runtime.agents import AgentRegistry
-from orchestrator_runtime.agents.base import AgentRequest
+from orchestrator_runtime.agents.base import AgentRequest, AgentResult
 from orchestrator_runtime.agents.process import CliExecutor
 from orchestrator_runtime.config import RuntimeConfig, load_config
 from orchestrator_runtime.documentation import DocumentationUpdater
 from orchestrator_runtime.errors import TaskNotFoundError
 from orchestrator_runtime.events import EventBus, EventType, RuntimeEvent
+from orchestrator_runtime.execution.git_workspace import (
+    GitBaseline,
+    capture_baseline,
+    changed_files_since,
+)
 from orchestrator_runtime.execution.locks import WriteLock
+from orchestrator_runtime.execution.timeouts import (
+    MIN_AGENT_TIMEOUT_S,
+    resolve_agent_timeout,
+)
 from orchestrator_runtime.manager_model import build_manager
 from orchestrator_runtime.memory.database import dumps
 from orchestrator_runtime.planning.analyzer import Planner
@@ -22,6 +35,7 @@ from orchestrator_runtime.tasks.models import TaskConstraints, TaskRecord
 from orchestrator_runtime.tasks.repository import TaskRepository
 from orchestrator_runtime.tasks.state_machine import TaskState, can_resume
 from orchestrator_runtime.testing import TestRunner
+from orchestrator_runtime.testing.discovery import stack_test_commands
 from orchestrator_runtime.validation import (
     CompletionGate,
     DeterministicValidator,
@@ -30,6 +44,10 @@ from orchestrator_runtime.validation import (
 
 
 class TaskService:
+    # Teto do refino de plano (advisory) — o workflow nunca fica preso em
+    # SELECTING_AGENTS mais que isso; o plano determinístico já existe.
+    PLANNER_REFINE_CAP_S = 300
+
     def __init__(
         self,
         config: RuntimeConfig,
@@ -54,6 +72,8 @@ class TaskService:
         self.lock = WriteLock(
             config.orchestrator_root / "runtime" / "locks" / "workspace.write.lock"
         )
+        self._loop_started_monotonic: float | None = None
+        self._git_baseline: GitBaseline = GitBaseline()
 
     def create_task(
         self,
@@ -103,6 +123,18 @@ class TaskService:
     def cancel(self, task_id: str) -> TaskRecord:
         task = self.get(task_id)
         task.cancel_requested = True
+        # Propaga o cancel para os CLIs filhos ainda vivos — sem isso o Codex
+        # órfão segue rodando e segurando o workspace após o cancelamento.
+        if task_id in self._running_tasks:
+            killed = self.executor.kill_active()
+            if killed:
+                self.bus.emit(
+                    RuntimeEvent(
+                        task_id=task.id,
+                        type=EventType.TASK_CANCELLED,
+                        data={"killed_pids": killed, "summary": "child CLIs killed"},
+                    )
+                )
         if can_resume(task.status):
             self.repo.transition(
                 task, TaskState.CANCELLED, reason="cancel requested", agent="runtime"
@@ -156,6 +188,10 @@ class TaskService:
         except TimeoutError as exc:
             # Lock ocupado por outra execução: NÃO envenenar a tarefa em andamento.
             task = self.get(task_id)
+            # Status visível: sem isso a task fica RECEIVED "muda" e o chat
+            # cancela achando que travou (fila invisível — transcrições PrintBee).
+            task.error = f"blocked_by_lock: {exc}"
+            self.repo.save(task)
             self.bus.emit(
                 RuntimeEvent(
                     task_id=task.id,
@@ -217,9 +253,19 @@ class TaskService:
         return task
 
     async def _execute_loop(self, task: TaskRecord) -> TaskRecord:
-        # RECEIVED -> ANALYZING
+        self._loop_started_monotonic = time.monotonic()
+        self._git_baseline = capture_baseline(self.config.project_path)
+
+        # RECEIVED -> ANALYZING (WAITING_FOR_USER -> ANALYZING no resume)
         if task.status == TaskState.RECEIVED:
             self.repo.transition(task, TaskState.ANALYZING, reason="start analysis")
+        elif task.status == TaskState.WAITING_FOR_USER:
+            self.repo.transition(
+                task, TaskState.ANALYZING, reason="resume after user input"
+            )
+        if task.error and str(task.error).startswith("blocked_by_lock"):
+            task.error = None
+            self.repo.save(task)
 
         if task.cancel_requested:
             return self.cancel(task.id)
@@ -232,7 +278,20 @@ class TaskService:
         task.complexity = analysis.complexity
         task.requirements = analysis.requirements
         task.acceptance_criteria = analysis.acceptance_criteria
-        task.analysis = analysis.model_dump()
+        # Preserva contexto de requires_input/resume — o re-analyze não pode
+        # apagar a resposta do usuário nem o contador de perguntas.
+        prior_analysis = task.analysis if isinstance(task.analysis, dict) else {}
+        merged_analysis = analysis.model_dump()
+        for key in (
+            "user_message",
+            "user_question",
+            "user_options",
+            "resume_instruction",
+            "requires_input_count",
+        ):
+            if key in prior_analysis:
+                merged_analysis[key] = prior_analysis[key]
+        task.analysis = merged_analysis
         self.repo.save(task)
 
         self.repo.transition(task, TaskState.RETRIEVING_MEMORY, reason="memory lookup")
@@ -274,7 +333,16 @@ class TaskService:
                 f"Plano atual: {dumps(task.plan)}\n"
                 "Responda com passos objetivos sem abreviação."
             )
-            await self._run_agent(plan_roles.planner, "planner", plan_prompt, task)
+            # O plano determinístico já existe; o refino é advisory e não pode
+            # segurar SELECTING_AGENTS por 15 min (fable "travado" nas
+            # transcrições PrintBee). Teto duro de 5 min.
+            await self._run_agent(
+                plan_roles.planner,
+                "planner",
+                plan_prompt,
+                task,
+                timeout_cap_s=self.PLANNER_REFINE_CAP_S,
+            )
         except Exception as exc:  # noqa: BLE001
             self.bus.emit(
                 RuntimeEvent(
@@ -295,6 +363,23 @@ class TaskService:
             task = self.get(task.id)
             if task.cancel_requested:
                 return self.cancel(task.id)
+
+            remaining = self._remaining_duration_s(task)
+            if remaining < MIN_AGENT_TIMEOUT_S:
+                self.repo.transition(
+                    task,
+                    TaskState.INCOMPLETE,
+                    reason="maximum_duration_seconds",
+                    error=(
+                        f"Orçamento de tempo esgotado "
+                        f"(restante={remaining}s < {MIN_AGENT_TIMEOUT_S}s)"
+                    ),
+                )
+                self.bus.emit(
+                    RuntimeEvent(task_id=task.id, type=EventType.TASK_INCOMPLETE)
+                )
+                self._persist_episode(task, success=False)
+                return task
 
             if task.iteration >= task.constraints.maximum_iterations:
                 self.repo.transition(
@@ -389,67 +474,139 @@ class TaskService:
                 )
                 continue
 
+            task = self.get(task.id)
+            if task.cancel_requested:
+                return self.cancel(task.id)
+
+            requires_input = (
+                None
+                if exec_result.changed_files
+                else self._parse_requires_input(exec_result.stdout)
+            )
+            if requires_input:
+                analysis_d = dict(task.analysis or {})
+                count = int(analysis_d.get("requires_input_count") or 0) + 1
+                analysis_d["requires_input_count"] = count
+                analysis_d["user_question"] = requires_input["question"]
+                analysis_d["user_options"] = requires_input["options"]
+                task.analysis = analysis_d
+                if count == 1:
+                    # Pergunta estruturada pausa a task sem queimar a iteração.
+                    task.iteration = max(0, task.iteration - 1)
+                    self.repo.save(task)
+                    self.repo.transition(
+                        task,
+                        TaskState.WAITING_FOR_USER,
+                        reason="executor requires_input",
+                        agent=plan_roles.executor,
+                    )
+                    self.bus.emit(
+                        RuntimeEvent(
+                            task_id=task.id,
+                            type=EventType.STATE_CHANGED,
+                            role=role,
+                            agent=plan_roles.executor,
+                            data={
+                                "to": TaskState.WAITING_FOR_USER.value,
+                                "summary": requires_input["question"][:200],
+                            },
+                        )
+                    )
+                    return task
+                # Repetiu a pergunta após resposta do usuário: infra reject +
+                # rotação de executor (não fica em loop de perguntas).
+                self.repo.save(task)
+                terminal, last_validation = await self._reject_iteration_infra(
+                    task,
+                    plan_roles,
+                    issue_id="AGENT-REQUIRES-INPUT",
+                    description=(
+                        f"{role}/{plan_roles.executor} voltou a pedir decisão em "
+                        f"vez de implementar: {requires_input['question'][:200]}"
+                    ),
+                    summary="executor asked instead of implementing",
+                    error_text=(
+                        "AGENT-REQUIRES-INPUT: executor repetiu pergunta após "
+                        "resposta do usuário"
+                    ),
+                    issue_counts=issue_counts,
+                )
+                if terminal is not None:
+                    return terminal
+                continue
+
             spawn_failed = exec_result.exit_code == 127 or (
                 exec_result.status == "failed"
                 and "FileNotFoundError" in (exec_result.stderr or "")
             )
-            if spawn_failed:
-                last_validation = {
-                    "status": "rejected",
-                    "score": 0.0,
-                    "blocking_issues": [
-                        {
-                            "id": "EXEC-SPAWN",
-                            "severity": "blocking",
-                            "description": (
-                                f"Falha ao iniciar CLI {plan_roles.executor}: "
-                                f"{(exec_result.stderr or '')[:300]}"
-                            ),
-                        }
-                    ],
-                    "summary": "executor spawn failed",
-                }
-                decision = await self.manager.evaluate_iteration(
-                    task, last_validation, task.iteration
-                )
-                self.repo.add_iteration(
-                    task.id,
-                    task.iteration,
-                    0.0,
-                    decision.action,
-                    {"reason": decision.reason, "spawn_failed": True},
-                )
-                if decision.action in {"stop_incomplete", "fail"}:
-                    target = (
-                        TaskState.FAILED
-                        if decision.action == "fail"
-                        else TaskState.INCOMPLETE
+            # CLI "completou" mas não produziu nada (stdout vazio + nenhum arquivo
+            # alterado, mesmo após fallback git). Sem este guard a iteração segue
+            # para VALIDATING e vira rejeição falsa de AC workspace_changes.
+            empty_output = (
+                not spawn_failed
+                and exec_result.status == "completed"
+                and not (exec_result.stdout or "").strip()
+                and not exec_result.changed_files
+            )
+            if spawn_failed or empty_output:
+                if spawn_failed:
+                    issue_id = "EXEC-SPAWN"
+                    description = (
+                        f"Falha ao iniciar CLI {plan_roles.executor}: "
+                        f"{(exec_result.stderr or '')[:300]}"
                     )
-                    self.repo.transition(
-                        task,
-                        target,
-                        reason=decision.reason,
-                        error=exec_result.stderr,
+                    summary = "executor spawn failed"
+                    error_text = exec_result.stderr
+                else:
+                    issue_id = "AGENT-EMPTY-OUTPUT"
+                    description = (
+                        f"{role}/{plan_roles.executor} terminou exit=0 sem stdout "
+                        "e sem arquivos alterados (saída vazia do CLI)"
                     )
-                    self._persist_episode(task, success=False)
-                    return task
-                # Tentar fallback de executor na próxima iteração
-                fallbacks = (task.plan or {}).get("fallbacks", {}).get("executor") or []
-                for fb in fallbacks:
-                    if fb != plan_roles.executor and self.registry.get(fb):
-                        plan_roles.executor = fb
-                        break
-                self.repo.transition(
+                    summary = "agent empty output"
+                    error_text = (
+                        f"AGENT-EMPTY-OUTPUT: {role}/{plan_roles.executor} "
+                        "retornou saída vazia"
+                    )
+                terminal, last_validation = await self._reject_iteration_infra(
                     task,
-                    TaskState.CORRECTING,
-                    reason="executor spawn failed → correct/fallback",
-                    agent=plan_roles.executor,
+                    plan_roles,
+                    issue_id=issue_id,
+                    description=description,
+                    summary=summary,
+                    error_text=error_text,
+                    issue_counts=issue_counts,
                 )
+                if terminal is not None:
+                    return terminal
                 continue
 
             changed_files = list(
                 dict.fromkeys(changed_files + exec_result.changed_files)
             )
+            agent_timed_out = bool(exec_result.timed_out)
+            if agent_timed_out and not exec_result.changed_files:
+                # Padrão Codex/Windows (quoting/heredoc PowerShell): timeout sem
+                # escrever nada. "Continue do disco" é inútil sem arquivos —
+                # rejeita como infra e rotaciona o executor via fallback.
+                terminal, last_validation = await self._reject_iteration_infra(
+                    task,
+                    plan_roles,
+                    issue_id="AGENT-TIMEOUT-NO-OUTPUT",
+                    description=(
+                        f"{role}/{plan_roles.executor} atingiu timeout "
+                        f"({exec_result.duration_s:.0f}s) sem alterar arquivos"
+                    ),
+                    summary="executor timeout without output",
+                    error_text=(
+                        f"AGENT-TIMEOUT-NO-OUTPUT: {role}/{plan_roles.executor} "
+                        "timeout sem arquivos alterados"
+                    ),
+                    issue_counts=issue_counts,
+                )
+                if terminal is not None:
+                    return terminal
+                continue
 
             # TESTING
             task = self.get(task.id)
@@ -508,6 +665,28 @@ class TaskService:
             val_prompt = self._build_validator_prompt(task, det, test_results, changed_files)
             val_result = await self._run_agent(val_agent, "validator", val_prompt, task)
             last_validation = self.llm_validator.parse(val_result.stdout, det)
+            if last_validation is det and self._validator_infra_failure(val_result):
+                # Sem veredito LLM por falha de infra (ex.: sandbox Windows 740):
+                # tentar validator alternativo; nunca virar rejeição de mérito.
+                fb_agent = self._next_validator_fallback(task, plan_roles, val_agent)
+                if fb_agent:
+                    try:
+                        val_result = await self._run_agent(
+                            fb_agent, "validator", val_prompt, task
+                        )
+                        last_validation = self.llm_validator.parse(
+                            val_result.stdout, det
+                        )
+                    except Exception:  # noqa: BLE001
+                        last_validation = det
+                if last_validation is det:
+                    last_validation = dict(det)
+                    last_validation["validator_infra_failure"] = True
+                    last_validation["summary"] = (
+                        str(det.get("summary") or "")
+                        + " | validator infra failure — veredito LLM indisponível"
+                        " (não é rejeição de mérito)"
+                    )
             # Prefer stricter: if deterministic rejected, keep rejected
             if det["status"] != "approved":
                 last_validation["status"] = "rejected"
@@ -541,6 +720,26 @@ class TaskService:
                     float(last_validation.get("score") or 0.0), 0.4
                 )
 
+            if agent_timed_out:
+                last_validation["status"] = "rejected"
+                timeout_issues = list(last_validation.get("blocking_issues") or [])
+                timeout_issues.insert(
+                    0,
+                    {
+                        "id": "AGENT-TIMEOUT",
+                        "severity": "blocking",
+                        "description": (
+                            f"{role}/{plan_roles.executor} atingiu timeout "
+                            f"({exec_result.duration_s:.0f}s). Retome a partir dos "
+                            f"arquivos já no disco; não reinvente o inventário."
+                        ),
+                    },
+                )
+                last_validation["blocking_issues"] = timeout_issues
+                last_validation["score"] = min(
+                    float(last_validation.get("score") or 0.0), 0.2
+                )
+
             self.repo.add_validation_round(
                 task_id=task.id,
                 iteration=task.iteration,
@@ -557,6 +756,10 @@ class TaskService:
                     severity="blocking",
                     description=desc or "",
                 )
+                # Timeout: não contar VAL-* de workspace/evidence vazios no
+                # same_issue_repeat (evita INCOMPLETE falso por entrega "vazia").
+                if agent_timed_out and self._is_empty_delivery_issue(issue):
+                    continue
                 issue_counts[iid] = issue_counts.get(iid, 0) + 1
 
             task.last_score = float(last_validation.get("score") or 0)
@@ -695,6 +898,15 @@ class TaskService:
                     parts.append(f"- {issue.get('id')}: {issue.get('description')}")
                 else:
                     parts.append(f"- {issue}")
+            if any(
+                isinstance(i, dict) and i.get("id") == "AGENT-TIMEOUT"
+                for i in validation["blocking_issues"]
+            ):
+                parts.append(
+                    "Atenção: a iteração anterior estourou timeout. "
+                    "Inspecione o disco (git status) e continue o trabalho; "
+                    "não recomece do zero."
+                )
         if test_results:
             failed = [
                 t
@@ -712,10 +924,68 @@ class TaskService:
             parts.append("Memória relevante:")
             for m in memories[:3]:
                 parts.append(f"- {m.get('content', '')[:200]}")
+        analysis_d = task.analysis if isinstance(task.analysis, dict) else {}
+        user_answer = analysis_d.get("user_message") or analysis_d.get(
+            "resume_instruction"
+        )
+        if user_answer:
+            parts.append(f"Decisão do usuário (já autorizada): {user_answer}")
+        parts.append(
+            "Escopo: o objetivo acima já define o que fazer. NÃO faça perguntas "
+            "abertas nem pare para pedir decisão de negócio — implemente o "
+            "escopo definido."
+        )
+        parts.append(
+            "Somente se estiver bloqueado por decisão externa obrigatória, "
+            'escreva uma única linha REQUIRES_INPUT: {"question": "...", '
+            '"options": ["..."]} e encerre imediatamente sem alterar arquivos.'
+        )
+        parts.append(self._stack_hint())
+        if os.name == "nt":
+            parts.append(
+                "Ambiente Windows: NÃO use heredoc nem quoting complexo de "
+                "PowerShell para criar arquivos; prefira a ferramenta de escrita "
+                "de arquivos do agente, `python -c` ou arquivo temporário."
+            )
         parts.append(
             "Não use abreviação caveman. Não declare sucesso sem evidências."
         )
         return "\n".join(parts)
+
+    def _stack_hint(self) -> str:
+        cmds = stack_test_commands(self.config.project_path)
+        if not cmds:
+            return (
+                "Nenhuma suite de testes detectada no workspace; "
+                "não invente comandos de teste."
+            )
+        return (
+            "Testes detectados no workspace: "
+            + "; ".join(cmds)
+            + ". Use SOMENTE estes comandos de teste; não exija outros "
+            "(ex.: pytest em projeto Node/Angular)."
+        )
+
+    _REQUIRES_INPUT_RE = re.compile(
+        r"^\s*REQUIRES_INPUT\s*:\s*(.+)$", re.MULTILINE
+    )
+
+    @classmethod
+    def _parse_requires_input(cls, stdout: str | None) -> dict[str, Any] | None:
+        match = cls._REQUIRES_INPUT_RE.search(stdout or "")
+        if not match:
+            return None
+        payload = match.group(1).strip()
+        try:
+            data = json.loads(payload)
+        except json.JSONDecodeError:
+            data = None
+        if isinstance(data, dict) and data.get("question"):
+            return {
+                "question": str(data["question"]),
+                "options": [str(o) for o in data.get("options") or []],
+            }
+        return {"question": payload[:500], "options": []}
 
     def _build_validator_prompt(
         self,
@@ -731,10 +1001,158 @@ class TaskService:
             f"Diff/arquivos: {changed_files}\n"
             f"Testes: {dumps([{k: t.get(k) for k in ('command','status','exit_code')} for t in tests])}\n"
             f"Validação determinística: {dumps(det)}\n"
+            f"{self._stack_hint()}\n"
         )
 
+    def _remaining_duration_s(self, task: TaskRecord) -> int:
+        started = self._loop_started_monotonic
+        if started is None:
+            return int(task.constraints.maximum_duration_seconds)
+        elapsed = time.monotonic() - started
+        return max(0, int(task.constraints.maximum_duration_seconds - elapsed))
+
+    def _resolve_agent_timeout(self, role: str, task: TaskRecord) -> int:
+        return resolve_agent_timeout(
+            role,
+            remaining_s=self._remaining_duration_s(task),
+            by_role=self.config.limits.agent_timeout_by_role,
+            default_s=self.config.limits.agent_timeout_default_s,
+        )
+
+    # Marcadores de falha de infra do validator (sandbox Windows sem elevação).
+    _VALIDATOR_INFRA_MARKERS = (
+        "createprocessasuserw failed: 740",
+        "windows error 740",
+        "requer elevação",
+        "requer elevacao",
+        "windows sandbox: runner failed",
+    )
+
+    @classmethod
+    def _validator_infra_failure(cls, result: AgentResult) -> bool:
+        """Validator falhou por infra (processo/sandbox), não por mérito."""
+        if result.status != "completed":
+            return True
+        blob = ((result.stdout or "") + (result.stderr or "")).lower()
+        return any(m in blob for m in cls._VALIDATOR_INFRA_MARKERS)
+
+    def _next_validator_fallback(
+        self, task: TaskRecord, plan_roles: Any, current: str
+    ) -> str | None:
+        fallbacks = (task.plan or {}).get("fallbacks", {}).get("validator") or []
+        for fb in fallbacks:
+            if fb in {current, plan_roles.executor}:
+                continue
+            adapter = self.registry.get(fb)
+            if adapter and adapter.detect().available:
+                return fb
+        return None
+
+    async def _reject_iteration_infra(
+        self,
+        task: TaskRecord,
+        plan_roles: Any,
+        *,
+        issue_id: str,
+        description: str,
+        summary: str,
+        error_text: str | None,
+        issue_counts: dict[str, int],
+    ) -> tuple[TaskRecord | None, dict[str, Any]]:
+        """Iteração rejeitada por falha de infra do executor (spawn/saída vazia).
+
+        Retorna (task_terminal | None, last_validation). None → caller continua
+        o loop em CORRECTING com fallback de executor aplicado.
+        """
+        last_validation: dict[str, Any] = {
+            "status": "rejected",
+            "score": 0.0,
+            "blocking_issues": [
+                {
+                    "id": issue_id,
+                    "severity": "blocking",
+                    "description": description,
+                }
+            ],
+            "summary": summary,
+        }
+        decision = await self.manager.evaluate_iteration(
+            task, last_validation, task.iteration
+        )
+        issue_counts[issue_id] = issue_counts.get(issue_id, 0) + 1
+        if issue_counts[issue_id] >= self.config.limits.same_issue_repeat_limit:
+            decision.action = "stop_incomplete"
+            decision.reason = "same_issue_repeat_limit"
+        self.repo.add_iteration(
+            task.id,
+            task.iteration,
+            0.0,
+            decision.action,
+            {"reason": decision.reason, "infra_issue": issue_id},
+        )
+        if decision.action in {"stop_incomplete", "fail"}:
+            target = (
+                TaskState.FAILED
+                if decision.action == "fail"
+                else TaskState.INCOMPLETE
+            )
+            self.repo.transition(
+                task, target, reason=decision.reason, error=error_text
+            )
+            self._persist_episode(task, success=False)
+            return task, last_validation
+        # Tentar fallback de executor na próxima iteração
+        fallbacks = (task.plan or {}).get("fallbacks", {}).get("executor") or []
+        for fb in fallbacks:
+            if fb != plan_roles.executor and self.registry.get(fb):
+                plan_roles.executor = fb
+                break
+        self.repo.transition(
+            task,
+            TaskState.CORRECTING,
+            reason=f"{issue_id} → correct/fallback",
+            agent=plan_roles.executor,
+        )
+        return None, last_validation
+
+    @staticmethod
+    def _is_empty_delivery_issue(issue: Any) -> bool:
+        """VAL de workspace/evidence vazio — não deve acelerar same_issue após timeout."""
+        if not isinstance(issue, dict):
+            return False
+        if issue.get("id") == "AGENT-TIMEOUT":
+            return False
+        kind = str(issue.get("kind") or "").lower()
+        if kind in {"workspace_changes", "evidence"}:
+            return True
+        desc = str(issue.get("description") or "").lower()
+        markers = (
+            "workspace_changes",
+            "entregável",
+            "entregavel",
+            "arquivos vazio",
+            "diff/arquivos vazio",
+            "nenhum entregável",
+            "changed_files",
+        )
+        return any(m in desc for m in markers)
+
+    def _enrich_changed_files(self, result: AgentResult) -> AgentResult:
+        if result.changed_files:
+            return result
+        from_git = changed_files_since(self.config.project_path, self._git_baseline)
+        if from_git:
+            result.changed_files = list(from_git)
+        return result
+
     async def _run_agent(
-        self, agent_id: str, role: str, prompt: str, task: TaskRecord
+        self,
+        agent_id: str,
+        role: str,
+        prompt: str,
+        task: TaskRecord,
+        *,
+        timeout_cap_s: int | None = None,
     ):
         adapter = self.registry.get(agent_id)
         if adapter is None or not adapter.detect().available:
@@ -750,14 +1168,25 @@ class TaskService:
         if adapter is None or not adapter.detect().available:
             raise RuntimeError(f"Agente indisponivel para papel {role}: {agent_id}")
 
-        model, model_flag = self.router.resolve_model(agent_id, task.task_type)
+        timeout_s = self._resolve_agent_timeout(role, task)
+        if timeout_cap_s is not None:
+            timeout_s = min(timeout_s, int(timeout_cap_s))
+        if timeout_s < MIN_AGENT_TIMEOUT_S:
+            raise RuntimeError(
+                f"Orçamento de tempo insuficiente para {role} "
+                f"(timeout_s={timeout_s})"
+            )
+
+        model, model_flag = self.router.resolve_model(
+            agent_id, task.task_type, role=role
+        )
         self.bus.emit(
             RuntimeEvent(
                 task_id=task.id,
                 type=EventType.AGENT_STARTED,
                 role=role,
                 agent=agent_id,
-                data={"model": model},
+                data={"model": model, "timeout_s": timeout_s},
             )
         )
         request = AgentRequest(
@@ -766,9 +1195,10 @@ class TaskService:
             model=model,
             model_flag=model_flag,
             cwd=str(self.config.project_path),
-            timeout_s=min(600, task.constraints.maximum_duration_seconds),
+            timeout_s=timeout_s,
         )
         result = await adapter.run(request)
+        result = self._enrich_changed_files(result)
         self.repo.add_agent_run(
             task_id=task.id,
             role=role,
@@ -803,7 +1233,12 @@ class TaskService:
                 type=EventType.AGENT_COMPLETED,
                 role=role,
                 agent=agent_id,
-                data={"status": result.status, "exit_code": result.exit_code},
+                data={
+                    "status": result.status,
+                    "exit_code": result.exit_code,
+                    "timed_out": result.timed_out,
+                    "timeout_s": timeout_s,
+                },
             )
         )
         return result

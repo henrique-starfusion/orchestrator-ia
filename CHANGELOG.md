@@ -2,6 +2,122 @@
 
 ## Unreleased
 
+## 0.4.11 - 2026-07-24
+
+Auditoria das transcrições reais PrintBee (Cursor 2026-07-24) -> correções P0 do runtime
+(`docs/audits/2026-07-24-printbee-transcripts-orchestrator-fixes.md`).
+
+### Fixed
+
+- Executor que pergunta em vez de implementar: prompt proíbe perguntas abertas quando o objetivo já define o escopo; se genuinamente bloqueado, emite linha estruturada `REQUIRES_INPUT: {"question": ..., "options": [...]}` — runtime pausa em WAITING_FOR_USER SEM queimar a iteração (pergunta/opções expostas em `orchestrator_status`); pergunta repetida após resposta vira `AGENT-REQUIRES-INPUT` (infra) com rotação de executor e stop por `same_issue_repeat_limit`
+- Classificação: pedido de implementação que também cita "analisar" não vira mais `complex_analysis` com ACs de auditoria — verbo de implementação (implementar/criar/corrigir/mudar/alterar/ajustar/fix...) vence a keyword de análise; negações ("não criar X") continuam ignoradas
+- Refino de plano pelo planner (advisory — o plano determinístico já existe) com teto duro de 300s; `SELECTING_AGENTS` não fica mais preso 15 min no fable
+- Harness por stack: descoberta de pytest exige marcador Python real (pyproject/setup/requirements ou `.py` em `tests/`); fim do `**/test_*.py` que varria `node_modules` e inventava pytest em projeto Angular; prompts de executor e validator recebem os comandos de teste detectados ("use SOMENTE estes")
+- Cancel propaga kill para os CLIs filhos ativos (`CliExecutor.kill_active`); Codex órfão não segue rodando após cancelamento
+- Task barrada pelo `workspace.write.lock` grava `error = "blocked_by_lock: ..."` (visível em status/list) em vez de ficar RECEIVED muda; o erro é limpo quando a task finalmente executa
+- Timeout do executor sem NENHUM arquivo alterado (padrão Codex/PowerShell no Windows) rejeita como infra `AGENT-TIMEOUT-NO-OUTPUT` com rotação de executor, em vez de mandar "continue do disco" vazio; prompt no Windows orienta evitar heredoc/quoting PowerShell (preferir tools de escrita/`python -c`/arquivo temp)
+- `orchestrator_message`: não transiciona mais para PLANNING (transição que quebrava o resume); resume reentra o pipeline via WAITING_FOR_USER -> ANALYZING preservando resposta do usuário na análise
+
+### Added
+
+- `orchestrator_run` avisa (`warnings: ["mcp_modules_stale"]` + mensagem) quando o processo MCP está stale vs disco
+- Fingerprint de stale agora cobre `tasks/service.py`, `tasks/state_machine.py`, `testing/discovery.py`, `agents/process.py`; features novas: `requires_input_structured`, `impl_intent_overrides_analysis`, `stack_aware_test_harness`, `cancel_kills_children`, `blocked_by_lock_visible`, `timeout_no_output_rotation`, `planner_refine_cap`
+- Migration `0.4.10-to-0.4.11`
+- Testes `runtime/tests/unit/test_transcript_p0_fixes.py` (17 casos: classificação, requires_input pause/resume/repeat, discovery Node vs Python, stack hint nos prompts, timeout sem output, lock visível, cancel-kill, teto do planner)
+
+## 0.4.10 - 2026-07-23
+
+Auditoria do processo PrintBee -> correcoes de confiabilidade do runtime
+(`docs/audits/2026-07-23-printbee-process-orchestrator-improvements.md`).
+
+### Fixed
+
+- `git status`/`rev-parse` do baseline agora com timeout de 30s (`GIT_TIMEOUT_S`); hang do git no Windows nao trava mais a task em RECEIVED segurando o `workspace.write.lock`
+- Executor/corrector que "completa" com stdout vazio e zero arquivos alterados gera issue de infra `AGENT-EMPTY-OUTPUT` com fallback de executor e stop por `same_issue_repeat_limit`, em vez de rejeicao falsa do AC `workspace_changes`
+- `LlmReviewValidator.parse`: extracao de JSON tolerante a logs com chaves soltas (`raw_decode` por candidato); so `approved`/`rejected` contam como veredito - `{"status":"validating"}` e ruido de CLI nao rejeitam mais por engano; `score: null` cai no score deterministico
+- Validator que falha por infra (ex.: sandbox Windows erro 740 "requer elevacao") nao conta como rejeicao de merito: runtime tenta um validator alternativo e, sem veredito, usa apenas a validacao deterministica marcada com `validator_infra_failure`
+- `orchestrator_delegate` finaliza a task criada (COMPLETED/INCOMPLETE/FAILED); fim dos orfaos RECEIVED acumulados no DB (state machine permite RECEIVED->COMPLETED/INCOMPLETE para single-role)
+- Suite `npm test` hermetica: `Run-AllTests.ps1` limpa `ORCHESTRATOR_CHILD_AGENT` herdada do runtime (VALIDATING roda testes via `CliExecutor`, que marca o filho com a var); sem isso o golden de dispatch do `Test-AgentProfiles` abortava por anti-recursao em `Invoke-RoutedAgent.ps1` - mesmo isolamento ja aplicado ao pytest em `runtime/tests/conftest.py`
+
+### Added
+
+- Migration `0.4.9-to-0.4.10` (inclui SQL opcional para limpar delegates RECEIVED antigos)
+- Testes: hang de git (baseline indisponivel), saida vazia do executor -> INCOMPLETE com `AGENT-EMPTY-OUTPUT`, parse de veredito em log ruidoso, finalizacao de delegate
+
+## 0.4.9 — 2026-07-23
+
+### Fixed
+
+- Auto-dispatch: docstrings MCP de `orchestrator_run`/`delegate`/`analyze` declaram DEFAULT obrigatório (sem o usuário pedir)
+- Rule Cursor: primeira tool de trabalho = `orchestrator_run` antes de editar
+- Gap documentado em `docs/audits/2026-07-23-cursor-orchestrator-auto-dispatch-gap.md`
+
+### Added
+
+- Migration `0.4.8-to-0.4.9`
+
+## 0.4.8 — 2026-07-23
+
+### Fixed
+
+- `cursor configure` / merge de `.cursor/mcp.json` tolera BOM UTF-8 (`utf-8-sig`)
+
+### Added
+
+- Migration `0.4.7-to-0.4.8`
+
+## 0.4.7 — 2026-07-23
+
+### Fixed
+
+- Windows/Cursor: runtime fixa stdin/stdout/stderr em UTF-8; descrições PT-BR não perdem `ç`, `ã`, `õ` quando Python herda CP1252 em pipe
+- Wrapper Node (`bin/orchestrator.js`) exporta `PYTHONUTF8=1` + `PYTHONIOENCODING=utf-8` ao spawnar o runtime Python
+- `task list` texto troca `prompt[:60]` por preview de uma linha, word-safe, com `…`; `--json` continua integral
+- Regressão cobre CLI argv → SQLite → MCP result → JSON/texto sob `PYTHONIOENCODING=cp1252`
+
+### Changed
+
+- Rules Cursor (`multiagent-orchestrator.mdc`, live + template + rule gerada por `cursor configure`): orquestrador vira **modo padrão obrigatório** ("sem o usuário pedir"), com seções Gatilhos/Exceções/Anti-padrões; proibido inventar preferência de projeto sem citação `arquivo:linha` (auditoria `docs/audits/2026-07-23-cursor-inline-bypass-audit.md`, F1–F8)
+- `token-economy.mdc`: seção "Preferência" → "Ordem obrigatória"
+- `docs/cursor-front-controller.md` + `CURSOR.md` (raiz e template): bug fix / mudança de lógica → `orchestrator_run` por default; removida a licença "edição trivial → resposta direta"
+
+### Added
+
+- Migration `0.4.6-to-0.4.7` (behavior-only; dados SQLite já estavam íntegros)
+- Testes: `runtime/tests/unit/test_cli_encoding.py` (pipeline UTF-8) e `tests/Test-CursorDefaultOrchestration.ps1` (wording default orquestrador live == template == `cursor configure`)
+
+## 0.4.6 — 2026-07-23
+
+### Added
+
+- `role_model_preferences` em `models.json`: papel **planner** prefere **fable** → **opus** (Claude) quando declarados no cliente
+- `RulesRouter.resolve_model(..., role=)` aplica preferências por papel antes do `task_map`
+- Migration `0.4.5-to-0.4.6`
+
+### Fixed
+
+- Planner recebia Sonnet em tarefas `implementation`/`docs` porque o modelo seguia só o `task_type`
+
+## 0.4.5 — 2026-07-23
+
+### Added
+
+- Orçamento de timeout por papel (`agent_timeout_default_s` / `agent_timeout_by_role` em `policies.json`); executor/corrector padrão **2400s**
+- Fallback `git status --porcelain` para popular `changed_files` quando o CLI não reporta
+- Issue `AGENT-TIMEOUT` + exclusão de VAL workspace/evidence vazios do `same_issue_repeat_limit` após timeout
+- Regra Cursor `version-bump.mdc`: bump semver obrigatório ao entregar mudanças no pacote
+- Migration `0.4.4-to-0.4.5`
+
+### Fixed
+
+- Hardcap `min(600, …)` por invocação de agente (tarefas longas morriam em ~10 min mesmo com `maximum_duration_seconds=3600`)
+- `ProfileCliAdapter`: `request.timeout_s` passa a prevalecer sobre `profile.timeout_default_s`
+- `maximum_duration_seconds` agora encerra o loop quando o tempo restante é insuficiente
+
+### Changed
+
+- Profiles template: `timeout_default_s` 600 → **2400** (CLIs de escrita); gemini **1200**
+
 ## 0.4.4 — 2026-07-23
 
 ### Added

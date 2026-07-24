@@ -69,6 +69,8 @@ function printVersion(asJson) {
   const env = {
     ...process.env,
     PYTHONPATH: runtimeSrc + (process.env.PYTHONPATH ? path.delimiter + process.env.PYTHONPATH : ''),
+    PYTHONUTF8: '1',
+    PYTHONIOENCODING: 'utf-8',
   };
   const result = spawnSync(
     py.cmd,
@@ -301,6 +303,8 @@ function runRuntime(parsed) {
   const env = {
     ...process.env,
     PYTHONPATH: runtimeSrc + (process.env.PYTHONPATH ? path.delimiter + process.env.PYTHONPATH : ''),
+    PYTHONUTF8: '1',
+    PYTHONIOENCODING: 'utf-8',
   };
 
   const args = [...py.prefix, '-m', 'orchestrator_runtime'];

@@ -1,0 +1,20 @@
+---
+description: Sempre subir a versão do pacote ao concluir mudanças no orquestrador
+alwaysApply: true
+---
+
+# Version bump obrigatório
+
+Ao concluir qualquer mudança que altere o **pacote/runtime/instalador** do Orquestrador IA Multiagente (repositório do pacote), **suba a versão semver** antes do commit final.
+
+## Checklist mínimo
+
+1. `VERSION` (raiz) + `package/template/.orchestrator/VERSION`
+2. `package.json`, `runtime/pyproject.toml`, `runtime/.../__init__.py`
+3. `CHANGELOG.md` + `package/migrations/<from>-to-<to>.ps1`
+4. Docs que citam a versão atual + testes de versão
+5. Commit/push → `orchestrator update -Force` nos projetos consumidores
+
+Default: **PATCH** (`x.y.Z+1`), salvo pedido de minor/major.
+
+Não entregar fix/feature do runtime sem bump. Detalhes canônicos no repositório do pacote (`.cursor/rules/version-bump.mdc`).

@@ -48,6 +48,35 @@ def extract_requirements(prompt: str) -> list[str]:
     return requirements or [prompt.strip()]
 
 
+_IMPLEMENTATION_INTENT = (
+    "implement",
+    "implemente",
+    "implementar",
+    "criar",
+    "crie",
+    "corrig",
+    "conserte",
+    "mudar",
+    "mude",
+    "mudanç",
+    "mudanc",
+    "alterar",
+    "altere",
+    "adicionar",
+    "adicione",
+    "remover",
+    "remova",
+    "refator",
+    "refactor",
+    "aplicar",
+    "aplique",
+    "ajustar",
+    "ajuste",
+    "escrever",
+    "escreva",
+)
+
+
 class TaskAnalyzer:
     def analyze(self, prompt: str, project_files: list[str] | None = None) -> TaskAnalysis:
         languages = detect_languages(prompt, project_files)
@@ -65,6 +94,17 @@ class TaskAnalyzer:
             task_type = "complex_analysis"
         elif any(w in lowered for w in ("doc", "readme", "changelog")):
             task_type = "docs"
+
+        # Pedido de implementação que também cita "analisar" não pode virar
+        # complex_analysis (ACs de auditoria em vez de workspace_changes) —
+        # verbo de implementação vence a keyword de análise.
+        # Negações não contam como intenção ("não criar módulo soma").
+        cleaned = _NEGATED_CLAUSE_RE.sub(" ", lowered)
+        has_impl_intent = any(w in cleaned for w in _IMPLEMENTATION_INTENT) or re.search(
+            r"\bfix(es|ed|ing)?\b", cleaned
+        )
+        if task_type == "complex_analysis" and has_impl_intent:
+            task_type = "implementation"
 
         complexity = "medium"
         if len(prompt) > 400 or task_type in {"architecture", "complex_analysis"}:

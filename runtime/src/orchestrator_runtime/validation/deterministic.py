@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 from typing import Any
 
@@ -194,16 +193,43 @@ class DeterministicValidator:
 class LlmReviewValidator:
     """Interpreta JSON de aprovação emitido por um agente validador."""
 
+    # Só "approved"/"rejected" são veredito de mérito. Saídas intermediárias
+    # (ex.: {"status":"validating"}) ou logs com chaves não podem rejeitar.
+    VERDICT_STATUSES = frozenset({"approved", "rejected"})
+
+    @staticmethod
+    def _json_objects(text: str) -> list[Any]:
+        """Todo objeto JSON embutido no texto, tolerante a chaves soltas de log."""
+        decoder = json.JSONDecoder()
+        out: list[Any] = []
+        idx = 0
+        while True:
+            pos = text.find("{", idx)
+            if pos < 0:
+                break
+            try:
+                obj, end = decoder.raw_decode(text, pos)
+            except json.JSONDecodeError:
+                idx = pos + 1
+                continue
+            out.append(obj)
+            idx = end
+        return out
+
     def parse(self, stdout: str, fallback: dict[str, Any]) -> dict[str, Any]:
-        match = re.search(r"\{[\s\S]*\}", stdout)
-        if not match:
+        data: dict[str, Any] | None = None
+        for parsed in self._json_objects(stdout or ""):
+            if (
+                isinstance(parsed, dict)
+                and str(parsed.get("status", "")).lower() in self.VERDICT_STATUSES
+            ):
+                data = parsed  # último veredito válido vence
+        if data is None:
             return fallback
-        try:
-            data = json.loads(match.group(0))
-        except json.JSONDecodeError:
-            return fallback
-        if "status" not in data:
-            return fallback
+        if data.get("score") is None:
+            data.pop("score", None)
+        if data.get("blocking_issues") is None:
+            data.pop("blocking_issues", None)
         data.setdefault("blocking_issues", [])
         data.setdefault("non_blocking_issues", [])
         data.setdefault("criteria", fallback.get("criteria", []))

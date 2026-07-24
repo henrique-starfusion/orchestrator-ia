@@ -203,6 +203,12 @@
       "notes": "Usar modelo mais novo exposto pelo CLI Kimi; ajustar quando houver tiers oficiais."
     }
   },
+  "role_model_preferences": {
+    "planner": {
+      "claude": ["fable", "opus"],
+      "cursor": ["max", "deep"]
+    }
+  },
   "escalation": {
     "on_validation_fail": "upgrade_one_tier",
     "tier_order": ["fast", "balanced", "deep", "max"],
@@ -211,9 +217,10 @@
   },
   "resolution_algorithm": [
     "1. Classificar a tarefa (task_classes).",
-    "2. Resolver tier → modelo do cliente disponível (agents/detected.json).",
-    "3. Aplicar caveman (full) na comunicação do orquestrador/agentes.",
-    "4. Invocar CLI com model_flag + modelo resolvido.",
-    "5. Se validate-result falhar e allow escalate: subir um tier e repetir (máx. 1)."
+    "2. Se o papel tiver role_model_preferences e o modelo estiver declarado no cliente, usar o primeiro disponível (planner: fable → opus).",
+    "3. Senão resolver task_class → tier → modelo do cliente disponível (agents/detected.json).",
+    "4. Aplicar caveman (full) na comunicação do orquestrador/agentes.",
+    "5. Invocar CLI com model_flag + modelo resolvido.",
+    "6. Se validate-result falhar e allow escalate: subir um tier e repetir (máx. 1)."
   ]
 }

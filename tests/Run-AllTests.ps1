@@ -2,6 +2,12 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Hermetico: runtime/dispatch marcam filhos com ORCHESTRATOR_CHILD_AGENT=1.
+# Herdada (ex.: suite rodando sob o orquestrador em VALIDATING), a var faz
+# Invoke-RoutedAgent abortar por anti-recursao e Test-AgentProfiles falhar.
+# Mesmo isolamento do pytest em runtime/tests/conftest.py.
+$env:ORCHESTRATOR_CHILD_AGENT = ''
+
 $testsRoot = $PSScriptRoot
 $testScripts = @(Get-ChildItem -LiteralPath $testsRoot -Filter 'Test-*.ps1' -File |
     Where-Object { $_.Name -ne 'Test-Helpers.ps1' } |

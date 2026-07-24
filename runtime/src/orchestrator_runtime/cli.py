@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
+import textwrap
 from pathlib import Path
 from typing import Optional
 
@@ -11,6 +13,31 @@ import typer
 
 from orchestrator_runtime import __version__
 from orchestrator_runtime.tasks.service import build_service
+
+
+def _configure_utf8_stdio() -> None:
+    """Keep Windows pipes/MCP/IDE consumers on one encoding contract."""
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="strict")
+        except (OSError, ValueError):
+            # Test/capture streams and already-detached wrappers may reject it.
+            continue
+
+
+def _task_preview(prompt: str, width: int = 72) -> str:
+    """Single-line, word-safe text preview; JSON keeps the complete prompt."""
+    normalized = " ".join(prompt.split())
+    shortened = textwrap.shorten(normalized, width=width, placeholder="…")
+    if shortened.endswith("…"):
+        shortened = shortened[:-1].rstrip(".,;:") + "…"
+    return shortened
+
+
+_configure_utf8_stdio()
 
 app = typer.Typer(
     name="orchestrator-runtime",
@@ -205,7 +232,7 @@ def task_list(
         _print_json([t.model_dump() for t in tasks])
     else:
         for t in tasks:
-            typer.echo(f"{t.id}\t{t.status.value}\t{t.prompt[:60]}")
+            typer.echo(f"{t.id}\t{t.status.value}\t{_task_preview(t.prompt)}")
 
 
 @task_app.command("cancel")
@@ -318,18 +345,36 @@ description: Integração do chat do Cursor com o Orquestrador Multiagente
 alwaysApply: true
 ---
 
-Você é o agente principal da conversa no Cursor.
+Você é o agente principal da conversa no Cursor (cliente IDE, não worker).
 
-Analise cada solicitação e escolha entre:
+## Modo padrão: orquestrador (obrigatório, sem o usuário pedir)
 
-1. responder diretamente;
-2. delegar um papel específico;
-3. executar o workflow completo.
+`orchestrator_run` é o modo DEFAULT para qualquer tarefa não-trivial.
+O usuário NÃO precisa pedir. Se qualquer gatilho abaixo se aplica, a
+primeira tool de trabalho deve ser `orchestrator_run` (ou
+`orchestrator_delegate` para papel read-only pontual) — antes de editar.
 
-Use `orchestrator_delegate` para tarefas pontuais.
+## Gatilhos (qualquer um → orquestrador)
 
-Use `orchestrator_run` para tarefas que exigem planejamento, alterações,
-testes, validação, correção, persistência ou múltiplos agentes.
+- Alterar código-fonte (mesmo 1 linha de lógica, mesmo 1 arquivo)
+- Corrigir bug reportado (bug fix NUNCA é exceção "trivial")
+- Criar/alterar testes, build ou configuração de runtime
+- Tarefa com critérios de aceitação, validação ou multi-arquivo
+
+## Exceções (resposta direta permitida)
+
+- Dúvida conceitual ou leitura pontual de arquivo (sem edição)
+- Typo/comentário/formatação sem mudança de lógica, 1 arquivo
+- Reformatação de resposta anterior no chat
+
+## Anti-padrões (proibido)
+
+- Fix inline "porque é rápido/simples" — se muda lógica, é orquestrador.
+- Inventar preferência/política de projeto (ex.: "preferência do projeto:
+  trabalho inline"). Alegação de preferência exige citação arquivo:linha de
+  uma rule real; sem citação, a preferência não existe e vale o default.
+- Subagentes `Task` do Cursor como workflow principal (só fallback legado,
+  sempre com `model=` explícito).
 
 Não simule respostas de agentes CLI.
 

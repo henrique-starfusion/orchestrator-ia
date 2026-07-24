@@ -71,6 +71,9 @@ def test_mcp_delegate(tools):
     )
     assert out["status"] == "completed"
     assert out["agent"] == "claude"
+    # delegate finaliza a task (anti-órfão RECEIVED no DB)
+    st = tools.status({"task_id": out["task_id"]})
+    assert st["status"] == "COMPLETED"
 
 
 def test_mcp_run(tools):
@@ -132,7 +135,7 @@ def test_mcp_message(tools):
     service.repo.transition(task, TaskState.PLANNING, reason="t")
     service.repo.transition(task, TaskState.WAITING_FOR_USER, reason="ask")
     out = tools.message({"task_id": task.id, "message": "proceed"})
-    assert out["status"] == "PLANNING"
+    assert out["status"] == "RESUMING"
 
 
 def test_mcp_resources(tools):

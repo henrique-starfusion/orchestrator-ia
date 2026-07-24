@@ -13,6 +13,6 @@
     "json_flags": []
   },
   "exit_codes": { "success": 0 },
-  "timeout_default_s": 600,
+  "timeout_default_s": 1200,
   "notes": "Extraido de docs (nao testado neste host). model_flag -m vem de config/models.json."
 }

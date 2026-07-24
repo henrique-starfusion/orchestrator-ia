@@ -109,11 +109,28 @@ class RulesRouter:
             return preferred
         return ranked[0]
 
-    def resolve_model(self, agent_id: str, task_type: str) -> tuple[str | None, str | None]:
-        """Retorna (model_or_alias, model_flag). Se não confirmado, (None, None)."""
+    def resolve_model(
+        self,
+        agent_id: str,
+        task_type: str,
+        role: str | None = None,
+    ) -> tuple[str | None, str | None]:
+        """Retorna (model_or_alias, model_flag). Se não confirmado, (None, None).
+
+        ``role`` permite override por papel (ex.: planner → fable/opus quando
+        configurados no cliente), independentemente do ``task_type``.
+        """
         clients = (self.config.models or {}).get("clients") or {}
         client = clients.get(agent_id) or {}
         model_flag = client.get("model_flag")
+        flag = str(model_flag) if model_flag else None
+
+        # Preferências por papel (planner prefere fable → opus quando disponíveis).
+        for token in self._role_model_candidates(agent_id, role, client):
+            resolved = self._materialize_model_token(client, token, flag)
+            if resolved[0] is not None:
+                return resolved
+
         task_map = client.get("task_map") or {}
         alias = task_map.get(task_type)
         if not alias:
@@ -132,10 +149,51 @@ class RulesRouter:
             alias = aliases.get(tier)
         if not alias:
             return None, None
+        return self._materialize_model_token(client, str(alias), flag)
+
+    def _role_model_candidates(
+        self, agent_id: str, role: str | None, client: dict[str, Any]
+    ) -> list[str]:
+        if not role:
+            return []
+        prefs = (self.config.models or {}).get("role_model_preferences") or {}
+        # Defaults do produto: planner Claude → Fable 5, senão Opus 4.8
+        defaults: dict[str, dict[str, list[str]]] = {
+            "planner": {
+                "claude": ["fable", "opus"],
+                "cursor": ["max", "deep"],
+            }
+        }
+        by_role = prefs.get(role) if isinstance(prefs.get(role), dict) else None
+        if by_role is None:
+            by_role = defaults.get(role) or {}
+        raw = by_role.get(agent_id) if isinstance(by_role, dict) else None
+        if not isinstance(raw, list):
+            return []
         models = client.get("models") or {}
         aliases_map = client.get("aliases") or {}
-        flag = str(model_flag) if model_flag else None
-        # task_map pode apontar para alias de CLI (sonnet) ou tier (balanced).
+        alias_values = {str(v) for v in aliases_map.values()}
+        out: list[str] = []
+        for item in raw:
+            token = str(item)
+            # "disponível" = declarado no cliente (alias CLI ou chave em models/aliases)
+            if (
+                token in models
+                or token in aliases_map
+                or token in alias_values
+            ):
+                out.append(token)
+        return out
+
+    def _materialize_model_token(
+        self,
+        client: dict[str, Any],
+        alias: str,
+        flag: str | None,
+    ) -> tuple[str | None, str | None]:
+        models = client.get("models") or {}
+        aliases_map = client.get("aliases") or {}
+        # task_map / prefs podem apontar para alias de CLI (sonnet/fable) ou tier (balanced).
         token = str(alias)
         if token in aliases_map:
             token = str(aliases_map[token])

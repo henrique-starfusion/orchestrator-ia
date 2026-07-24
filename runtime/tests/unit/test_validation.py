@@ -6,7 +6,11 @@ from orchestrator_runtime.tasks.models import (
     CriterionKind,
     TaskRecord,
 )
-from orchestrator_runtime.validation import CompletionGate, DeterministicValidator
+from orchestrator_runtime.validation import (
+    CompletionGate,
+    DeterministicValidator,
+    LlmReviewValidator,
+)
 
 
 def test_validation_and_gate(project):
@@ -101,3 +105,42 @@ def test_legacy_criterion_infers_soma_kind(project):
     )
     assert det["status"] == "approved"
     assert det["criteria"][0]["kind"] == "soma_module"
+
+
+FALLBACK = {"status": "rejected", "score": 0.3, "blocking_issues": [], "summary": "det"}
+
+
+def test_llm_parse_verdict_amid_cli_noise():
+    """Log real de CLI: chaves soltas + JSON intermediário + veredito no fim."""
+    stdout = (
+        "ERROR codex_core::exec: Io(Custom { kind: Other, error: \"x\" })\n"
+        '{"status":"validating","score":null,"blocking_issues":[]}\n'
+        "mais log { solto\n"
+        '{"status":"approved","score":0.95,"blocking_issues":[]}\n'
+    )
+    out = LlmReviewValidator().parse(stdout, dict(FALLBACK))
+    assert out["status"] == "approved"
+    assert out["score"] == 0.95
+
+
+def test_llm_parse_intermediate_status_is_not_verdict():
+    """{"status":"validating"} sozinho não é veredito → fallback determinístico."""
+    fallback = dict(FALLBACK)
+    stdout = '{"status":"validating","score":null,"blocking_issues":[]}\n'
+    out = LlmReviewValidator().parse(stdout, fallback)
+    assert out is fallback
+
+
+def test_llm_parse_null_score_uses_fallback_score():
+    fallback = dict(FALLBACK)
+    stdout = '{"status":"rejected","score":null,"blocking_issues":["faltou doc"]}\n'
+    out = LlmReviewValidator().parse(stdout, fallback)
+    assert out["status"] == "rejected"
+    assert out["score"] == fallback["score"]
+    assert out["blocking_issues"][0]["description"] == "faltou doc"
+
+
+def test_llm_parse_pure_noise_falls_back():
+    fallback = dict(FALLBACK)
+    out = LlmReviewValidator().parse("Io(Custom { kind: Other })", fallback)
+    assert out is fallback

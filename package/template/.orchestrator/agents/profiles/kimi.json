@@ -13,6 +13,6 @@
     "json_flags": []
   },
   "exit_codes": { "success": 0 },
-  "timeout_default_s": 600,
+  "timeout_default_s": 2400,
   "notes": "Best-effort de docs; validar flags reais quando o CLI estiver no PATH e marcar verified=true."
 }

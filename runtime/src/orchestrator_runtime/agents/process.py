@@ -70,6 +70,8 @@ class CliExecutor:
     def __init__(self, project_path: Path, echo: bool = True) -> None:
         self.project_path = project_path.resolve()
         self.echo = echo
+        # PIDs de CLIs em execução — alvo do cancel (kill de filhos).
+        self._active_pids: set[int] = set()
 
     def run(
         self,
@@ -135,6 +137,7 @@ class CliExecutor:
                 cwd=str(workdir),
             )
 
+        self._active_pids.add(proc.pid)
         stop_heartbeat = threading.Event()
 
         def _reader(stream, chunks: list[str], prefix: str) -> None:
@@ -172,6 +175,7 @@ class CliExecutor:
             except subprocess.TimeoutExpired:
                 proc.kill()
         finally:
+            self._active_pids.discard(proc.pid)
             stop_heartbeat.set()
             t_out.join(timeout=2)
             t_err.join(timeout=2)
@@ -190,6 +194,19 @@ class CliExecutor:
             command=resolved_command,
             cwd=str(workdir),
         )
+
+    def kill_active(self) -> list[int]:
+        """Mata as árvores de processos CLI ativos (propagação de cancel).
+
+        ponytail: mata todos os filhos deste executor — um workflow por vez sob
+        o write lock, então o alvo é a task cancelada; rastrear pid→task se um
+        dia houver escrita paralela.
+        """
+        killed: list[int] = []
+        for pid in list(self._active_pids):
+            self._kill_tree(pid)
+            killed.append(pid)
+        return killed
 
     @staticmethod
     def _kill_tree(pid: int) -> None:

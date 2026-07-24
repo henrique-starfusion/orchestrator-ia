@@ -5,11 +5,35 @@ alwaysApply: true
 
 Você é o agente principal da conversa no Cursor (cliente IDE, não worker).
 
-## Escolha de modo
+## Modo padrão: orquestrador (obrigatório, sem o usuário pedir)
 
-1. Responder diretamente (dúvida simples, leitura local).
-2. `orchestrator_delegate` — papel pontual (planner/validator read-only).
-3. `orchestrator_run` — workflow com plano, alterações, testes, validação, docs.
+`orchestrator_run` é o modo DEFAULT para qualquer tarefa não-trivial.
+O usuário NÃO precisa pedir. Se qualquer gatilho abaixo se aplica, a
+**primeira tool de trabalho** deve ser `orchestrator_run` (ou
+`orchestrator_delegate` para papel read-only pontual) — antes de
+Write/StrReplace/Shell de alteração.
+
+## Gatilhos (qualquer um → orquestrador)
+
+- Alterar código-fonte (mesmo 1 linha de lógica, mesmo 1 arquivo)
+- Corrigir bug reportado (bug fix NUNCA é exceção "trivial")
+- Criar/alterar testes, build ou configuração de runtime
+- Tarefa com critérios de aceitação, validação ou multi-arquivo
+
+## Exceções (resposta direta permitida)
+
+- Dúvida conceitual ou leitura pontual de arquivo (sem edição)
+- Typo/comentário/formatação sem mudança de lógica, 1 arquivo
+- Reformatação de resposta anterior no chat
+
+## Anti-padrões (proibido)
+
+- Fix inline "porque é rápido/simples" — se muda lógica, é orquestrador.
+- Inventar preferência/política de projeto (ex.: "preferência do projeto:
+  trabalho inline"). Alegação de preferência exige citação arquivo:linha de
+  uma rule real; sem citação, a preferência não existe e vale o default.
+- Subagentes `Task` do Cursor como workflow principal (só fallback legado,
+  sempre com `model=` explícito).
 
 ## Contrato de poll (obrigatório)
 

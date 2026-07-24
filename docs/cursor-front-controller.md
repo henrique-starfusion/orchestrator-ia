@@ -26,7 +26,8 @@ flowchart TB
 
 | Situação | Ação |
 |---|---|
-| Pergunta / edição trivial | Resposta direta |
+| Dúvida conceitual / typo sem lógica (exceções em multiagent-orchestrator.mdc) | Resposta direta |
+| Bug fix / mudança de lógica (qualquer tamanho) | `orchestrator_run` (default, sem pedir) |
 | Plano / review pontual | `orchestrator_delegate` |
 | Multi-arquivo, testes, validação | `orchestrator_run` |
 
