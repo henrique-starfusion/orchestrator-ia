@@ -5,6 +5,8 @@
 param(
     [string]$ProjectPath,
     [string]$PackageRoot,
+    [string]$FromVersion,
+    [string]$ToVersion,
     [switch]$DryRun
 )
 
