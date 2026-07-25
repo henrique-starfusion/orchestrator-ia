@@ -66,6 +66,11 @@ FEATURES: tuple[str, ...] = (
     "role_model_executor_strong",
     # 0.4.23 — import rules/skills/adapters existentes antes do install
     "preinstall_import_existing_config",
+    # 0.4.24 — cancel hard-stop, MCP stale gate, registry prune, fila TASK_QUEUED
+    "cancel_terminal_hard_stop",
+    "mcp_stale_run_reject",
+    "registry_prune_test_fixtures",
+    "task_queued_event",
 )
 
 

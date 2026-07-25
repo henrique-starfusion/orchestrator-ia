@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+## 0.4.24 - 2026-07-25
+
+Correções P0–P2 da auditoria multi-projeto: cancel confiável, MCP stale, registry, spawn, fila.
+
+### Fixed
+
+- **bug-022:** `save` não ressuscita task terminal; `transition` relê DB e aborta com `CancelledError` ao sair de CANCELLED/FAILED/…
+- Loop checa cancel/`_ensure_runnable` entre fases (incl. TESTING/VALIDATING)
+- `cancel(reason=)` persiste motivo em `error`
+- MCP `orchestrator_run` **recusa** se `modules_stale` (opt-out: `ORCHESTRATOR_ALLOW_STALE_MCP=1`)
+- SELECTING_AGENTS com teto 180s (refine limitado ao restante)
+- WinError 2: stderr com path/`which`/command explícitos
+- Registry: não registra `Temp/orchestrator-tests-*`; `Prune-OrchestratorProjectRegistry` no propagate
+
+### Added
+
+- Evento `TASK_QUEUED`
+- Onboarding no primeiro run (probe agentes + `memory/legacy-import/INDEX.md`)
+- `role_model_preferences.planner` no patch de models
+- Rules git-workflow: não commit inline com task ativa
+- Feature flags: `cancel_terminal_hard_stop`, `mcp_stale_run_reject`, `registry_prune_test_fixtures`, `task_queued_event`
+- Migration `0.4.23-to-0.4.24`
+- Testes `test_0424_p0_p2_fixes.py`
+
 ## 0.4.23 - 2026-07-25
 
 Antes do install/update, importa rules/skills/adapters já presentes no repositório para `legacy-import/` (aditivo; não apaga a origem).

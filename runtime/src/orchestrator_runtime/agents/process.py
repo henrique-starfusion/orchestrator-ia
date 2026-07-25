@@ -151,16 +151,43 @@ class CliExecutor:
                 errors="replace",
             )
         except FileNotFoundError as exc:
-            # Ainda sem executável resolvido (PATH do MCP/Cursor incompleto).
+            # Ainda sem executável resolvido (PATH do MCP/Cursor incompleto / WinError 2).
+            exe0 = resolved_command[0] if resolved_command else "?"
+            which_hint = which(str(exe0)) if resolved_command else None
+            detail = (
+                f"[WinError 2 / FileNotFoundError] executável não encontrado: {exe0!r}. "
+                f"which={which_hint!r} cwd={workdir} PATH_has_exe="
+                f"{bool(which_hint)}. command={resolved_command!r}. "
+                f"original={exc}"
+            )
             return ProcessResult(
                 exit_code=127,
                 stdout="",
-                stderr=f"FileNotFoundError: {exc} (command={resolved_command!r})",
+                stderr=detail,
                 timed_out=False,
                 duration_s=time.monotonic() - started,
                 command=resolved_command,
                 cwd=str(workdir),
             )
+        except OSError as exc:
+            # Windows às vezes reporta WinError 2 como OSError genérico.
+            winerr = getattr(exc, "winerror", None)
+            if winerr == 2 or getattr(exc, "errno", None) == 2:
+                exe0 = resolved_command[0] if resolved_command else "?"
+                detail = (
+                    f"[WinError 2] O sistema não pode encontrar o arquivo: {exe0!r}. "
+                    f"cwd={workdir} command={resolved_command!r}. original={exc}"
+                )
+                return ProcessResult(
+                    exit_code=127,
+                    stdout="",
+                    stderr=detail,
+                    timed_out=False,
+                    duration_s=time.monotonic() - started,
+                    command=resolved_command,
+                    cwd=str(workdir),
+                )
+            raise
 
         self._active_pids.add(proc.pid)
         stop_heartbeat = threading.Event()

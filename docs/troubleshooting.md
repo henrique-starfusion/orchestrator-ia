@@ -487,6 +487,22 @@ Inclua:
 
 ---
 
+## MCP stale / run recusado (0.4.24+)
+
+Sintoma: `orchestrator_run` retorna `status=FAILED` com `mcp_modules_stale` sem criar task.
+
+Causa: o processo MCP ainda carrega código antigo (`modules_stale=true`).
+
+Ação: recarregar o servidor MCP / reiniciar o Cursor. Emergência: `ORCHESTRATOR_ALLOW_STALE_MCP=1` (não recomendado).
+
+## Cancel que “não para” / CANCELLED → TESTING (bug-022, 0.4.24+)
+
+A partir de 0.4.24 o `save` não sobrescreve estado terminal e `transition` aborta com `CancelledError`. Use `orchestrator_cancel` com `reason` — o motivo fica em `error`.
+
+## Registry com dezenas de Temp/orchestrator-tests
+
+`Prune-OrchestratorProjectRegistry` (automático no propagate 0.4.24+) remove paths mortos e fixtures de teste. Install/update de fixtures não registra mais no registry global.
+
 ## Ver também
 
 - [`cli-reference.md`](cli-reference.md)

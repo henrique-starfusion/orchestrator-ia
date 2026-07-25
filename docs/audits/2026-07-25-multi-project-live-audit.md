@@ -107,9 +107,15 @@ Taxas de conclusão (tasks no DB):
 - Nenhum lock zumbi no momento da varredura.
 - Codex fail-fast / sandbox Windows já no código (efeito em produção ainda misturado com cancels).
 
-## 6. Próximo passo sugerido
+## 6. Status de implementação
 
-1. Recarregar MCP (obrigatório antes de qualquer `orchestrator_run` confiável).  
-2. Implementar **A1+A2+A3** (cancel hard-stop) como 0.4.24.  
-3. **A9+A10** (prune registry) no mesmo release — baixo risco, alto higiene.  
-4. Só depois atacar A4/A5 (UX MCP stale + SELECTING hang).
+**0.4.24 (2026-07-25)** implementou A1–A14 do backlog desta auditoria:
+
+- cancel hard-stop + save anti-ressurreição + `cancel_reason`
+- MCP stale → run rejeitado; SELECTING_AGENTS cap 180s
+- git-workflow anti-inline com task ativa
+- WinError 2 detalhado; probe+INDEX no primeiro run
+- registry prune + skip Temp tests; planner prefs no patch
+- evento `TASK_QUEUED`
+
+Pendente operacional: **reload MCP** na IDE (fingerprint stale até reinício).

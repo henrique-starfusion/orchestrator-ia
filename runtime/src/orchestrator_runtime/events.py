@@ -30,6 +30,7 @@ class EventType(str, Enum):
     TASK_FAILED = "task_failed"
     TASK_INCOMPLETE = "task_incomplete"
     TASK_CANCELLED = "task_cancelled"
+    TASK_QUEUED = "task_queued"
 
 
 class RuntimeEvent(BaseModel):

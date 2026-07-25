@@ -456,6 +456,35 @@ class OrchestratorMcpTools:
                 "ou ORCHESTRATOR_ALLOW_FAKE_AGENTS=1"
             )
 
+        # 0.4.24 — MCP stale: recusar run (evita hang/modelos errados).
+        allow_stale = os.environ.get(
+            "ORCHESTRATOR_ALLOW_STALE_MCP", ""
+        ).lower() in {"1", "true", "yes"}
+        try:
+            from orchestrator_runtime.diagnostics import code_fingerprint
+
+            fp = code_fingerprint()
+            if fp.get("modules_stale") and not allow_stale:
+                return {
+                    "task_id": None,
+                    "status": "FAILED",
+                    "warnings": ["mcp_modules_stale"],
+                    "error": (
+                        "MCP modules stale: processo carregou runtime antigo "
+                        f"(fingerprint={fp.get('sha256_16')}) vs disco "
+                        f"({fp.get('disk_sha256_16')}). "
+                        "Recarregue o servidor MCP / Cursor e tente de novo. "
+                        "Opt-out emergencial: ORCHESTRATOR_ALLOW_STALE_MCP=1."
+                    ),
+                    "message": (
+                        "Orquestrador recusou run — MCP stale. "
+                        "Reload Cursor/MCP obrigatório."
+                    ),
+                    "next_poll_after_seconds": 0,
+                }
+        except Exception:  # noqa: BLE001
+            pass
+
         service = self._service(data.workspace)
         prev_fake = service.config.fake_agents
 
@@ -799,11 +828,13 @@ class OrchestratorMcpTools:
     def cancel(self, payload: dict[str, Any]) -> dict[str, Any]:
         data = CancelInput.model_validate(payload)
         service = self._service()
-        task = service.cancel(data.task_id)
+        reason = (data.reason or "").strip() or "cancel requested via MCP"
+        task = service.cancel(data.task_id, reason=reason)
         return {
             "task_id": task.id,
             "status": task.status.value,
-            "reason": data.reason,
+            "reason": reason,
+            "error": task.error,
         }
 
     def resume(self, payload: dict[str, Any]) -> dict[str, Any]:

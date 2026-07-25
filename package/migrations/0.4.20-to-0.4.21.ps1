@@ -51,6 +51,10 @@ if claude.get("invoke_example") == 'claude --model sonnet -p "..."':
 
 prefs = data.setdefault("role_model_preferences", {})
 desired = {
+    "planner": {
+        "claude": ["fable", "opus"],
+        "cursor": ["max", "deep"],
+    },
     "executor": {
         "claude": ["opus", "sonnet"],
         "codex": ["deep", "balanced", "gpt-5.6-sol"],

@@ -1010,6 +1010,41 @@ function Save-ProjectRegistry {
     return $path
 }
 
+function Test-IsOrchestratorTestProject {
+    param([Parameter(Mandatory = $true)][string]$ProjectPath)
+    # Fixtures de testes PowerShell — nunca poluir o registry global.
+    # (ORCHESTRATOR_SKIP_PACKAGE_SYNC não entra aqui: testes de propagate usam registry isolado.)
+    if ($ProjectPath -match '(?i)[\\/]Temp[\\/]orchestrator-tests-') { return $true }
+    if ($ProjectPath -match '(?i)AppData[\\/]Local[\\/]Temp[\\/]orchestrator-tests-') { return $true }
+    return $false
+}
+
+function Prune-OrchestratorProjectRegistry {
+    <#
+    .SYNOPSIS
+      Remove entradas inexistentes e fixtures Temp/orchestrator-tests-* do registry.
+    #>
+    param([switch]$DryRun)
+    $reg = Read-ProjectRegistry
+    $kept = [System.Collections.Generic.List[object]]::new()
+    $removed = 0
+    foreach ($p in @($reg.projects)) {
+        if ($null -eq $p) { continue }
+        $pp = [string]$p.path
+        if ([string]::IsNullOrWhiteSpace($pp)) { $removed++; continue }
+        if (Test-IsOrchestratorTestProject -ProjectPath $pp) { $removed++; continue }
+        if (-not (Test-Path -LiteralPath $pp)) { $removed++; continue }
+        if (-not (Test-Path -LiteralPath (Join-Path $pp '.orchestrator'))) { $removed++; continue }
+        $kept.Add($p) | Out-Null
+    }
+    if ($removed -gt 0) {
+        Write-Host ("[OK] Prune registry: removidas {0} entradas (restam {1})" -f $removed, $kept.Count)
+        $reg.projects = @($kept.ToArray())
+        Save-ProjectRegistry -Registry $reg -DryRun:$DryRun | Out-Null
+    }
+    return [pscustomobject]@{ removed = $removed; kept = $kept.Count }
+}
+
 function Register-OrchestratorProject {
     param(
         [Parameter(Mandatory = $true)]
@@ -1026,15 +1061,22 @@ function Register-OrchestratorProject {
     catch {
         return $null
     }
+    if (Test-IsOrchestratorTestProject -ProjectPath $resolved) {
+        Write-Host ("[SKIP] Registry: projeto de teste nao registrado ({0})" -f $resolved)
+        return $null
+    }
     if ([string]::IsNullOrWhiteSpace($Version)) {
         $Version = Read-WorkspaceVersion -ProjectPath $resolved
     }
     $reg = Read-ProjectRegistry
+    # Prune oportunista a cada register
     $list = [System.Collections.Generic.List[object]]::new()
     foreach ($p in @($reg.projects)) {
         if ($null -eq $p) { continue }
         $pp = [string]$p.path
         if ([string]::IsNullOrWhiteSpace($pp)) { continue }
+        if (Test-IsOrchestratorTestProject -ProjectPath $pp) { continue }
+        if (-not (Test-Path -LiteralPath $pp)) { continue }
         if (-not [string]::Equals($pp, $resolved, [StringComparison]::OrdinalIgnoreCase)) {
             $list.Add($p) | Out-Null
         }

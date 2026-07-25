@@ -68,6 +68,8 @@ No `install` / `init` / `update`, **antes** de copiar o template, o pipeline det
 
 Skills sob `.orchestrator/skills/legacy-import/**` entram no catálogo do runtime (`discover_skills` faz `rglob`).
 
+No **primeiro** `orchestrator_run` do projeto, o runtime gera `.orchestrator/memory/legacy-import/INDEX.md` (lista skills/rules importadas para revisão) e faz probe dos agentes disponíveis.
+
 ### Exclusões na cópia de `.cursor/rules`
 
 Não são importadas (geradas pelo template/OpenWolf): `openwolf.mdc`, `call-agent.mdc`, `git-workflow.mdc`, `multiagent-orchestrator.mdc`, `orchestrator.mdc`, `runtime.mdc`, `token-economy.mdc`, `version-bump.mdc`.

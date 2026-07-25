@@ -26,4 +26,10 @@ Quando uma tarefa ou atualização for **concluída e testada**:
 
 Neste projeto, concluir + testar implica commit e push (não esperar pedido explícito).
 
+## Convivência com o orquestrador (0.4.24+)
+
+- **Não** faça commit/push inline enquanto houver `orchestrator_run` ativo no mesmo workspace (poll até estado terminal via `orchestrator_result`).
+- **Não** cancele a task só para “terminar mais rápido” no chat — isso anula validação/testes do runtime.
+- Se precisar cancelar: `orchestrator_cancel` com `reason` explícito; só então trabalhe inline.
+
 Não usar `push --force` em `main`. Não alterar `git config`.

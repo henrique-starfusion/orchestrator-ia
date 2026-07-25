@@ -188,6 +188,20 @@ class TaskRepository:
             if row is None:
                 s.add(self._to_row(task))
             else:
+                # 0.4.24 — nunca ressuscitar task terminal com objeto stale em memória
+                # (bug-022: cancel no DB + save do loop sobrescrevia CANCELLED → VALIDATING).
+                try:
+                    db_status = TaskState(row.status)
+                except ValueError:
+                    db_status = None
+                if db_status in TERMINAL_STATES and task.status not in TERMINAL_STATES:
+                    task.status = db_status
+                    task.cancel_requested = True
+                    if row.error and not task.error:
+                        task.error = row.error
+                if row.cancel_requested and not task.cancel_requested:
+                    task.cancel_requested = True
+
                 row.prompt = task.prompt
                 row.project_path = task.project_path
                 row.task_type = task.task_type
@@ -227,6 +241,22 @@ class TaskRepository:
         evidence: dict[str, Any] | None = None,
         error: str | None = None,
     ) -> TaskRecord:
+        # Releitura: status autoritativo é o DB (cancel paralelo / outra thread).
+        fresh = self.get(task.id)
+        if fresh is not None:
+            task.status = fresh.status
+            task.cancel_requested = fresh.cancel_requested or task.cancel_requested
+            if fresh.error and not task.error:
+                task.error = fresh.error
+        if task.status in TERMINAL_STATES and new_state != task.status:
+            # Não levantar InvalidTransitionError (virava task.error opaco) —
+            # sinaliza abort limpo para o loop.
+            from orchestrator_runtime.errors import CancelledError
+
+            raise CancelledError(
+                f"task {task.id} já terminal ({task.status.value}); "
+                f"ignorado {new_state.value} ({reason})"
+            )
         if task.status == new_state:
             return task  # idempotent: same-state is a no-op, no event emitted
         assert_transition(task.status, new_state)

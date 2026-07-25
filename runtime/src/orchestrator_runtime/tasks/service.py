@@ -20,7 +20,7 @@ from orchestrator_runtime.agents.base import AgentRequest, AgentResult
 from orchestrator_runtime.agents.process import CliExecutor
 from orchestrator_runtime.config import RuntimeConfig, load_config
 from orchestrator_runtime.documentation import DocumentationUpdater
-from orchestrator_runtime.errors import TaskNotFoundError
+from orchestrator_runtime.errors import CancelledError, TaskNotFoundError
 from orchestrator_runtime.events import EventBus, EventType, RuntimeEvent
 from orchestrator_runtime.execution.git_workspace import (
     GitBaseline,
@@ -58,6 +58,8 @@ class TaskService:
     # Teto do refino de plano (advisory) — o workflow nunca fica preso em
     # SELECTING_AGENTS mais que isso; o plano determinístico já existe.
     PLANNER_REFINE_CAP_S = 300
+    # 0.4.24 — teto total da fase SELECTING_AGENTS (skill_selector + planner refine)
+    SELECTING_AGENTS_CAP_S = 180
 
     def __init__(
         self,
@@ -148,13 +150,85 @@ class TaskService:
             project_path=str(self.config.project_path),
             constraints=constraints,
         )
+        prior_count = len(self.repo.list_tasks(limit=2))
+        first_run = prior_count == 0
         self.repo.create(task)
         event = RuntimeEvent(
-            task_id=task.id, type=EventType.TASK_CREATED, data={"prompt": prompt[:200]}
+            task_id=task.id,
+            type=EventType.TASK_CREATED,
+            data={
+                "prompt": prompt[:200],
+                "first_run": first_run,
+            },
         )
         self.bus.emit(event)
         self.repo.add_event(event)
+        if first_run:
+            self._onboard_first_run(task)
         return task
+
+    def _onboard_first_run(self, task: TaskRecord) -> None:
+        """0.4.24 — primeiro run no projeto: probe de agentes + índice legacy-import."""
+        probe: dict[str, Any] = {"agents": []}
+        try:
+            for st in self.registry.list_statuses():
+                probe["agents"].append(
+                    {
+                        "id": st.id,
+                        "available": bool(st.available),
+                        "path": st.path,
+                        "notes": (st.notes or "")[:160] if getattr(st, "notes", None) else None,
+                    }
+                )
+        except Exception as exc:  # noqa: BLE001
+            probe["error"] = str(exc)
+        idx_path = self._write_legacy_import_index()
+        self.bus.emit(
+            RuntimeEvent(
+                task_id=task.id,
+                type=EventType.MEMORY_UPDATED,
+                agent="runtime",
+                data={
+                    "summary": "first_run_onboarding",
+                    "agent_probe": probe,
+                    "legacy_import_index": str(idx_path) if idx_path else None,
+                },
+            )
+        )
+
+    def _write_legacy_import_index(self) -> Path | None:
+        """Gera índice das skills/rules em legacy-import (requires-review)."""
+        root = self.config.project_path / ".orchestrator"
+        skills_root = root / "skills" / "legacy-import"
+        rules_root = root / "rules" / "legacy-import"
+        if not skills_root.is_dir() and not rules_root.is_dir():
+            return None
+        lines = [
+            "# Legacy import index",
+            "",
+            "Gerado no primeiro `orchestrator_run` do projeto (0.4.23+).",
+            "Status: requires-review — promover manualmente para paths ativos.",
+            "",
+            "## Skills",
+            "",
+        ]
+        if skills_root.is_dir():
+            for skill_md in sorted(skills_root.rglob("SKILL.md")):
+                rel = skill_md.relative_to(root).as_posix()
+                lines.append(f"- `{rel}`")
+        else:
+            lines.append("- _(nenhuma)_")
+        lines += ["", "## Rules", ""]
+        if rules_root.is_dir():
+            for rule in sorted(rules_root.rglob("*")):
+                if rule.is_file() and rule.name != "LEGACY-IMPORT.md":
+                    lines.append(f"- `{rule.relative_to(root).as_posix()}`")
+        else:
+            lines.append("- _(nenhuma)_")
+        out = root / "memory" / "legacy-import" / "INDEX.md"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return out
 
     def get(self, task_id: str) -> TaskRecord:
         task = self.repo.get(task_id)
@@ -165,28 +239,51 @@ class TaskService:
     def list_tasks(self, limit: int = 50) -> list[TaskRecord]:
         return self.repo.list_tasks(limit=limit)
 
-    def cancel(self, task_id: str) -> TaskRecord:
+    def cancel(self, task_id: str, reason: str = "cancel requested") -> TaskRecord:
         task = self.get(task_id)
         task.cancel_requested = True
+        reason_text = (reason or "cancel requested").strip() or "cancel requested"
+        if not task.error:
+            task.error = reason_text
+        elif reason_text not in str(task.error):
+            task.error = f"{task.error} | cancel: {reason_text}"
         # Propaga o cancel para os CLIs filhos ainda vivos — sem isso o Codex
         # órfão segue rodando e segurando o workspace após o cancelamento.
-        if task_id in self._running_tasks:
+        killed: list[int] = []
+        try:
             killed = self.executor.kill_active()
-            if killed:
-                self.bus.emit(
-                    RuntimeEvent(
-                        task_id=task.id,
-                        type=EventType.TASK_CANCELLED,
-                        data={"killed_pids": killed, "summary": "child CLIs killed"},
-                    )
+        except Exception:  # noqa: BLE001
+            killed = []
+        if killed:
+            self.bus.emit(
+                RuntimeEvent(
+                    task_id=task.id,
+                    type=EventType.TASK_CANCELLED,
+                    data={
+                        "killed_pids": killed,
+                        "summary": "child CLIs killed",
+                        "reason": reason_text,
+                    },
                 )
+            )
         if can_resume(task.status):
-            started = task.status != TaskState.RECEIVED
+            started = task.status not in {
+                TaskState.RECEIVED,
+                TaskState.QUEUED,
+            }
             self.repo.transition(
-                task, TaskState.CANCELLED, reason="cancel requested", agent="runtime"
+                task,
+                TaskState.CANCELLED,
+                reason=reason_text,
+                agent="runtime",
+                error=reason_text,
             )
             self.bus.emit(
-                RuntimeEvent(task_id=task.id, type=EventType.TASK_CANCELLED)
+                RuntimeEvent(
+                    task_id=task.id,
+                    type=EventType.TASK_CANCELLED,
+                    data={"reason": reason_text},
+                )
             )
             # Learn-then-compact também no cancelamento após execução (0.4.14).
             if started:
@@ -194,6 +291,18 @@ class TaskService:
         else:
             self.repo.save(task)
         return task
+
+    def _ensure_runnable(self, task: TaskRecord) -> TaskRecord:
+        """Recarrega do DB; aborta se cancel/terminal (bug-022 hard-stop)."""
+        fresh = self.get(task.id)
+        if fresh.cancel_requested and fresh.status not in TERMINAL_STATES:
+            self.cancel(fresh.id, reason=fresh.error or "cancel requested")
+            raise CancelledError(f"task {fresh.id} cancelled")
+        if fresh.status in TERMINAL_STATES:
+            raise CancelledError(
+                f"task {fresh.id} terminal ({fresh.status.value})"
+            )
+        return fresh
 
     def status(self, task_id: str) -> dict[str, Any]:
         task = self.get(task_id)
@@ -256,6 +365,20 @@ class TaskService:
         pos = self._queue_position(task.id, task.project_path)
         task.error = f"queued_behind:{blocked_by}|pos={pos}"
         self.repo.save(task)
+        self.bus.emit(
+            RuntimeEvent(
+                task_id=task.id,
+                type=EventType.TASK_QUEUED,
+                agent="runtime",
+                data={
+                    "to": TaskState.QUEUED.value,
+                    "summary": f"QUEUED behind {blocked_by} pos={pos}",
+                    "blocked_by": blocked_by,
+                    "queue_position": pos,
+                    "reason": "workspace_busy",
+                },
+            )
+        )
         self.bus.emit(
             RuntimeEvent(
                 task_id=task.id,
@@ -350,9 +473,13 @@ class TaskService:
                 self._running_tasks.add(task_id)
                 try:
                     result = await self._execute_loop(task)
+                except CancelledError:
+                    result = self.get(task_id)
                 finally:
                     self._running_tasks.discard(task_id)
             return result
+        except CancelledError:
+            return self.get(task_id)
         except TimeoutError as exc:
             # Lock ocupado (outra coroutine/processo): fila explícita QUEUED.
             task = self.get(task_id)
@@ -433,10 +560,11 @@ class TaskService:
             self.repo.save(task)
 
         if task.cancel_requested:
-            return self.cancel(task.id)
+            return self.cancel(task.id, reason=task.error or "cancel requested")
 
         project_files = [p.name for p in self.config.project_path.iterdir()]
         analysis = await self.manager.analyze_task(task.prompt, project_files)
+        task = self._ensure_runnable(task)
         task.task_type = analysis.task_type
         task.languages = analysis.languages
         task.risk = analysis.risk
@@ -459,6 +587,7 @@ class TaskService:
         task.analysis = merged_analysis
         self.repo.save(task)
 
+        task = self._ensure_runnable(task)
         self.repo.transition(task, TaskState.RETRIEVING_MEMORY, reason="memory lookup")
         memories = self.repo.search_memories(task.prompt, limit=5)
         # 0.4.14 — aprendizados de tarefas anteriores (kind=learning) além dos episodes
@@ -471,9 +600,11 @@ class TaskService:
             )
         )
 
+        task = self._ensure_runnable(task)
         # SKILL SELECTION (0.4.13): fast model picks installed skills before heavy models
         await self._select_skills(task)
 
+        task = self._ensure_runnable(task)
         self.repo.transition(task, TaskState.PLANNING, reason="planning")
         plan_roles = await self.manager.select_strategy(task, analysis)
         task.plan = self.planner.plan(task, analysis, plan_roles)
@@ -488,6 +619,8 @@ class TaskService:
             )
         )
 
+        task = self._ensure_runnable(task)
+        selecting_started = time.monotonic()
         self.repo.transition(task, TaskState.SELECTING_AGENTS, reason="select agents")
         self.bus.emit(
             RuntimeEvent(
@@ -499,6 +632,13 @@ class TaskService:
 
         # Planner agent (Claude no MVP) — refina plano; falha nao aborta se dry artifacts ok
         try:
+            selecting_elapsed = time.monotonic() - selecting_started
+            if selecting_elapsed >= self.SELECTING_AGENTS_CAP_S:
+                raise TimeoutError(
+                    f"SELECTING_AGENTS excedeu {self.SELECTING_AGENTS_CAP_S}s "
+                    f"(elapsed={selecting_elapsed:.0f}s)"
+                )
+            task = self._ensure_runnable(task)
             _tooling = self._required_tooling_block()
             _skills = self._skills_block(task)
             _learnings = self._learnings_block(learnings)
@@ -515,16 +655,22 @@ class TaskService:
                     "NÃO delegue a subagentes — refine o plano sozinho."
                 )
             )
-            # O plano determinístico já existe; o refino é advisory e não pode
-            # segurar SELECTING_AGENTS por 15 min (fable "travado" nas
-            # transcrições PrintBee). Teto duro de 5 min.
+            # O plano determinístico já existe; o refino é advisory.
+            # 0.4.24: teto = min(PLANNER_REFINE_CAP, restante SELECTING_AGENTS_CAP).
+            remaining_selecting = max(
+                30,
+                int(self.SELECTING_AGENTS_CAP_S - (time.monotonic() - selecting_started)),
+            )
+            refine_cap = min(self.PLANNER_REFINE_CAP_S, remaining_selecting)
             await self._run_agent(
                 plan_roles.planner,
                 "planner",
                 plan_prompt,
                 task,
-                timeout_cap_s=self.PLANNER_REFINE_CAP_S,
+                timeout_cap_s=refine_cap,
             )
+        except CancelledError:
+            raise
         except Exception as exc:  # noqa: BLE001
             self.bus.emit(
                 RuntimeEvent(
@@ -542,9 +688,7 @@ class TaskService:
         issue_counts: dict[str, int] = {}
 
         while True:
-            task = self.get(task.id)
-            if task.cancel_requested:
-                return self.cancel(task.id)
+            task = self._ensure_runnable(self.get(task.id))
 
             remaining = self._remaining_duration_s(task)
             if remaining < MIN_AGENT_TIMEOUT_S:
@@ -796,7 +940,7 @@ class TaskService:
                 continue
 
             # TESTING
-            task = self.get(task.id)
+            task = self._ensure_runnable(self.get(task.id))
             self.repo.transition(task, TaskState.TESTING, reason="deterministic tests")
             self.bus.emit(RuntimeEvent(task_id=task.id, type=EventType.TEST_STARTED))
             test_results = self.tests.run_all(self.config.project_path)
@@ -816,7 +960,7 @@ class TaskService:
             )
 
             # VALIDATING
-            task = self.get(task.id)
+            task = self._ensure_runnable(self.get(task.id))
             self.repo.transition(
                 task, TaskState.VALIDATING, reason="independent validation", agent=plan_roles.validator
             )

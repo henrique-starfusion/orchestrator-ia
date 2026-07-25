@@ -28,6 +28,8 @@ if ([string]::IsNullOrWhiteSpace($PackageVersion)) {
 }
 
 $pkgResolved = (Resolve-Path -LiteralPath $PackageRoot).Path
+# 0.4.24 — limpa fixtures Temp mortas antes de propagar
+Prune-OrchestratorProjectRegistry -DryRun:$DryRun | Out-Null
 $reg = Read-ProjectRegistry
 
 if ($Discover.IsPresent) {
