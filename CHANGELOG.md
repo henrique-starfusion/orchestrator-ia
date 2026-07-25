@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.4.22 - 2026-07-25
+
+Corrige propagação do roteamento de modelos: `models.json` é `mode=merge` e a 0.4.21 era no-op nos consumidores.
+
+### Fixed
+
+- Migration `0.4.20-to-0.4.21` faz patch idempotente de `role_model_preferences` + `task_map` Claude
+- Migration `0.4.21-to-0.4.22` reaplica o patch nos projetos já em 0.4.21
+
 ## 0.4.21 - 2026-07-25
 
 Roteamento de modelos: executor/corrector usam modelo forte para código; validator fica em tier intermediário.
