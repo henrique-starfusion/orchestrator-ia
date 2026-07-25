@@ -318,12 +318,14 @@
     "planner": {
       "claude": [
         "fable",
-        "opus"
+        "opus",
+        "sonnet"
       ],
       "cursor": [
         "max",
         "deep"
-      ]
+      ],
+      "_comment": "0.4.25: melhor modelo + fallback de cota"
     },
     "executor": {
       "claude": [
@@ -390,11 +392,21 @@
       ]
     },
     "skill_selector": {
-      "claude": ["haiku"],
-      "codex": ["fast"],
-      "gemini": ["fast"],
-      "opencode": ["fast"],
-      "kimi": ["fast"]
+      "claude": [
+        "haiku"
+      ],
+      "codex": [
+        "fast"
+      ],
+      "gemini": [
+        "fast"
+      ],
+      "opencode": [
+        "fast"
+      ],
+      "kimi": [
+        "fast"
+      ]
     }
   },
   "escalation": {

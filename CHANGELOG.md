@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 0.4.25 - 2026-07-25
+
+Planner com Claude: usa o melhor modelo e faz fallback automático se a cota esgotar.
+
+### Added
+
+- `resolve_model_candidates` + detecção de cota/rate-limit (`routing/quota.py`)
+- `_run_agent` tenta o próximo modelo da preferência do papel quando a CLI sinaliza esgotamento
+- Planner Claude: `fable → opus → sonnet`
+- Feature `planner_model_quota_fallback`
+- Migration `0.4.24-to-0.4.25`
+- Testes `test_planner_quota_fallback.py`
+
+### Changed
+
+- Docs `model-routing.md` — seção de fallback de cota
+
 ## 0.4.24 - 2026-07-25
 
 Correções P0–P2 da auditoria multi-projeto: cancel confiável, MCP stale, registry, spawn, fila.

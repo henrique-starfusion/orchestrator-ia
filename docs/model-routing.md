@@ -68,12 +68,16 @@ Role `skill_selector` mapeado para haiku/fast em `models.json → role_model_pre
 
 | Papel | Claude | Codex | OpenCode |
 |---|---|---|---|
-| planner | fable → opus | — | — |
+| planner | **fable → opus → sonnet** | — | — |
 | **executor / corrector** | **opus** → sonnet | **deep** / gpt-5.6-sol | deep → balanced |
 | **validator** | **sonnet** → haiku | balanced → fast | balanced → fast |
 | skill_selector | haiku | fast | fast |
 
 `task_map` Claude `implementation` / `refactor_simple` também aponta para `opus` (fallback se `role` não for passado).
+
+### Fallback de cota no planner (0.4.25+)
+
+Com **Claude instalado**, o planner começa no melhor modelo (`fable`). Se a CLI sinalizar cota/rate-limit esgotada (`429`, `rate limit`, `quota`, `out of credits`, …), o runtime tenta automaticamente o próximo da lista (`opus`, depois `sonnet`) na mesma chamada — sem cancelar a task. Evento: `AGENT_COMPLETED` com `status=quota_exhausted` e `fallback_model`.
 
 ## Tiers (capacidade × custo)
 

@@ -71,6 +71,8 @@ FEATURES: tuple[str, ...] = (
     "mcp_stale_run_reject",
     "registry_prune_test_fixtures",
     "task_queued_event",
+    # 0.4.25 — planner Claude: melhor modelo + fallback se cota esgotar
+    "planner_model_quota_fallback",
 )
 
 

@@ -94,6 +94,8 @@ class TaskService:
         # Contexto do run corrente para o learning (locals do loop não
         # persistidos na task): changed_files, test_results, last_validation.
         self._run_ctx: dict[str, Any] = {}
+        # 0.4.25 — modelos com cota esgotada neste processo/run (agent, model)
+        self._exhausted_models: set[tuple[str, str]] = set()
 
     def _cancel_stale_received(self) -> int:
         """Auto-cancel RECEIVED tasks older than stale_received_ttl_hours (P1-D 0.4.16)."""
@@ -544,6 +546,7 @@ class TaskService:
         self._loop_started_monotonic = time.monotonic()
         self._git_baseline = capture_baseline(self.config.project_path)
         self._run_ctx = {}
+        self._exhausted_models = set()
 
         # RECEIVED -> ANALYZING (WAITING_FOR_USER -> ANALYZING no resume)
         if task.status == TaskState.RECEIVED:
@@ -1675,56 +1678,143 @@ class TaskService:
                 f"(timeout_s={timeout_s})"
             )
 
-        model, model_flag = self.router.resolve_model(
+        from orchestrator_runtime.routing.quota import should_retry_next_model
+
+        candidates = self.router.resolve_model_candidates(
             agent_id, task.task_type, role=role
         )
-        self.bus.emit(
-            RuntimeEvent(
+        if not candidates:
+            candidates = [(None, None)]
+
+        # Filtra modelos já esgotados neste run; se todos esgotados, tenta o 1º.
+        usable = [
+            c
+            for c in candidates
+            if (agent_id, str(c[0] or "")) not in self._exhausted_models
+        ]
+        if not usable:
+            usable = list(candidates)
+
+        last_result = None
+        art_dir = self.config.orchestrator_root / "runtime" / "results" / task.id
+        art_dir.mkdir(parents=True, exist_ok=True)
+
+        for idx, (model, model_flag) in enumerate(usable):
+            self.bus.emit(
+                RuntimeEvent(
+                    task_id=task.id,
+                    type=EventType.AGENT_STARTED,
+                    role=role,
+                    agent=agent_id,
+                    data={
+                        "model": model,
+                        "timeout_s": timeout_s,
+                        "model_attempt": idx + 1,
+                        "model_candidates": [c[0] for c in usable],
+                    },
+                )
+            )
+            request = AgentRequest(
+                role=role,
+                prompt=prompt,
+                model=model,
+                model_flag=model_flag,
+                cwd=str(self.config.project_path),
+                timeout_s=timeout_s,
+            )
+            result = await adapter.run(request)
+            result = self._enrich_changed_files(result)
+            last_result = result
+            self.repo.add_agent_run(
                 task_id=task.id,
-                type=EventType.AGENT_STARTED,
                 role=role,
                 agent=agent_id,
-                data={"model": model, "timeout_s": timeout_s},
+                model=model,
+                command_json=dumps(result.command),
+                cwd=result.cwd,
+                started_at=result.started_at,
+                finished_at=result.finished_at,
+                exit_code=result.exit_code,
+                timed_out=1 if result.timed_out else 0,
+                stdout=result.stdout[-20000:],
+                stderr=result.stderr[-20000:],
+                status=result.status,
+                changed_files_json=dumps(result.changed_files),
             )
-        )
-        request = AgentRequest(
-            role=role,
-            prompt=prompt,
-            model=model,
-            model_flag=model_flag,
-            cwd=str(self.config.project_path),
-            timeout_s=timeout_s,
-        )
-        result = await adapter.run(request)
-        result = self._enrich_changed_files(result)
-        self.repo.add_agent_run(
-            task_id=task.id,
-            role=role,
-            agent=agent_id,
-            model=model,
-            command_json=dumps(result.command),
-            cwd=result.cwd,
-            started_at=result.started_at,
-            finished_at=result.finished_at,
-            exit_code=result.exit_code,
-            timed_out=1 if result.timed_out else 0,
-            stdout=result.stdout[-20000:],
-            stderr=result.stderr[-20000:],
-            status=result.status,
-            changed_files_json=dumps(result.changed_files),
-        )
-        art_dir = (
-            self.config.orchestrator_root / "runtime" / "results" / task.id
-        )
-        art_dir.mkdir(parents=True, exist_ok=True)
-        out_path = art_dir / f"{role}-{agent_id}.txt"
-        out_path.write_text(
-            result.stdout + "\n" + result.stderr, encoding="utf-8"
-        )
-        self.repo.add_artifact(task.id, "agent_output", str(out_path))
-        self.repo.update_agent_performance(
-            agent_id, result.status == "completed", result.duration_s, task.last_score
-        )
+            out_path = art_dir / f"{role}-{agent_id}.txt"
+            out_path.write_text(
+                result.stdout + "\n" + result.stderr, encoding="utf-8"
+            )
+            self.repo.add_artifact(task.id, "agent_output", str(out_path))
+            self.repo.update_agent_performance(
+                agent_id,
+                result.status == "completed",
+                result.duration_s,
+                task.last_score,
+            )
+
+            if result.status == "completed":
+                self.bus.emit(
+                    RuntimeEvent(
+                        task_id=task.id,
+                        type=EventType.AGENT_COMPLETED,
+                        role=role,
+                        agent=agent_id,
+                        data={
+                            "status": result.status,
+                            "exit_code": result.exit_code,
+                            "timed_out": result.timed_out,
+                            "timeout_s": timeout_s,
+                            "model": model,
+                        },
+                    )
+                )
+                return result
+
+            # 0.4.25 — cota/rate-limit: tenta próximo modelo da preferência do papel
+            has_next = idx + 1 < len(usable)
+            if has_next and should_retry_next_model(result):
+                exhausted_key = (agent_id, str(model or ""))
+                self._exhausted_models.add(exhausted_key)
+                next_model = usable[idx + 1][0]
+                self.bus.emit(
+                    RuntimeEvent(
+                        task_id=task.id,
+                        type=EventType.AGENT_COMPLETED,
+                        role=role,
+                        agent=agent_id,
+                        data={
+                            "status": "quota_exhausted",
+                            "exit_code": result.exit_code,
+                            "model": model,
+                            "fallback_model": next_model,
+                            "summary": (
+                                f"cota/rate-limit em {model}; "
+                                f"fallback → {next_model}"
+                            ),
+                        },
+                    )
+                )
+                continue
+
+            self.bus.emit(
+                RuntimeEvent(
+                    task_id=task.id,
+                    type=EventType.AGENT_COMPLETED,
+                    role=role,
+                    agent=agent_id,
+                    data={
+                        "status": result.status,
+                        "exit_code": result.exit_code,
+                        "timed_out": result.timed_out,
+                        "timeout_s": timeout_s,
+                        "model": model,
+                    },
+                )
+            )
+            return result
+
+        assert last_result is not None
         self.bus.emit(
             RuntimeEvent(
                 task_id=task.id,
@@ -1732,14 +1822,15 @@ class TaskService:
                 role=role,
                 agent=agent_id,
                 data={
-                    "status": result.status,
-                    "exit_code": result.exit_code,
-                    "timed_out": result.timed_out,
+                    "status": last_result.status,
+                    "exit_code": last_result.exit_code,
+                    "timed_out": last_result.timed_out,
                     "timeout_s": timeout_s,
+                    "model": getattr(last_result, "model", None),
                 },
             )
         )
-        return result
+        return last_result
 
     def _persist_episode(
         self, task: TaskRecord, *, success: bool, strategy: str | None = None

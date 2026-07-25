@@ -120,21 +120,49 @@ class RulesRouter:
         ``role`` permite override por papel (ex.: planner → fable/opus quando
         configurados no cliente), independentemente do ``task_type``.
         """
+        candidates = self.resolve_model_candidates(agent_id, task_type, role=role)
+        if not candidates:
+            return None, None
+        return candidates[0]
+
+    def resolve_model_candidates(
+        self,
+        agent_id: str,
+        task_type: str,
+        role: str | None = None,
+    ) -> list[tuple[str | None, str | None]]:
+        """Lista ordenada de (model, flag) — melhor primeiro; para fallback de cota.
+
+        Planner Claude (0.4.25+): fable → opus → sonnet. Em esgotamento do
+        melhor modelo, o runtime tenta o próximo da lista.
+        """
         clients = (self.config.models or {}).get("clients") or {}
         client = clients.get(agent_id) or {}
         model_flag = client.get("model_flag")
         flag = str(model_flag) if model_flag else None
 
-        # Preferências por papel (planner prefere fable → opus quando disponíveis).
-        for token in self._role_model_candidates(agent_id, role, client):
-            resolved = self._materialize_model_token(client, token, flag)
-            if resolved[0] is not None:
-                return resolved
+        out: list[tuple[str | None, str | None]] = []
+        seen: set[str] = set()
 
+        def _add(token: str | None) -> None:
+            if token is None:
+                return
+            resolved = self._materialize_model_token(client, str(token), flag)
+            if resolved[0] is None:
+                return
+            key = str(resolved[0])
+            if key in seen:
+                return
+            seen.add(key)
+            out.append(resolved)
+
+        for token in self._role_model_candidates(agent_id, role, client):
+            _add(token)
+
+        # Fallback task_map / tier se prefs vazias ou como último candidato
         task_map = client.get("task_map") or {}
         alias = task_map.get(task_type)
         if not alias:
-            # map complexity-ish defaults
             tier_map = {
                 "docs": "balanced",
                 "documentation": "balanced",
@@ -147,9 +175,10 @@ class RulesRouter:
             ) or tier_map.get(task_type, "balanced")
             aliases = client.get("aliases") or {}
             alias = aliases.get(tier)
-        if not alias:
-            return None, None
-        return self._materialize_model_token(client, str(alias), flag)
+        if alias:
+            _add(str(alias))
+
+        return out
 
     def _role_model_candidates(
         self, agent_id: str, role: str | None, client: dict[str, Any]
@@ -157,13 +186,13 @@ class RulesRouter:
         if not role:
             return []
         prefs = (self.config.models or {}).get("role_model_preferences") or {}
-        # Defaults do produto (0.4.21):
-        # - planner: Fable → Opus
+        # Defaults do produto (0.4.25):
+        # - planner (Claude instalado): Fable → Opus → Sonnet (cota/esgotamento)
         # - executor/corrector: modelos fortes para código (Opus / gpt-5.6-sol)
         # - validator: intermediário (Sonnet / balanced)
         defaults: dict[str, dict[str, list[str]]] = {
             "planner": {
-                "claude": ["fable", "opus"],
+                "claude": ["fable", "opus", "sonnet"],
                 "cursor": ["max", "deep"],
             },
             "executor": {
