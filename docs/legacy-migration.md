@@ -35,6 +35,10 @@ Se `.orchestrator/VERSION` **já existir**, a migração é ignorada (salvo `-Fo
 
 ---
 
+## Import amplo no install (0.4.23+)
+
+Além do caminho `.claude/VERSION` abaixo, o pipeline `legacy cleanup` (sempre no install/update) importa também `.claude/skills`, `.cursor/rules`, skills de outros vendors e snapshots de adapters (`CLAUDE.md`, …) para `legacy-import/`. Ver [`legacy-cleanup.md`](legacy-cleanup.md).
+
 ## O que a migração faz
 
 Script: `scripts/Migrate-LegacyClaude.ps1`

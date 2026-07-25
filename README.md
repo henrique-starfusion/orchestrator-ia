@@ -470,6 +470,23 @@ package/
 
 Se existir `.claude/VERSION` sem `.orchestrator/VERSION`, o `install` executa `Migrate-LegacyClaude.ps1` (importa memória/regras para `legacy-import/`). Veja [`docs/legacy-migration.md`](docs/legacy-migration.md).
 
+### Importação de configuração existente (0.4.23+)
+
+Antes de instalar o template, o orquestrador **copia** rules/skills/adapters já presentes no repo para `.orchestrator/**/legacy-import/` (aditivo; não apaga a origem):
+
+```bash
+# Repo com .cursor/rules/meu-projeto.mdc e .claude/skills/foo/SKILL.md
+cd /caminho/do/projeto
+orchestrator install
+
+# Resultado (origens intactas):
+# .orchestrator/rules/legacy-import/cursor/meu-projeto.mdc
+# .orchestrator/skills/legacy-import/claude/foo/SKILL.md
+# .orchestrator/memory/legacy-import/adapters/CLAUDE.md   # se CLAUDE.md existir na raiz
+```
+
+Detalhes e exclusões de rules geradas: [`docs/legacy-cleanup.md`](docs/legacy-cleanup.md).
+
 O prompt antigo está arquivado em [`docs/archive/prompts/`](docs/archive/prompts/) — **não use** para instalação.
 
 ---

@@ -16,8 +16,12 @@ try {
     Set-Content -LiteralPath (Join-Path $tempDir '.ai\old.txt') -Value 'x' -Encoding UTF8
     New-Item -ItemType Directory -Path (Join-Path $tempDir 'graphify-out') -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $tempDir '.claude\memory') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $tempDir '.claude\skills\keepme') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $tempDir '.cursor\rules') -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $tempDir '.claude\VERSION') -Value '0.0.9' -Encoding UTF8
     Set-Content -LiteralPath (Join-Path $tempDir '.claude\memory\index.json') -Value '{"entries":[]}' -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $tempDir '.claude\skills\keepme\SKILL.md') -Value "---`nname: keepme`n---`n# keep" -Encoding UTF8
+    Set-Content -LiteralPath (Join-Path $tempDir '.cursor\rules\project.mdc') -Value '# project rule' -Encoding UTF8
     # user-owned deve sobreviver
     New-Item -ItemType Directory -Path (Join-Path $tempDir '.aider') -Force | Out-Null
     Set-Content -LiteralPath (Join-Path $tempDir '.aider\cfg.yml') -Value 'keep: true' -Encoding UTF8
@@ -30,6 +34,8 @@ try {
     Assert-Test -Condition (Test-Path -LiteralPath (Join-Path $tempDir '.orchestrator\VERSION')) -Message 'VERSION ausente'
     $importMem = Join-Path $tempDir '.orchestrator\memory\legacy-import\claude'
     Assert-Test -Condition (Test-Path -LiteralPath $importMem) -Message 'memoria nao migrada para legacy-import/claude'
+    Assert-Test -Condition (Test-Path -LiteralPath (Join-Path $tempDir '.cursor\rules\project.mdc')) -Message '.cursor/rules nao deveria ser removido no safe'
+    Assert-Test -Condition (Test-Path -LiteralPath (Join-Path $tempDir '.claude\skills\keepme\SKILL.md')) -Message '.claude/skills nao deveria ser removido no safe'
     $report = Join-Path $tempDir '.orchestrator\runtime\reports\legacy-cleanup-report.md'
     Assert-Test -Condition (Test-Path -LiteralPath $report) -Message 'relatorio legacy-cleanup ausente'
 

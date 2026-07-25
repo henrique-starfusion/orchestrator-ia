@@ -52,18 +52,33 @@ Restore **não** roda no uninstall — só via `legacy restore`.
 
 ## Migração de conhecimento
 
-Conteúdo útil vai para paths `legacy-import` (requires-review), por exemplo:
+No `install` / `init` / `update`, **antes** de copiar o template, o pipeline detecta e importa configuração existente para paths `legacy-import` (requires-review). A origem **não** é apagada no modo safe.
 
-- `.claude/memory` → `.orchestrator/memory/legacy-import/claude/`
-- `.claude/rules` → `.orchestrator/rules/legacy-import/claude/`
-- `.agents/skills` → `.orchestrator/skills/legacy-import/`
+| Fonte | Destino |
+|---|---|
+| `.claude/memory` | `.orchestrator/memory/legacy-import/claude/` |
+| `.claude/rules` | `.orchestrator/rules/legacy-import/claude/` |
+| `.claude/skills` | `.orchestrator/skills/legacy-import/claude/` |
+| `.cursor/rules` (user) | `.orchestrator/rules/legacy-import/cursor/` |
+| `.codex/skills` | `.orchestrator/skills/legacy-import/codex/` |
+| `.gemini/skills` | `.orchestrator/skills/legacy-import/gemini/` |
+| `.opencode/skills` | `.orchestrator/skills/legacy-import/opencode/` |
+| `.agents/skills` | `.orchestrator/skills/legacy-import/` (path histórico) |
+| `CLAUDE.md`, `AGENTS.md`, `CURSOR.md`, `CODEX.md`, `GEMINI.md`, `KIMI.md` | `.orchestrator/memory/legacy-import/adapters/` |
+
+Skills sob `.orchestrator/skills/legacy-import/**` entram no catálogo do runtime (`discover_skills` faz `rglob`).
+
+### Exclusões na cópia de `.cursor/rules`
+
+Não são importadas (geradas pelo template/OpenWolf): `openwolf.mdc`, `call-agent.mdc`, `git-workflow.mdc`, `multiagent-orchestrator.mdc`, `orchestrator.mdc`, `runtime.mdc`, `token-economy.mdc`, `version-bump.mdc`.
 
 ## Preservado automaticamente
 
 - `user-owned` (`.aider`, `.continue`, …)
 - `unknown` (`.mcp`, `mcp.json`, …)
 - `runtime` (`.wolf`, `.graphify`)
-- adaptadores atuais (`.claude/`, `.cursor/`, `CLAUDE.md`, …) — remove apenas filhos legado conhecidos
+- pastas de adaptador (`.claude/`, `.cursor/`, …) — remove apenas filhos legado conhecidos (`delete`/`replace`)
+- arquivos de adaptador na raiz — **snapshot** em `legacy-import/adapters/`; o arquivo original permanece
 - `.git/`, código-fonte, secrets, `.env`
 
 ## Relatórios

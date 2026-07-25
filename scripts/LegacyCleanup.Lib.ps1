@@ -54,12 +54,12 @@ function Get-LegacyKnownCatalog {
         @{ Path = '.windsurf'; Type = 'directory'; Classification = 'user-owned'; SafeToRemove = $false; Reason = 'ferramenta externa' }
         @{ Path = '.wolf'; Type = 'directory'; Classification = 'runtime'; SafeToRemove = $false; Reason = 'runtime OpenWolf opt-in' }
         @{ Path = '.graphify'; Type = 'directory'; Classification = 'runtime'; SafeToRemove = $false; Reason = 'runtime Graphify opt-in' }
-        @{ Path = 'CLAUDE.md'; Type = 'file'; Classification = 'adapter-current'; SafeToRemove = $false; Reason = 'adaptador atual' }
-        @{ Path = 'AGENTS.md'; Type = 'file'; Classification = 'adapter-current'; SafeToRemove = $false; Reason = 'adaptador atual' }
-        @{ Path = 'CODEX.md'; Type = 'file'; Classification = 'adapter-current'; SafeToRemove = $false; Reason = 'adaptador atual' }
-        @{ Path = 'GEMINI.md'; Type = 'file'; Classification = 'adapter-current'; SafeToRemove = $false; Reason = 'adaptador atual' }
-        @{ Path = 'KIMI.md'; Type = 'file'; Classification = 'adapter-current'; SafeToRemove = $false; Reason = 'adaptador atual' }
-        @{ Path = 'CURSOR.md'; Type = 'file'; Classification = 'adapter-current'; SafeToRemove = $false; Reason = 'adaptador atual' }
+        @{ Path = 'CLAUDE.md'; Type = 'file'; Classification = 'migrate'; SafeToRemove = $false; Reason = 'snapshot do adaptador para revisao'; MigrationTarget = '.orchestrator/memory/legacy-import/adapters' }
+        @{ Path = 'AGENTS.md'; Type = 'file'; Classification = 'migrate'; SafeToRemove = $false; Reason = 'snapshot do adaptador para revisao'; MigrationTarget = '.orchestrator/memory/legacy-import/adapters' }
+        @{ Path = 'CODEX.md'; Type = 'file'; Classification = 'migrate'; SafeToRemove = $false; Reason = 'snapshot do adaptador para revisao'; MigrationTarget = '.orchestrator/memory/legacy-import/adapters' }
+        @{ Path = 'GEMINI.md'; Type = 'file'; Classification = 'migrate'; SafeToRemove = $false; Reason = 'snapshot do adaptador para revisao'; MigrationTarget = '.orchestrator/memory/legacy-import/adapters' }
+        @{ Path = 'KIMI.md'; Type = 'file'; Classification = 'migrate'; SafeToRemove = $false; Reason = 'snapshot do adaptador para revisao'; MigrationTarget = '.orchestrator/memory/legacy-import/adapters' }
+        @{ Path = 'CURSOR.md'; Type = 'file'; Classification = 'migrate'; SafeToRemove = $false; Reason = 'snapshot do adaptador para revisao'; MigrationTarget = '.orchestrator/memory/legacy-import/adapters' }
         @{ Path = 'OPENAI.md'; Type = 'file'; Classification = 'unknown'; SafeToRemove = $false; Reason = 'pode ser user-owned' }
         @{ Path = 'copilot-instructions.md'; Type = 'file'; Classification = 'user-owned'; SafeToRemove = $false; Reason = 'instrucoes Copilot do usuario' }
     )
@@ -71,11 +71,38 @@ function Get-LegacyChildHotspots {
         @{ Path = '.claude/memory'; Type = 'directory'; Classification = 'migrate'; SafeToRemove = $false; Reason = 'memoria legada'; MigrationTarget = '.orchestrator/memory/legacy-import/claude' }
         @{ Path = '.claude/rules'; Type = 'directory'; Classification = 'migrate'; SafeToRemove = $false; Reason = 'rules legadas'; MigrationTarget = '.orchestrator/rules/legacy-import/claude' }
         @{ Path = '.claude/VERSION'; Type = 'file'; Classification = 'delete'; SafeToRemove = $true; Reason = 'VERSION legado; canonico e .orchestrator/VERSION' }
-        @{ Path = '.claude/skills'; Type = 'directory'; Classification = 'adapter-legacy'; SafeToRemove = $false; Reason = 'skills vendor; stubs atuais podem coexistir' }
+        @{ Path = '.claude/skills'; Type = 'directory'; Classification = 'migrate'; SafeToRemove = $false; Reason = 'skills do projeto'; MigrationTarget = '.orchestrator/skills/legacy-import/claude' }
+        @{ Path = '.cursor/rules'; Type = 'directory'; Classification = 'migrate'; SafeToRemove = $false; Reason = 'rules do Cursor (user)'; MigrationTarget = '.orchestrator/rules/legacy-import/cursor' }
         @{ Path = '.cursor/rules/openwolf.mdc'; Type = 'file'; Classification = 'delete'; SafeToRemove = $true; Reason = 'rule gerada localmente pelo OpenWolf' }
+        @{ Path = '.codex/skills'; Type = 'directory'; Classification = 'migrate'; SafeToRemove = $false; Reason = 'skills Codex do projeto'; MigrationTarget = '.orchestrator/skills/legacy-import/codex' }
+        @{ Path = '.gemini/skills'; Type = 'directory'; Classification = 'migrate'; SafeToRemove = $false; Reason = 'skills Gemini do projeto'; MigrationTarget = '.orchestrator/skills/legacy-import/gemini' }
+        @{ Path = '.opencode/skills'; Type = 'directory'; Classification = 'migrate'; SafeToRemove = $false; Reason = 'skills OpenCode do projeto'; MigrationTarget = '.orchestrator/skills/legacy-import/opencode' }
         @{ Path = '.agents/skills'; Type = 'directory'; Classification = 'migrate'; SafeToRemove = $false; Reason = 'skills antigas'; MigrationTarget = '.orchestrator/skills/legacy-import' }
         @{ Path = '.codex/config.toml'; Type = 'file'; Classification = 'keep'; SafeToRemove = $false; Reason = 'config exclusiva Codex' }
     )
+}
+
+function Get-LegacyMigrationExcludedNames {
+    <#
+    .SYNOPSIS
+      Nomes a nao copiar ao migrar um path (rules geradas do template / OpenWolf).
+    #>
+    param([Parameter(Mandatory = $true)][string]$SourcePath)
+    switch (($SourcePath -replace '\\', '/').ToLowerInvariant()) {
+        '.cursor/rules' {
+            return @(
+                'openwolf.mdc',
+                'call-agent.mdc',
+                'git-workflow.mdc',
+                'multiagent-orchestrator.mdc',
+                'orchestrator.mdc',
+                'runtime.mdc',
+                'token-economy.mdc',
+                'version-bump.mdc'
+            )
+        }
+        default { return @() }
+    }
 }
 
 function New-LegacyInventoryItem {

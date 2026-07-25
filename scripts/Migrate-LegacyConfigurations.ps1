@@ -40,8 +40,9 @@ foreach ($item in $migratable) {
         continue
     }
 
-    # Nao copiar secrets obvios
+    # Nao copiar secrets obvios nem rules geradas pelo template/OpenWolf
     $skipNames = @('.env', '.env.local', 'credentials.json', 'secrets.json')
+    $excluded = @(Get-LegacyMigrationExcludedNames -SourcePath $item.path)
 
     if ($DryRun) {
         Write-Host ("[DRY-RUN] Migrar {0} -> {1}" -f $item.path, $item.migration_target)
@@ -56,14 +57,16 @@ foreach ($item in $migratable) {
 
     if (Test-Path -LiteralPath $source -PathType Container) {
         Get-ChildItem -LiteralPath $source -Force | ForEach-Object {
-            if ($skipNames -contains $_.Name) { return }
+            if ($skipNames -contains $_.Name -or $excluded -contains $_.Name) { return }
             $target = Join-Path $dest $_.Name
             if ((Test-Path -LiteralPath $target) -and -not $Force) { return }
             Copy-Item -LiteralPath $_.FullName -Destination $target -Recurse -Force
         }
     }
     else {
-        if ($skipNames -contains [System.IO.Path]::GetFileName($source)) { continue }
+        $leaf = [System.IO.Path]::GetFileName($source)
+        if ($skipNames -contains $leaf -or $excluded -contains $leaf) { continue }
+        # Destino e diretorio (legacy-import/...): Copy-Item preserva o nome do arquivo
         Copy-Item -LiteralPath $source -Destination $dest -Force
     }
 

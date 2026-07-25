@@ -64,6 +64,8 @@ FEATURES: tuple[str, ...] = (
     "workspace_task_queue",
     # 0.4.21 — executor/corrector modelo forte; validator intermediário
     "role_model_executor_strong",
+    # 0.4.23 — import rules/skills/adapters existentes antes do install
+    "preinstall_import_existing_config",
 )
 
 

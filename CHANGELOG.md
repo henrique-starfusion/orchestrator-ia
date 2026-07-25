@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 0.4.23 - 2026-07-25
+
+Antes do install/update, importa rules/skills/adapters já presentes no repositório para `legacy-import/` (aditivo; não apaga a origem).
+
+### Added
+
+- Hotspots migrate: `.claude/skills`, `.cursor/rules`, `.codex/skills`, `.gemini/skills`, `.opencode/skills`
+- Snapshot de `CLAUDE.md` / `AGENTS.md` / `CURSOR.md` / `CODEX.md` / `GEMINI.md` / `KIMI.md` → `memory/legacy-import/adapters/`
+- Exclusão de rules geradas do template Cursor + `openwolf.mdc` na cópia de `.cursor/rules`
+- Feature `preinstall_import_existing_config`
+- Migration `0.4.22-to-0.4.23` (reexecuta detect+migrate)
+- Testes: fixture ampliada em `Test-LegacyMigration`; `test_skill_discovery_legacy_import.py`
+
+### Changed
+
+- `docs/legacy-cleanup.md` + seção no README com exemplo executável
+
 ## 0.4.22 - 2026-07-25
 
 Corrige propagação do roteamento de modelos: `models.json` é `mode=merge` e a 0.4.21 era no-op nos consumidores.
