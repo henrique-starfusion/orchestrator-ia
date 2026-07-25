@@ -102,3 +102,64 @@ def test_planner_role_preferences_from_models_json(project):
         "opus",
         "--model",
     )
+
+
+def test_executor_prefers_strong_coding_model(project):
+    """0.4.21: executor Claude → opus (não sonnet); Codex → gpt-5.6-sol."""
+    config = load_config(project, fake_agents=True)
+    config.models = {
+        "role_model_preferences": {
+            "executor": {
+                "claude": ["opus", "sonnet"],
+                "codex": ["deep", "balanced", "gpt-5.6-sol"],
+            },
+            "validator": {
+                "claude": ["sonnet", "haiku"],
+                "codex": ["balanced", "fast"],
+            },
+        },
+        "clients": {
+            "claude": {
+                "model_flag": "--model",
+                "prefer_aliases": True,
+                "aliases": {
+                    "fast": "haiku",
+                    "balanced": "sonnet",
+                    "deep": "opus",
+                },
+                "models": {
+                    "haiku": "claude-haiku-4-5",
+                    "sonnet": "claude-sonnet-5",
+                    "opus": "claude-opus-4-8",
+                },
+                "task_map": {"implementation": "sonnet"},
+            },
+            "codex": {
+                "model_flag": "-m",
+                "prefer_aliases": False,
+                "models": {
+                    "fast": "gpt-5.6-sol",
+                    "balanced": "gpt-5.6-sol",
+                    "deep": "gpt-5.6-sol",
+                },
+                "task_map": {"implementation": "balanced"},
+            },
+        },
+    }
+    router = RulesRouter(config, AgentRegistry(config))
+    assert router.resolve_model("claude", "implementation", role="executor") == (
+        "opus",
+        "--model",
+    )
+    assert router.resolve_model("claude", "implementation", role="corrector") == (
+        "opus",
+        "--model",
+    )
+    assert router.resolve_model("claude", "implementation", role="validator") == (
+        "sonnet",
+        "--model",
+    )
+    assert router.resolve_model("codex", "implementation", role="executor") == (
+        "gpt-5.6-sol",
+        "-m",
+    )

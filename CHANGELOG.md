@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 0.4.21 - 2026-07-25
+
+Roteamento de modelos: executor/corrector usam modelo forte para código; validator fica em tier intermediário.
+
+### Changed
+
+- `models.json` `role_model_preferences`:
+  - **executor / corrector:** Claude `opus` (fallback sonnet); Codex `gpt-5.6-sol` / deep; OpenCode deep
+  - **validator:** Claude `sonnet` (fallback haiku); Codex/OpenCode `balanced`
+- `task_map` Claude `implementation` / `refactor_simple`: `sonnet` → `opus`
+- Defaults em `routing/manager.py` alinhados (mesmo sem JSON)
+
+### Added
+
+- Feature `role_model_executor_strong`
+- Migration `0.4.20-to-0.4.21`
+- Teste `test_executor_prefers_strong_coding_model`
+
 ## 0.4.20 - 2026-07-25
 
 Propagação automática: ao atualizar o **pacote** (`@starfusion/orchestrator`), os projetos registrados com orquestrador também são atualizados.

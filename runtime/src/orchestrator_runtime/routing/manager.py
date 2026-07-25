@@ -157,12 +157,33 @@ class RulesRouter:
         if not role:
             return []
         prefs = (self.config.models or {}).get("role_model_preferences") or {}
-        # Defaults do produto: planner Claude → Fable 5, senão Opus 4.8
+        # Defaults do produto (0.4.21):
+        # - planner: Fable → Opus
+        # - executor/corrector: modelos fortes para código (Opus / gpt-5.6-sol)
+        # - validator: intermediário (Sonnet / balanced)
         defaults: dict[str, dict[str, list[str]]] = {
             "planner": {
                 "claude": ["fable", "opus"],
                 "cursor": ["max", "deep"],
-            }
+            },
+            "executor": {
+                "claude": ["opus", "sonnet"],
+                "codex": ["deep", "balanced", "gpt-5.6-sol"],
+                "opencode": ["deep", "balanced"],
+                "cursor": ["deep", "max"],
+            },
+            "corrector": {
+                "claude": ["opus", "sonnet"],
+                "codex": ["deep", "balanced", "gpt-5.6-sol"],
+                "opencode": ["deep", "balanced"],
+                "cursor": ["deep", "max"],
+            },
+            "validator": {
+                "claude": ["sonnet", "haiku"],
+                "codex": ["balanced", "fast"],
+                "opencode": ["balanced", "fast"],
+                "cursor": ["balanced", "fast"],
+            },
         }
         by_role = prefs.get(role) if isinstance(prefs.get(role), dict) else None
         if by_role is None:

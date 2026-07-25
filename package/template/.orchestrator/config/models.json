@@ -191,8 +191,8 @@
         "classify": "haiku",
         "docs": "sonnet",
         "documentation": "sonnet",
-        "implementation": "sonnet",
-        "refactor_simple": "sonnet",
+        "implementation": "opus",
+        "refactor_simple": "opus",
         "code_review": "sonnet",
         "tests": "sonnet",
         "architecture": "opus",
@@ -202,7 +202,7 @@
         "long_agentic": "fable",
         "orchestration_plan": "fable"
       },
-      "invoke_example": "claude --model sonnet -p \"...\""
+      "invoke_example": "claude --model opus -p \"...\""
     },
     "codex": {
       "cli": "codex",
@@ -325,6 +325,70 @@
         "deep"
       ]
     },
+    "executor": {
+      "claude": [
+        "opus",
+        "sonnet"
+      ],
+      "codex": [
+        "deep",
+        "balanced",
+        "gpt-5.6-sol"
+      ],
+      "opencode": [
+        "deep",
+        "balanced"
+      ],
+      "cursor": [
+        "deep",
+        "max"
+      ],
+      "kimi": [
+        "max",
+        "balanced"
+      ]
+    },
+    "corrector": {
+      "claude": [
+        "opus",
+        "sonnet"
+      ],
+      "codex": [
+        "deep",
+        "balanced",
+        "gpt-5.6-sol"
+      ],
+      "opencode": [
+        "deep",
+        "balanced"
+      ],
+      "cursor": [
+        "deep",
+        "max"
+      ]
+    },
+    "validator": {
+      "claude": [
+        "sonnet",
+        "haiku"
+      ],
+      "codex": [
+        "balanced",
+        "fast"
+      ],
+      "opencode": [
+        "balanced",
+        "fast"
+      ],
+      "cursor": [
+        "balanced",
+        "fast"
+      ],
+      "kimi": [
+        "balanced",
+        "fast"
+      ]
+    },
     "skill_selector": {
       "claude": ["haiku"],
       "codex": ["fast"],
@@ -346,7 +410,7 @@
   },
   "resolution_algorithm": [
     "1. Classificar a tarefa (task_classes).",
-    "2. Se o papel tiver role_model_preferences e o modelo estiver declarado no cliente, usar o primeiro disponível (planner: fable → opus).",
+    "2. Se o papel tiver role_model_preferences e o modelo estiver declarado no cliente, usar o primeiro disponível (planner: fable→opus; executor/corrector: opus|gpt-5.6-sol; validator: sonnet/balanced).",
     "3. Senão resolver task_class → tier → modelo do cliente disponível (agents/detected.json).",
     "4. Aplicar caveman (full) na comunicação do orquestrador/agentes.",
     "5. Invocar CLI com model_flag + modelo resolvido.",

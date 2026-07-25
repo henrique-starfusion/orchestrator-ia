@@ -62,13 +62,26 @@ Config em `policies.json → skill_selection`:
 
 Role `skill_selector` mapeado para haiku/fast em `models.json → role_model_preferences.skill_selector`.
 
+## Preferências por papel (0.4.21+)
+
+`resolve_model(..., role=)` consulta `role_model_preferences` **antes** do `task_map`. Código (executor/corrector) usa modelo forte; validação fica em tier intermediário.
+
+| Papel | Claude | Codex | OpenCode |
+|---|---|---|---|
+| planner | fable → opus | — | — |
+| **executor / corrector** | **opus** → sonnet | **deep** / gpt-5.6-sol | deep → balanced |
+| **validator** | **sonnet** → haiku | balanced → fast | balanced → fast |
+| skill_selector | haiku | fast | fast |
+
+`task_map` Claude `implementation` / `refactor_simple` também aponta para `opus` (fallback se `role` não for passado).
+
 ## Tiers (capacidade × custo)
 
 | Tier | Uso | Claude (alias) | Cursor (slug, fallback Task) |
 |---|---|---|---|
 | fast | trivial, classify | `haiku` | `claude-4.5-haiku` |
-| balanced | docs, impl, review, tests | `sonnet` | `claude-sonnet-5-thinking-high` |
-| deep | architecture, hard debug | `opus` | `claude-opus-4-8-thinking-high` |
+| balanced | docs, review, tests, validator | `sonnet` | `claude-sonnet-5-thinking-high` |
+| deep | architecture, hard debug, **código (executor)** | `opus` | `claude-opus-4-8-thinking-high` |
 | max | complex analysis, long agentic | `fable` | `claude-fable-5-thinking-high` |
 
 Ver também: [`mcp-integration.md`](mcp-integration.md), [`cursor-front-controller.md`](cursor-front-controller.md).

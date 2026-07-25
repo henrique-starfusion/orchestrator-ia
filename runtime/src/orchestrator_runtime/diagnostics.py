@@ -62,6 +62,8 @@ FEATURES: tuple[str, ...] = (
     "codex_collab_wait_failfast",
     # 0.4.19 — fila FIFO por workspace (QUEUED + dequeue automático)
     "workspace_task_queue",
+    # 0.4.21 — executor/corrector modelo forte; validator intermediário
+    "role_model_executor_strong",
 )
 
 
