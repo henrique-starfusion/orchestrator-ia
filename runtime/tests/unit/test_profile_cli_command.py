@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from unittest.mock import patch
 
 from orchestrator_runtime.agents.base import AgentRequest
 from orchestrator_runtime.agents.base_adapters import ProfileCliAdapter
@@ -20,15 +20,17 @@ def test_build_command_includes_sandbox_flags(project):
         },
     }
     adapter = ProfileCliAdapter(profile, CliExecutor(project, echo=False))
-    cmd = adapter.build_command(
-        AgentRequest(
-            role="executor",
-            prompt="hello",
-            model="gpt-5.6-sol",
-            model_flag="-m",
-            cwd=str(project),
+    # Patch posix: no Windows o adapter 0.4.15 troca workspace-write → danger-full-access.
+    with patch("orchestrator_runtime.agents.base_adapters.os.name", "posix"):
+        cmd = adapter.build_command(
+            AgentRequest(
+                role="executor",
+                prompt="hello",
+                model="gpt-5.6-sol",
+                model_flag="-m",
+                cwd=str(project),
+            )
         )
-    )
     assert cmd[:4] == ["codex", "exec", "--sandbox", "workspace-write"]
     assert "--skip-git-repo-check" in cmd
     assert "-m" in cmd and "gpt-5.6-sol" in cmd

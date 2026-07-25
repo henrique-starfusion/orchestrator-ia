@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -60,8 +61,16 @@ class ProfileCliAdapter(AgentAdapter):
         args: list[str] = [self.id]
         for part in invoke.get("subcommand") or []:
             args.append(str(part))
-        # Flags de sandbox/automação do profile (ex.: codex --full-auto)
-        for part in invoke.get("sandbox_flags") or []:
+        # Flags de sandbox/automação do profile (ex.: codex --full-auto).
+        # 0.4.15: no Windows, CreateProcessAsUserW falha com erro 740 quando
+        # --sandbox workspace-write é usado (requer elevação); override para
+        # danger-full-access. Profile base mantém workspace-write (documentado).
+        sandbox_flags = list(invoke.get("sandbox_flags") or [])
+        if os.name == "nt" and "--sandbox" in sandbox_flags:
+            idx = sandbox_flags.index("--sandbox")
+            if idx + 1 < len(sandbox_flags) and sandbox_flags[idx + 1] == "workspace-write":
+                sandbox_flags[idx + 1] = "danger-full-access"
+        for part in sandbox_flags:
             args.append(str(part))
         if request.model and request.model_flag:
             args.extend([request.model_flag, request.model])

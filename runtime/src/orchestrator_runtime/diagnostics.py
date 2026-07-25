@@ -48,6 +48,20 @@ FEATURES: tuple[str, ...] = (
     "skill_selection_fast_model",
     # 0.4.14 — aprendizado durável antes da compactação de contexto do chat
     "learn_then_compact_context",
+    # 0.4.15 — fail-fast no stream (740) + override sandbox Windows
+    "codex_infra_failfast",
+    "codex_sandbox_windows_override",
+    # 0.4.16 — fixes PrintBee: lock reentrante asyncio, classificação docs, transição idempotente, TTL RECEIVED, prompt child
+    "writelock_asyncio_singleflight",
+    "produção_not_docs",
+    "same_state_transition_noop",
+    "stale_received_ttl_autocancel",
+    "child_agent_no_subagents_prompt",
+    # 0.4.18 — restrição anti-subagente sempre no prompt + fail-fast collab Wait
+    "child_agent_restriction_always_on",
+    "codex_collab_wait_failfast",
+    # 0.4.19 — fila FIFO por workspace (QUEUED + dequeue automático)
+    "workspace_task_queue",
 )
 
 

@@ -469,6 +469,32 @@ class OrchestratorMcpTools:
             validator=validator,
         )
 
+        # 0.4.19 — workspace ocupado: enfileira e retorna QUEUED (sem thread).
+        busy = service._busy_task_id(task.project_path, exclude_id=task.id)
+        if busy and not data.wait:
+            queued = service._enqueue_task(task, blocked_by=busy)
+            pos = service.status(queued.id).get("queue_position")
+            return {
+                "task_id": queued.id,
+                "status": TaskState.QUEUED.value,
+                "queue_position": pos,
+                "blocked_by": busy,
+                "warnings": [],
+                "message": (
+                    f"Orquestrador na fila — task={queued.id} | "
+                    f"pos={pos} | blocked_by={busy}. "
+                    "Aguarda a task ativa terminar; poll orchestrator_status."
+                ),
+                "status_resource": f"orchestrator://tasks/{queued.id}",
+                "events_resource": f"orchestrator://tasks/{queued.id}/events",
+                "next_poll_after_seconds": 5,
+                "poll_hint": {
+                    "status": "orchestrator_status",
+                    "events": "orchestrator_events",
+                    "result": "orchestrator_result",
+                },
+            }
+
         if data.wait:
             try:
 
@@ -657,6 +683,17 @@ class OrchestratorMcpTools:
         if not terminal:
             message_parts.append("poll orchestrator_status / orchestrator_events")
 
+        queue_position = None
+        blocked_by = None
+        if task.status == TaskState.QUEUED:
+            st = service.status(task.id)
+            queue_position = st.get("queue_position")
+            blocked_by = st.get("blocked_by")
+            message_parts.insert(
+                1,
+                f"fila pos={queue_position} blocked_by={blocked_by}",
+            )
+
         out = {
             "task_id": task.id,
             "status": task.status.value,
@@ -675,6 +712,8 @@ class OrchestratorMcpTools:
             "updated_at": task.updated_at,
             "requires_input": requires_input,
             "error": task.error,
+            "queue_position": queue_position,
+            "blocked_by": blocked_by,
             "session_digest": session_digest,
             "message": " | ".join(message_parts),
             "next_poll_after_seconds": 0 if terminal else 5,

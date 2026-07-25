@@ -53,12 +53,14 @@ function Invoke-TestInstall {
     $installer = Join-Path (Get-TestScriptsRoot) 'Install-Orchestrator.ps1'
 
     $params = @{
-        ProjectPath     = $ProjectPath
-        PackageRoot     = $PackageRoot
-        NonInteractive  = $true
-        SkipGlobalTools = $true
+        ProjectPath      = $ProjectPath
+        PackageRoot      = $PackageRoot
+        NonInteractive   = $true
+        SkipGlobalTools  = $true
+        # Suite nao deve mutar CLIs do host (0.4.17 Update-Agents default ON)
+        SkipAgentUpdates = $true
         # Evita mutar ~/.cursor/mcp.json do desenvolvedor durante a suite
-        CursorMcpScope  = 'project'
+        CursorMcpScope   = 'project'
     }
     foreach ($key in $ExtraParams.Keys) {
         $params[$key] = $ExtraParams[$key]
@@ -100,11 +102,12 @@ function Invoke-TestOrchestratorCommand {
     $installer = Join-Path (Get-TestScriptsRoot) 'Install-Orchestrator.ps1'
 
     $cmdParams = @{
-        ProjectPath     = $ProjectPath
-        PackageRoot     = $PackageRoot
-        NonInteractive  = $true
-        SkipGlobalTools = $true
-        CursorMcpScope  = 'project'
+        ProjectPath      = $ProjectPath
+        PackageRoot      = $PackageRoot
+        NonInteractive   = $true
+        SkipGlobalTools  = $true
+        SkipAgentUpdates = $true
+        CursorMcpScope   = 'project'
     }
     if ($Force) { $cmdParams.Force = $true }
     if ($DryRun) { $cmdParams.DryRun = $true }

@@ -25,6 +25,7 @@ Installer:
   orchestrator global-tools          # opt-in: MCPs/plugins/skills no perfil
   orchestrator route|dispatch        # roteamento / despacho unico
   orchestrator legacy scan|cleanup|status|restore
+  (install/update atualizam CLIs de agentes por padrão; opt-out: --skip-agent-updates)
 
 Runtime (persistente):
   orchestrator run --prompt "..."
@@ -225,6 +226,7 @@ function parseArgs(argv) {
       '--force': '-Force',
       '--non-interactive': '-NonInteractive',
       '--update-agents': '-UpdateAgents',
+      '--skip-agent-updates': '-SkipAgentUpdates',
       '--install-missing-agents': '-InstallMissingAgents',
       '--skip-agent-probes': '-SkipAgentProbes',
       '--skip-tools': '-SkipTools',

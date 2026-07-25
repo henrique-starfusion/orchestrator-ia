@@ -264,7 +264,8 @@ Parâmetros PowerShell aceitos via BAT (encaminhamento direto):
 |---|---|
 | `-ProjectPath` / `-Project` | Caminho do projeto-alvo |
 | `-DryRun` | Simula etapas sem alterar disco |
-| `-UpdateAgents` | Tenta `claude update`, `codex update`; com `-Force`, npm global |
+| `-UpdateAgents` | (compat) Força etapa de update de CLIs — **já é o padrão em 0.4.17+** |
+| `-SkipAgentUpdates` / `--skip-agent-updates` | Pula atualização dos CLIs de agentes existentes |
 | `-SkipTools` | Pula detecção/registro de OpenWolf e Graphify |
 | `-RefreshTools` | Consulta/atualiza versões publicadas (avisos se falhar) |
 | `-ConfigureMcps` | Atualiza `.orchestrator/mcp/registry.json` (Context7 desabilitado) |
@@ -291,12 +292,13 @@ orchestrator-ia.bat install -ProjectPath C:\meu-projeto -DryRun
 
 ---
 
-## Detecção de agentes e atualizações opcionais
+## Detecção de agentes e atualização de CLIs
 
 1. **Detect-Agents** — varre PATH, grava `detected.json` e atualiza `registry.json`.
-2. **Generate-Adapters** — copia adaptadores finos só para agentes `available`.
-3. **Update-Agents** (opcional, `-UpdateAgents`) — atualiza CLIs conhecidos; falhas viram avisos.
-4. **Probe-Agents** — por padrão **ignorado** no install; use `-RunSmokeTest` para probes somente leitura.
+2. **Update-Agents** (padrão em install/update desde 0.4.17) — atualiza CLIs já instalados (`claude`/`codex`/`kimi`/npm/choco/scoop); falhas viram avisos. Opt-out: `-SkipAgentUpdates`.
+3. **Detect-Agents** de novo — refresca versões após o update.
+4. **Generate-Adapters** — copia adaptadores finos só para agentes `available` (já com as versões atualizadas).
+5. **Probe-Agents** — por padrão **ignorado** no install; use `-RunSmokeTest` para probes somente leitura.
 
 Relatório final: `.orchestrator/runtime/reports/installation-report.md`
 

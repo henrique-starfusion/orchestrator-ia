@@ -47,6 +47,58 @@ Cache do one-liner PowerShell:
 
 ---
 
+## 0.4.19 — Duas tasks no mesmo projeto ao mesmo tempo
+
+**Sintoma (antes):** segunda `orchestrator_run` competia pelo WriteLock, ficava `RECEIVED` com `blocked_by_lock` ou parecia travada; chat cancelava.
+
+**Comportamento (0.4.19):** 1 execução ativa por `project_path`. Nova submissão → status `QUEUED`, campos `queue_position` e `blocked_by`. Ao terminar/cancelar a ativa, a próxima da fila inicia sozinha (FIFO). Projetos diferentes não se bloqueiam.
+
+**Poll:** `orchestrator_status` mostra `Estado: QUEUED | fila pos=N blocked_by=<id>`.
+
+## 0.4.16 — Tasks RECEIVED que nunca iniciam (zumbis de sessão anterior)
+
+**Sintoma:** `orchestrator task list` mostra tasks RECEIVED antigas que nunca transitaram para ANALYZING. O chat tentou rodar mas a sessão foi perdida antes do dispatch.
+
+**Causa:** Tasks RECEIVED sem lock ficam "mudas" — o processo que devia executá-las morreu. O orquestrador não as cancela automaticamente (antes de 0.4.16).
+
+**Solução (0.4.16):** Auto-cancel de tasks RECEIVED com idade > `stale_received_ttl_hours` (padrão: 6h). Disparado automaticamente em `create_task`. Configurável em `policies.json`:
+
+```json
+{ "stale_received_ttl_hours": 6 }
+```
+
+---
+
+## 0.4.16 — Task classificada incorretamente como "docs"
+
+**Sintoma:** Prompt de implementação (ex.: "Criar/atualizar regras de produção") é classificado como `docs`, gerando ACs de evidência/análise em vez de workspace_changes.
+
+**Causa:** O check de "doc" era substring, podendo casar falsamente em outros contextos. Além disso, prompts com intent de implementação E keyword "doc"/"documentação" ficavam presos como "docs".
+
+**Solução (0.4.16):** Check usa `\bdoc` (word-boundary); prompts com verbo de implementação + keyword docs são promovidos para `implementation` (mesmo padrão do `complex_analysis`).
+
+---
+
+## 0.4.16 — `InvalidTransitionError: RETRIEVING_MEMORY -> RETRIEVING_MEMORY` (double-resume/MCP retry)
+
+**Sintoma:** Task transita para FAILED com mensagem `Transição inválida: RETRIEVING_MEMORY -> RETRIEVING_MEMORY`. Ocorre quando o MCP faz retry de `orchestrator_run` ou quando o resume é chamado duas vezes na mesma task.
+
+**Causa:** `assert_transition` não era idempotente — mesmo estado levantava `InvalidTransitionError`.
+
+**Solução (0.4.16):** `assert_transition(same, same)` é no-op; `repo.transition(task, same_state, ...)` retorna sem salvar nem emitir evento.
+
+---
+
+## 0.4.16 — Duas tasks paralelas competem pelo workspace (PrintBee: 2 tabs simultâneos)
+
+**Sintoma:** Uma das tasks completa normalmente; a outra trava em RECEIVED ou aparece com `error: Lock em uso por outra task asyncio`. Em versões anteriores a segunda task entrava no loop como se tivesse o lock (reentrância incorreta).
+
+**Causa:** `WriteLock.acquire()` permitia a segunda task asyncio reentrar via `_depth` quando `_held=True`, pois não rastreava qual task asyncio detinha o lock. Spinning no event loop causaria deadlock.
+
+**Solução (0.4.16):** `WriteLock` rastreia `_owner_task` (asyncio Task). Segunda task ≠ owner → `TimeoutError` imediato → `run_task` registra `blocked_by_lock` e retorna sem FAILED na task em andamento.
+
+---
+
 ## One-liner / CLI npm
 
 ### Acentos somem ou viram `�` / `?` no Cursor ou PowerShell
@@ -247,6 +299,46 @@ orchestrator-ia.bat repair -ProjectPath C:\dev\projeto
 
 ## Agentes
 
+### Codex trava em VALIDATING / processo fica preso por 10–20 min no Windows
+
+**Sintoma A (sandbox 740):** tarefa fica em VALIDATING/EXECUTING; log com `CreateProcessAsUserW failed: 740` / `windows sandbox: runner failed`.
+
+**Sintoma B (subagentes / printbee-patterns, 0.4.18):** sandbox já é `danger-full-access`, mas o log cresce para MB com `collab: Wait`, `command timed out after 124`, menções a “três subagentes” / `printbee-patterns`. O Codex entra em loop de wait em vez de implementar inline.
+
+**Causa:** o profile padrão do Codex usa `--sandbox workspace-write`, que no Windows exige que `CreateProcessAsUserW` crie um processo restrito — operação que requer elevação de privilégio (erro 740 = `ERROR_ELEVATION_REQUIRED`). O Codex **não aborta** ao receber esse erro; em vez disso, tenta novamente via MCP `node_repl/js` indefinidamente.
+
+Mecanismos:
+
+1. **Override sandbox Windows (0.4.15):** `workspace-write` → `danger-full-access` em `os.name == "nt"`.
+2. **Fail-fast 740 (0.4.15):** após N marcadores 740 no stream, mata o processo (`agent_infra_fail_fast_count`).
+3. **Restrição child always-on (0.4.18):** prompt do executor/validator/planner **sempre** proíbe spawn/collab/Wait e ignora rito de N subagentes (não depende mais da env no processo MCP).
+4. **Fail-fast collab (0.4.18):** marcadores `collab: wait` e `command timed out after 124` também disparam INFRA-FAIL-FAST.
+
+**Solução (em caso de install anterior a 0.4.15):**
+
+```bash
+orchestrator update --force
+```
+
+**Verificação:**
+
+```bash
+# Confirme que o runtime é 0.4.15+:
+orchestrator status
+# Deve listar features: codex_infra_failfast, codex_sandbox_windows_override
+```
+
+**Ajuste de sensibilidade** (se 3 for alto/baixo demais):
+
+```json
+# .orchestrator/config/policies.json
+{ "agent_infra_fail_fast_count": 2 }
+```
+
+**Nota:** o erro 740 não é um problema de mérito — o agente simplesmente não consegue inicializar o sandbox. O runtime trata isso como `validator_infra_failure` e nunca converte em rejeição de AC.
+
+---
+
 ### Nenhum agente detectado
 
 **Causa:** CLIs não estão no PATH.
@@ -277,11 +369,11 @@ Registro: `.orchestrator/agents/detected.json`
 
 ---
 
-### `-UpdateAgents` falhou
+### Update de CLIs de agentes falhou
 
-**Causa:** `claude update` / `codex update` / npm retornou erro.
+**Causa:** `claude|codex|kimi update`, `npm install -g`, `choco upgrade` ou `scoop update` retornou erro.
 
-**Solução:** avisos não bloqueiam install. Atualize CLIs manualmente.
+**Solução:** avisos não bloqueiam install/update. Veja `.orchestrator/runtime/reports/agent-updates.json`. Atualize o CLI manualmente ou use `-SkipAgentUpdates` / `--skip-agent-updates` para pular a etapa.
 
 ---
 

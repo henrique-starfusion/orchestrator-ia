@@ -1,4 +1,6 @@
 {
+  "agent_infra_fail_fast_count": 3,
+  "stale_received_ttl_hours": 6,
   "maximum_iterations": 3,
   "same_issue_repeat_limit": 2,
   "minimum_validation_score": 0.9,

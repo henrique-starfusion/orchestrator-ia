@@ -106,17 +106,18 @@ Não há parsing de flags no BAT — use sintaxe PowerShell (`-ProjectPath`, `-D
 7. Apply-Manifest                  (modos managed/merge/generated)
 8. Sync-WorkspaceVersion           (se VERSION ausente)
 9. Detect-Agents.ps1
-10. Generate-Adapters.ps1
-11. Install-Tools.ps1               (salvo -SkipTools)
-12. Configure-Mcps.ps1              (se -ConfigureMcps)
-13. Validate-Orchestrator.ps1
-14. Validate-Hooks.ps1
-15. Legacy cleanup (pos): remove safe → validate
-16. Update-Agents.ps1               (se -UpdateAgents)
-17. Probe-Agents.ps1                (skip por padrão; -RunSmokeTest ativa)
-18. Configure-CursorMcp.ps1         (projeto + ~/.cursor/mcp.json; pular com -SkipCursor)
-19. Write-InstallationReport.ps1    (inclui seção Legacy cleanup)
-20. Remove-InstallationLock         (finally)
+10. Update-Agents.ps1               (padrão ON; opt-out -SkipAgentUpdates)
+11. Detect-Agents.ps1               (re-detect após update de CLIs)
+12. Generate-Adapters.ps1
+13. Install-Tools.ps1               (salvo -SkipTools)
+14. Configure-Mcps.ps1              (se -ConfigureMcps)
+15. Validate-Orchestrator.ps1
+16. Validate-Hooks.ps1
+17. Legacy cleanup (pos): remove safe → validate
+18. Probe-Agents.ps1                (skip por padrão; -RunSmokeTest ativa)
+19. Configure-CursorMcp.ps1         (projeto + ~/.cursor/mcp.json; pular com -SkipCursor)
+20. Write-InstallationReport.ps1    (inclui seção Legacy cleanup)
+21. Remove-InstallationLock         (finally)
 ```
 
 Detalhes: [`legacy-cleanup.md`](legacy-cleanup.md) · [`mcp-integration.md`](mcp-integration.md).

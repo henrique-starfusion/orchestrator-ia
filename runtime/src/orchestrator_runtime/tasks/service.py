@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
+import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+_log = logging.getLogger(__name__)
 
 from orchestrator_runtime.agents import AgentRegistry
 from orchestrator_runtime.agents.base import AgentRequest, AgentResult
@@ -33,7 +38,13 @@ from orchestrator_runtime.planning.analyzer import Planner
 from orchestrator_runtime.routing.manager import RulesRouter
 from orchestrator_runtime.tasks.models import TaskConstraints, TaskRecord
 from orchestrator_runtime.tasks.repository import TaskRepository
-from orchestrator_runtime.tasks.state_machine import TaskState, can_resume
+from orchestrator_runtime.tasks.state_machine import (
+    TERMINAL_STATES,
+    TaskState,
+    can_resume,
+)
+
+TERMINAL_LIKE = TERMINAL_STATES
 from orchestrator_runtime.testing import TestRunner
 from orchestrator_runtime.testing.discovery import stack_test_commands
 from orchestrator_runtime.validation import (
@@ -57,7 +68,11 @@ class TaskService:
         self.config = config
         self.bus = EventBus(verbose=verbose)
         self.repo = TaskRepository(str(config.db_path))
-        self.executor = CliExecutor(config.project_path, echo=verbose)
+        self.executor = CliExecutor(
+            config.project_path,
+            echo=verbose,
+            infra_fail_fast_count=config.limits.agent_infra_fail_fast_count,
+        )
         self.registry = AgentRegistry(config, self.executor)
         self.router = RulesRouter(config, self.registry)
         self.manager = build_manager(config, self.router)
@@ -78,6 +93,32 @@ class TaskService:
         # persistidos na task): changed_files, test_results, last_validation.
         self._run_ctx: dict[str, Any] = {}
 
+    def _cancel_stale_received(self) -> int:
+        """Auto-cancel RECEIVED tasks older than stale_received_ttl_hours (P1-D 0.4.16)."""
+        ttl_hours = self.config.limits.stale_received_ttl_hours
+        if not ttl_hours:
+            return 0
+        cutoff_s = ttl_hours * 3600
+        now = datetime.now(timezone.utc)
+        cancelled = 0
+        for task in self.repo.list_tasks(limit=200):
+            if task.status != TaskState.RECEIVED:
+                continue
+            try:
+                ts = task.created_at.replace("Z", "+00:00")
+                age_s = (now - datetime.fromisoformat(ts)).total_seconds()
+            except Exception:
+                continue
+            if age_s > cutoff_s:
+                self.repo.transition(
+                    task,
+                    TaskState.CANCELLED,
+                    reason=f"auto-cancel: stale RECEIVED > {ttl_hours}h",
+                    agent="runtime",
+                )
+                cancelled += 1
+        return cancelled
+
     def create_task(
         self,
         prompt: str,
@@ -90,6 +131,7 @@ class TaskService:
         validator: str | None = None,
         dry_run: bool = False,
     ) -> TaskRecord:
+        self._cancel_stale_received()
         constraints = TaskConstraints(
             maximum_iterations=max_iterations
             or self.config.limits.maximum_iterations,
@@ -155,7 +197,7 @@ class TaskService:
 
     def status(self, task_id: str) -> dict[str, Any]:
         task = self.get(task_id)
-        return {
+        out: dict[str, Any] = {
             "id": task.id,
             "status": task.status.value,
             "iteration": task.iteration,
@@ -164,6 +206,100 @@ class TaskService:
             "error": task.error,
             "documentation_review": task.documentation_review,
         }
+        if task.status == TaskState.QUEUED:
+            out["queue_position"] = self._queue_position(task.id, task.project_path)
+            out["blocked_by"] = self._blocked_by_from_error(task.error)
+        return out
+
+    @staticmethod
+    def _blocked_by_from_error(error: str | None) -> str | None:
+        if not error:
+            return None
+        m = re.match(r"queued_behind:([^|\s]+)", error)
+        return m.group(1) if m else None
+
+    def _queue_position(self, task_id: str, project_path: str) -> int:
+        for i, t in enumerate(self.repo.list_queued(project_path), start=1):
+            if t.id == task_id:
+                return i
+        return len(self.repo.list_queued(project_path)) + 1
+
+    def _busy_task_id(self, project_path: str, exclude_id: str | None = None) -> str | None:
+        """Id da task que ocupa o workspace, ou None se livre."""
+        active = self.repo.find_active_execution(project_path)
+        if active and active.id != exclude_id:
+            return active.id
+        for rid in list(self._running_tasks):
+            if rid == exclude_id:
+                continue
+            other = self.repo.get(rid)
+            if other and other.project_path == project_path:
+                return rid
+        return None
+
+    def _enqueue_task(self, task: TaskRecord, blocked_by: str) -> TaskRecord:
+        """Coloca task na fila FIFO do workspace (estado QUEUED)."""
+        task = self.get(task.id)
+        if task.status in TERMINAL_LIKE:
+            return task
+        if task.status == TaskState.RECEIVED:
+            self.repo.transition(
+                task,
+                TaskState.QUEUED,
+                reason=f"workspace busy; behind {blocked_by}",
+                agent="runtime",
+            )
+            task = self.get(task.id)
+        elif task.status != TaskState.QUEUED:
+            # Já saiu da fila / está em pipeline — não re-enfileirar.
+            return task
+        pos = self._queue_position(task.id, task.project_path)
+        task.error = f"queued_behind:{blocked_by}|pos={pos}"
+        self.repo.save(task)
+        self.bus.emit(
+            RuntimeEvent(
+                task_id=task.id,
+                type=EventType.STATE_CHANGED,
+                data={
+                    "to": TaskState.QUEUED.value,
+                    "summary": f"QUEUED behind {blocked_by} pos={pos}",
+                    "blocked_by": blocked_by,
+                    "queue_position": pos,
+                    "reason": "workspace_busy",
+                },
+            )
+        )
+        return task
+
+    def _maybe_start_next(self, project_path: str) -> None:
+        """Dequeue FIFO: inicia a próxima QUEUED quando o workspace liberar."""
+        if self._busy_task_id(project_path) is not None:
+            return
+        queued = self.repo.list_queued(project_path)
+        if not queued:
+            return
+        nxt = queued[0]
+        nxt = self.get(nxt.id)
+        if nxt.status != TaskState.QUEUED:
+            return
+        nxt.error = None
+        self.repo.save(nxt)
+        self.repo.transition(
+            nxt,
+            TaskState.RECEIVED,
+            reason="dequeued — workspace free",
+            agent="runtime",
+        )
+
+        def _bg() -> None:
+            try:
+                asyncio.run(self.run_task(nxt.id))
+            except Exception as exc:  # noqa: BLE001
+                _log.exception("dequeue run_task %s failed: %s", nxt.id, exc)
+
+        threading.Thread(
+            target=_bg, daemon=True, name=f"orch-dequeue-{nxt.id[:8]}"
+        ).start()
 
     def logs(self, task_id: str) -> list[dict[str, Any]]:
         self.get(task_id)
@@ -185,32 +321,46 @@ class TaskService:
             return task
         if task.constraints.dry_run:
             return await self._dry_run(task)
+
+        # 0.4.19 — se outra task já ocupa o workspace, enfileira (não compete).
+        busy = self._busy_task_id(task.project_path, exclude_id=task_id)
+        if busy:
+            return self._enqueue_task(task, blocked_by=busy)
+        if task.status == TaskState.QUEUED:
+            # Dequeued (RECEIVED) ou liberou — segue; se ainda QUEUED e livre,
+            # promove para RECEIVED antes do loop.
+            task = self.get(task_id)
+            if task.status == TaskState.QUEUED:
+                task.error = None
+                self.repo.save(task)
+                self.repo.transition(
+                    task,
+                    TaskState.RECEIVED,
+                    reason="workspace free — leaving queue",
+                    agent="runtime",
+                )
+                task = self.get(task_id)
+
+        project_path = task.project_path
+        held_lock = False
+        result = task
         try:
             with self.lock:
+                held_lock = True
                 self._running_tasks.add(task_id)
                 try:
-                    return await self._execute_loop(task)
+                    result = await self._execute_loop(task)
                 finally:
                     self._running_tasks.discard(task_id)
+            return result
         except TimeoutError as exc:
-            # Lock ocupado por outra execução: NÃO envenenar a tarefa em andamento.
+            # Lock ocupado (outra coroutine/processo): fila explícita QUEUED.
             task = self.get(task_id)
-            # Status visível: sem isso a task fica RECEIVED "muda" e o chat
-            # cancela achando que travou (fila invisível — transcrições PrintBee).
-            task.error = f"blocked_by_lock: {exc}"
-            self.repo.save(task)
-            self.bus.emit(
-                RuntimeEvent(
-                    task_id=task.id,
-                    type=EventType.TASK_FAILED,
-                    data={
-                        "error": str(exc),
-                        "non_fatal": True,
-                        "reason": "workspace_lock_busy",
-                    },
-                )
+            blocked = (
+                self._busy_task_id(project_path, exclude_id=task_id) or "unknown"
             )
-            return task
+            _log.debug("enqueue %s behind %s (%s)", task_id, blocked, exc)
+            return self._enqueue_task(task, blocked_by=blocked)
         except Exception as exc:  # noqa: BLE001
             task = self.get(task_id)
             if can_resume(task.status):
@@ -232,6 +382,10 @@ class TaskService:
             )
             self._persist_episode(task, success=False)
             raise
+        finally:
+            # Só dequeue se realmente rodamos sob o lock (não no caminho QUEUED).
+            if held_lock:
+                self._maybe_start_next(project_path)
 
     async def resume(self, task_id: str) -> TaskRecord:
         task = self.get(task_id)
@@ -271,7 +425,10 @@ class TaskService:
             self.repo.transition(
                 task, TaskState.ANALYZING, reason="resume after user input"
             )
-        if task.error and str(task.error).startswith("blocked_by_lock"):
+        if task.error and (
+            str(task.error).startswith("blocked_by_lock")
+            or str(task.error).startswith("queued_behind:")
+        ):
             task.error = None
             self.repo.save(task)
 
@@ -345,16 +502,18 @@ class TaskService:
             _tooling = self._required_tooling_block()
             _skills = self._skills_block(task)
             _learnings = self._learnings_block(learnings)
+            _child = self._child_agent_restriction_block()
             plan_prompt = (
-                f"{_tooling}\n" if _tooling else ""
-            ) + (
-                f"{_skills}\n" if _skills else ""
-            ) + (
-                f"{_learnings}\n" if _learnings else ""
-            ) + (
-                f"Refine o plano para: {task.prompt}\n"
-                f"Plano atual: {dumps(task.plan)}\n"
-                "Responda com passos objetivos sem abreviação."
+                f"{_child}\n"
+                + (f"{_tooling}\n" if _tooling else "")
+                + (f"{_skills}\n" if _skills else "")
+                + (f"{_learnings}\n" if _learnings else "")
+                + (
+                    f"Refine o plano para: {task.prompt}\n"
+                    f"Plano atual: {dumps(task.plan)}\n"
+                    "Responda com passos objetivos sem abreviação. "
+                    "NÃO delegue a subagentes — refine o plano sozinho."
+                )
             )
             # O plano determinístico já existe; o refino é advisory e não pode
             # segurar SELECTING_AGENTS por 15 min (fable "travado" nas
@@ -1033,6 +1192,24 @@ class TaskService:
                 lines.append(f"- {str(m.get('content', ''))[:300]}")
         return "\n".join(lines)
 
+    @staticmethod
+    def _child_agent_restriction_block() -> str:
+        """Restrição anti-subagente para CLIs spawnados pelo runtime.
+
+        CliExecutor sempre define ORCHESTRATOR_CHILD_AGENT=1 no processo filho.
+        O check no env do MCP (pai) era bug: o bloco nunca entrava no prompt e o
+        Codex seguia printbee-patterns (3 subagentes → collab Wait → hang).
+        """
+        return (
+            "OBRIGATÓRIO (agente filho do Orchestrator, ORCHESTRATOR_CHILD_AGENT=1): "
+            "execute TODO o trabalho INLINE neste processo. "
+            "PROIBIDO: spawn_agent, wait_agent, collab Wait, Tool(Agent), Task, "
+            "multi-agent, delegar a N subagentes. "
+            "Ignore qualquer skill/regra (ex.: printbee-patterns) que peça "
+            "'mínimo 3 subagentes' ou rito de avaliação paralela — isso causa hang. "
+            "Faça escopo/implementação/testes você mesmo, sequencialmente."
+        )
+
     def _build_executor_prompt(
         self,
         task: TaskRecord,
@@ -1044,6 +1221,8 @@ class TaskService:
     ) -> str:
         parts = [
             f"Tarefa: {task.prompt}",
+            # Antes das skills — senão o modelo compromete-se com 3 subagentes
+            self._child_agent_restriction_block(),
             "Critérios:",
             *[f"- {c.id}: {c.description}" for c in task.acceptance_criteria],
         ]
@@ -1164,8 +1343,10 @@ class TaskService:
         tooling_section = f"{tooling}\n" if tooling else ""
         skills = self._skills_block(task)
         skills_section = f"{skills}\n" if skills else ""
+        child = self._child_agent_restriction_block()
         return (
             "Valide a tarefa e responda APENAS JSON com status/score/blocking_issues.\n"
+            f"{child}\n"
             f"Prompt original: {task.prompt}\n"
             f"Critérios: {dumps([c.model_dump() for c in task.acceptance_criteria])}\n"
             f"Diff/arquivos: {changed_files}\n"

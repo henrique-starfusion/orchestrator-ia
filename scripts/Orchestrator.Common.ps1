@@ -819,6 +819,20 @@ function Get-AgentNpmPackageMap {
     }
 }
 
+function Get-AgentChocolateyPackageMap {
+    # IDs Chocolatey usados no fallback de Update-Agents (0.4.17+).
+    return @{
+        'opencode' = 'opencode'
+    }
+}
+
+function Get-AgentScoopPackageMap {
+    return @{
+        'opencode' = 'opencode'
+        'gemini'   = 'gemini-cli'
+    }
+}
+
 function Get-AdapterVendorMap {
     return @{
         'claude'     = 'claude'

@@ -18,6 +18,7 @@ param(
     [switch]$DryRun,
     [switch]$NonInteractive,
     [switch]$UpdateAgents,
+    [switch]$SkipAgentUpdates,
     [switch]$InstallMissingAgents,
     [switch]$SkipAgentProbes,
     [switch]$SkipTools,
@@ -296,6 +297,19 @@ try {
             # Refresh de deteccao/adaptadores apos sync estrutural
             Invoke-ChildScript -Name 'Detect-Agents.ps1' -Arguments @{ ProjectPath = $projectRoot } | Out-Null
 
+            # 0.4.17: atualizar CLIs de agentes existentes por padrao (opt-out: -SkipAgentUpdates)
+            if (-not $SkipAgentUpdates) {
+                Write-Host '[ETAPA] Update-Agents (CLIs existentes no PATH)'
+                $ua = @{ ProjectPath = $projectRoot; UpdateAgents = $true }
+                if ($Force) { $ua.Force = $true }
+                if ($DryRun) { $ua.DryRun = $true }
+                Invoke-ChildScript -Name 'Update-Agents.ps1' -Arguments $ua | Out-Null
+                Invoke-ChildScript -Name 'Detect-Agents.ps1' -Arguments @{ ProjectPath = $projectRoot } | Out-Null
+            }
+            else {
+                Write-Host '[INFO] Update-Agents ignorado (-SkipAgentUpdates).'
+            }
+
             $adapterArgs = @{ ProjectPath = $projectRoot; PackageRoot = $packageRootResolved }
             if ($Force) { $adapterArgs.Force = $true }
             Invoke-ChildScript -Name 'Generate-Adapters.ps1' -Arguments $adapterArgs | Out-Null
@@ -339,13 +353,6 @@ try {
                 }
                 if ($Force) { $mcpArgs.Force = $true }
                 Invoke-ChildScript -Name 'Configure-Mcps.ps1' -Arguments $mcpArgs | Out-Null
-            }
-
-            if ($UpdateAgents) {
-                $ua = @{ ProjectPath = $projectRoot; UpdateAgents = $true }
-                if ($Force) { $ua.Force = $true }
-                if ($DryRun) { $ua.DryRun = $true }
-                Invoke-ChildScript -Name 'Update-Agents.ps1' -Arguments $ua | Out-Null
             }
 
             $code = Invoke-ChildScript -Name 'Validate-Orchestrator.ps1' -Arguments @{
@@ -590,6 +597,22 @@ try {
 
     Invoke-ChildScript -Name 'Detect-Agents.ps1' -Arguments @{ ProjectPath = $projectRoot } | Out-Null
 
+    # 0.4.17: atualizar CLIs de agentes existentes por padrao (opt-out: -SkipAgentUpdates)
+    if (-not $SkipAgentUpdates) {
+        Write-Host '[ETAPA] Update-Agents (CLIs existentes no PATH)'
+        $updateArgs = @{
+            ProjectPath  = $projectRoot
+            UpdateAgents = $true
+        }
+        if ($Force) { $updateArgs.Force = $true }
+        if ($DryRun) { $updateArgs.DryRun = $true }
+        Invoke-ChildScript -Name 'Update-Agents.ps1' -Arguments $updateArgs | Out-Null
+        Invoke-ChildScript -Name 'Detect-Agents.ps1' -Arguments @{ ProjectPath = $projectRoot } | Out-Null
+    }
+    else {
+        Write-Host '[INFO] Update-Agents ignorado (-SkipAgentUpdates).'
+    }
+
     $adapterArgs = @{
         ProjectPath = $projectRoot
         PackageRoot = $packageRootResolved
@@ -694,16 +717,6 @@ try {
             )
             Set-Content -LiteralPath (Join-Path (Get-OrchestratorRoot -ProjectPath $projectRoot) 'runtime\reports\legacy-cleanup-report.md') -Value ($md -join [Environment]::NewLine) -Encoding UTF8
         }
-    }
-
-    if ($UpdateAgents) {
-        $updateArgs = @{
-            ProjectPath  = $projectRoot
-            UpdateAgents = $true
-        }
-        if ($Force) { $updateArgs.Force = $true }
-        if ($DryRun) { $updateArgs.DryRun = $true }
-        Invoke-ChildScript -Name 'Update-Agents.ps1' -Arguments $updateArgs | Out-Null
     }
 
     $shouldSkipProbes = $true

@@ -32,7 +32,7 @@ from orchestrator_runtime.tasks.models import (
     TaskConstraints,
     TaskRecord,
 )
-from orchestrator_runtime.tasks.state_machine import TaskState, assert_transition
+from orchestrator_runtime.tasks.state_machine import TaskState, TERMINAL_STATES, assert_transition
 
 
 class TaskRepository:
@@ -138,6 +138,49 @@ class TaskRepository:
             ).all()
             return [self._from_row(r) for r in rows]
 
+    # 0.4.19 — workspace task queue helpers
+    def list_queued(self, project_path: str) -> list[TaskRecord]:
+        """Return QUEUED tasks for project_path ordered FIFO by created_at."""
+        with self.session() as s:
+            rows = s.scalars(
+                select(TaskRow)
+                .where(TaskRow.status == TaskState.QUEUED.value)
+                .where(TaskRow.project_path == project_path)
+                .order_by(TaskRow.created_at.asc())
+            ).all()
+            return [self._from_row(r) for r in rows]
+
+    def find_active_execution(self, project_path: str) -> TaskRecord | None:
+        """Return the first non-terminal, non-QUEUED, non-RECEIVED task for project_path.
+
+        A task in these statuses is considered 'actively executing':
+        ANALYZING, RETRIEVING_MEMORY, PLANNING, SELECTING_AGENTS, EXECUTING,
+        TESTING, VALIDATING, CORRECTING, UPDATING_DOCUMENTATION, CONSOLIDATING,
+        WAITING_FOR_USER.
+        """
+        active_statuses = {
+            TaskState.ANALYZING,
+            TaskState.RETRIEVING_MEMORY,
+            TaskState.PLANNING,
+            TaskState.SELECTING_AGENTS,
+            TaskState.EXECUTING,
+            TaskState.TESTING,
+            TaskState.VALIDATING,
+            TaskState.CORRECTING,
+            TaskState.UPDATING_DOCUMENTATION,
+            TaskState.CONSOLIDATING,
+            TaskState.WAITING_FOR_USER,
+        }
+        with self.session() as s:
+            rows = s.scalars(
+                select(TaskRow)
+                .where(TaskRow.project_path == project_path)
+                .where(TaskRow.status.in_([st.value for st in active_statuses]))
+                .order_by(TaskRow.created_at.asc())
+                .limit(1)
+            ).all()
+            return self._from_row(rows[0]) if rows else None
+
     def save(self, task: TaskRecord) -> TaskRecord:
         task.updated_at = datetime.now(timezone.utc).isoformat()
         with self.session() as s:
@@ -184,6 +227,8 @@ class TaskRepository:
         evidence: dict[str, Any] | None = None,
         error: str | None = None,
     ) -> TaskRecord:
+        if task.status == new_state:
+            return task  # idempotent: same-state is a no-op, no event emitted
         assert_transition(task.status, new_state)
         previous = task.status
         task.status = new_state

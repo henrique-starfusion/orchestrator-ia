@@ -92,18 +92,18 @@ class TaskAnalyzer:
             for w in ("analis", "diagnos", "investig", "auditor", "audit", "gap")
         ):
             task_type = "complex_analysis"
-        elif any(w in lowered for w in ("doc", "readme", "changelog")):
+        elif re.search(r"\bdoc|\breadme\b|\bchangelog\b", lowered):
             task_type = "docs"
 
-        # Pedido de implementação que também cita "analisar" não pode virar
-        # complex_analysis (ACs de auditoria em vez de workspace_changes) —
-        # verbo de implementação vence a keyword de análise.
+        # Pedido de implementação que também cita "analisar"/"doc" não pode virar
+        # complex_analysis/docs (ACs de auditoria em vez de workspace_changes) —
+        # verbo de implementação vence a keyword de análise/docs.
         # Negações não contam como intenção ("não criar módulo soma").
         cleaned = _NEGATED_CLAUSE_RE.sub(" ", lowered)
         has_impl_intent = any(w in cleaned for w in _IMPLEMENTATION_INTENT) or re.search(
             r"\bfix(es|ed|ing)?\b", cleaned
         )
-        if task_type == "complex_analysis" and has_impl_intent:
+        if task_type in ("complex_analysis", "docs") and has_impl_intent:
             task_type = "implementation"
 
         complexity = "medium"

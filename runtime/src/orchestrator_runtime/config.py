@@ -43,6 +43,10 @@ class RuntimeLimits(BaseModel):
     digest_max_chars: int = 1500
     truncate_result_artifacts_chars: int = 20000
     update_wolf_status: bool = True
+    # 0.4.15 — fail-fast quando sandbox Windows (740) detectado no stream
+    agent_infra_fail_fast_count: int = 3
+    # 0.4.16 — auto-cancel tarefas RECEIVED antigas (zumbis de sessão anterior)
+    stale_received_ttl_hours: int = 6
 
 
 class ManagerModelConfig(BaseModel):
@@ -240,6 +244,12 @@ def load_config(
         ),
         caveman_enabled=bool(
             (policies.get("token_economy") or {}).get("caveman_enabled", True)
+        ),
+        agent_infra_fail_fast_count=int(
+            policies.get("agent_infra_fail_fast_count", 3)
+        ),
+        stale_received_ttl_hours=int(
+            policies.get("stale_received_ttl_hours", 6)
         ),
         **_skill_selection_limits(policies),
         **_context_compaction_limits(policies),

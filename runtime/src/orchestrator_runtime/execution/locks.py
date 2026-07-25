@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import time
 from pathlib import Path
+from typing import Any
 
 
 def _pid_alive(pid: int) -> bool:
@@ -28,12 +30,21 @@ def _pid_alive(pid: int) -> bool:
         return False
 
 
+def _current_asyncio_task() -> Any:
+    """Return current asyncio Task, or None if no running loop."""
+    try:
+        return asyncio.current_task()
+    except RuntimeError:
+        return None
+
+
 class WriteLock:
     def __init__(self, lock_path: Path, timeout_s: int = 30) -> None:
         self.lock_path = lock_path
         self.timeout_s = timeout_s
         self._held = False
         self._depth = 0
+        self._owner_task: Any = None  # asyncio Task that holds the lock
 
     def _reclaim_stale(self) -> bool:
         """Remove lock órfão (PID morto) ou do mesmo processo sem hold ativo."""
@@ -60,7 +71,16 @@ class WriteLock:
         return False
 
     def acquire(self) -> None:
+        cur = _current_asyncio_task()
+
         if self._held:
+            if cur is not None and cur is not self._owner_task:
+                # Different asyncio task — immediate fail; spinning here would deadlock
+                # the event loop because the lock is held by another coroutine.
+                raise TimeoutError(
+                    f"Lock em uso por outra task asyncio: {self.lock_path}"
+                )
+            # Same task (or non-async context): allow reentrant depth
             self._depth += 1
             return
 
@@ -73,6 +93,7 @@ class WriteLock:
                     json.dump({"pid": os.getpid(), "ts": time.time()}, fh)
                 self._held = True
                 self._depth = 1
+                self._owner_task = cur
                 return
             except FileExistsError:
                 self._reclaim_stale()
@@ -90,6 +111,7 @@ class WriteLock:
             self.lock_path.unlink(missing_ok=True)
         self._held = False
         self._depth = 0
+        self._owner_task = None
 
     def __enter__(self):
         self.acquire()

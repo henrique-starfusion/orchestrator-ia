@@ -18,6 +18,20 @@ def _live(msg: str) -> None:
     print(msg, file=sys.stderr, flush=True)
 
 
+# Marcadores de falha de infra do sandbox do Codex no Windows.
+# CreateProcessAsUserW requer elevação (erro 740) quando --sandbox workspace-write
+# é usado; o Codex não aborta e entra em loop por node_repl/js indefinidamente.
+# Importado por service.py (_VALIDATOR_INFRA_MARKERS).
+INFRA_FAIL_MARKERS: tuple[str, ...] = (
+    "createprocessasuserw failed: 740",
+    "windows sandbox: runner failed",
+    "windows error 740",
+    # 0.4.18 — Codex preso em ritual multi-agente (printbee-patterns / collab Wait)
+    "collab: wait",
+    "command timed out after 124",
+)
+
+
 SECRET_PATTERNS = ("API_KEY", "TOKEN", "SECRET", "PASSWORD", "AUTHORIZATION")
 
 
@@ -67,9 +81,17 @@ class ProcessResult:
 class CliExecutor:
     """Executa CLI com lista de argumentos, timeout e anti-recursão."""
 
-    def __init__(self, project_path: Path, echo: bool = True) -> None:
+    def __init__(
+        self,
+        project_path: Path,
+        echo: bool = True,
+        infra_fail_fast_count: int = 3,
+    ) -> None:
         self.project_path = project_path.resolve()
         self.echo = echo
+        # 0.4.15: matar processo após este nº de marcadores de infra consecutivos
+        # (740 / sandbox Windows). 0 desabilita o fail-fast.
+        self.infra_fail_fast_count = infra_fail_fast_count
         # PIDs de CLIs em execução — alvo do cancel (kill de filhos).
         self._active_pids: set[int] = set()
 
@@ -107,6 +129,9 @@ class CliExecutor:
         stderr_chunks: list[str] = []
         started = time.monotonic()
         timed_out = False
+        # 0.4.15 fail-fast: contador total de marcadores de infra no stream.
+        infra_fail_count = [0]
+        infra_fast_exit = threading.Event()
 
         if self.echo:
             _live(f"[exec] {redact(' '.join(resolved_command))}")
@@ -146,6 +171,15 @@ class CliExecutor:
                 chunks.append(line)
                 if self.echo:
                     _live(f"{prefix}{redact(line.rstrip(chr(10) + chr(13)))}")
+                # 0.4.15: fail-fast — detecta marcadores de infra do sandbox Windows
+                # (740/runner failed) no stream e mata o processo após N ocorrências.
+                if self.infra_fail_fast_count > 0 and not infra_fast_exit.is_set():
+                    lower = line.lower()
+                    if any(m in lower for m in INFRA_FAIL_MARKERS):
+                        infra_fail_count[0] += 1
+                        if infra_fail_count[0] >= self.infra_fail_fast_count:
+                            infra_fast_exit.set()
+                            self._kill_tree(proc.pid)
 
         def _heartbeat() -> None:
             if not self.echo or heartbeat_s <= 0:
@@ -185,10 +219,18 @@ class CliExecutor:
                 os.environ["ORCHESTRATOR_CHILD_AGENT"] = previous
 
         duration = time.monotonic() - started
+        stderr_text = redact("".join(stderr_chunks))
+        if infra_fast_exit.is_set():
+            # Append marker so _validator_infra_failure (service.py) triggers fallback.
+            stderr_text += (
+                f"\n[INFRA-FAIL-FAST] windows sandbox: runner failed"
+                f" (detected {infra_fail_count[0]}x,"
+                f" killed after {self.infra_fail_fast_count} occurrences)"
+            )
         return ProcessResult(
             exit_code=(-1 if timed_out else (proc.returncode or 0)),
             stdout=redact("".join(stdout_chunks)),
-            stderr=redact("".join(stderr_chunks)),
+            stderr=stderr_text,
             timed_out=timed_out,
             duration_s=duration,
             command=resolved_command,

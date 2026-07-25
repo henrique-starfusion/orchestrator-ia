@@ -9,6 +9,7 @@ from orchestrator_runtime.errors import InvalidTransitionError
 
 class TaskState(str, Enum):
     RECEIVED = "RECEIVED"
+    QUEUED = "QUEUED"
     ANALYZING = "ANALYZING"
     RETRIEVING_MEMORY = "RETRIEVING_MEMORY"
     PLANNING = "PLANNING"
@@ -35,6 +36,7 @@ TERMINAL_STATES = {
 
 ALLOWED_TRANSITIONS: dict[TaskState, set[TaskState]] = {
     TaskState.RECEIVED: {
+        TaskState.QUEUED,
         TaskState.ANALYZING,
         TaskState.CANCELLED,
         TaskState.FAILED,
@@ -42,6 +44,13 @@ ALLOWED_TRANSITIONS: dict[TaskState, set[TaskState]] = {
         # sem isso a task delegada fica órfã em RECEIVED para sempre.
         TaskState.COMPLETED,
         TaskState.INCOMPLETE,
+    },
+    # 0.4.19 — workspace task queue: fila FIFO por project_path
+    TaskState.QUEUED: {
+        TaskState.ANALYZING,
+        TaskState.RECEIVED,
+        TaskState.CANCELLED,
+        TaskState.FAILED,
     },
     TaskState.ANALYZING: {
         TaskState.RETRIEVING_MEMORY,
@@ -123,6 +132,8 @@ ALLOWED_TRANSITIONS: dict[TaskState, set[TaskState]] = {
 
 
 def assert_transition(current: TaskState, new: TaskState) -> None:
+    if current == new:  # ponytail: same-state is a no-op — prevents FAILED on double-resume/MCP retry
+        return
     allowed = ALLOWED_TRANSITIONS.get(current, set())
     if new not in allowed:
         raise InvalidTransitionError(

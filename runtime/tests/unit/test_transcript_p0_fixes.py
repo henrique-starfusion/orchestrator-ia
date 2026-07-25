@@ -224,7 +224,8 @@ def test_timeout_without_output_rotates_and_stops(project):
 # ------------------------------------------------------------- lock / cancel
 
 
-def test_blocked_by_lock_is_visible_in_task_error(project, monkeypatch):
+def test_lock_busy_enqueues_as_queued(project, monkeypatch):
+    """0.4.19: lock ocupado → QUEUED (não RECEIVED+blocked_by_lock mudo)."""
     config = load_config(project, fake_agents=True)
     service = TaskService(config, verbose=False)
     task = service.create_task("hello lock", max_iterations=1)
@@ -235,11 +236,11 @@ def test_blocked_by_lock_is_visible_in_task_error(project, monkeypatch):
     monkeypatch.setattr(service.lock, "acquire", _boom)
     asyncio.run(service.run_task(task.id))
     refreshed = service.get(task.id)
-    assert refreshed.status == TaskState.RECEIVED
-    assert (refreshed.error or "").startswith("blocked_by_lock")
+    assert refreshed.status == TaskState.QUEUED
+    assert (refreshed.error or "").startswith("queued_behind:")
 
 
-def test_blocked_by_lock_error_cleared_on_successful_run(project, monkeypatch):
+def test_queue_error_cleared_on_successful_run(project, monkeypatch):
     config = load_config(project, fake_agents=True)
     service = TaskService(config, verbose=False)
     for name in ("claude", "codex", "opencode"):
@@ -247,11 +248,11 @@ def test_blocked_by_lock_error_cleared_on_successful_run(project, monkeypatch):
     task = service.create_task(
         "Crie um modulo Python com funcao soma, testes e documentacao"
     )
-    task.error = "blocked_by_lock: fake anterior"
+    task.error = "queued_behind:abc123|pos=1"
     service.repo.save(task)
     done = asyncio.run(service.run_task(task.id))
     assert done.status == TaskState.COMPLETED
-    assert not (done.error or "").startswith("blocked_by_lock")
+    assert not (done.error or "").startswith("queued_behind:")
 
 
 def test_cancel_kills_active_child_processes(project, monkeypatch):

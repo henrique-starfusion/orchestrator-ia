@@ -2,6 +2,95 @@
 
 ## Unreleased
 
+## 0.4.19 - 2026-07-24
+
+Fila FIFO por workspace: se o orquestrador já executa uma task no projeto, novas submissões entram em `QUEUED` e iniciam automaticamente quando a ativa termina/cancela.
+
+### Added
+
+- Estado `TaskState.QUEUED` + transições `RECEIVED↔QUEUED`
+- `TaskRepository.list_queued` / `find_active_execution`
+- `TaskService`: enqueue em busy/lock TimeoutError; `_maybe_start_next` no finally do lock
+- MCP `orchestrator_run` retorna `QUEUED` + `queue_position` + `blocked_by` sem spawnar thread
+- Feature `workspace_task_queue`
+- Migration `0.4.18-to-0.4.19`
+
+### Changed
+
+- `blocked_by_lock` mudo substituído por fila explícita `queued_behind:<id>|pos=N`
+
+## 0.4.18 - 2026-07-24
+
+Corrige hang do Codex no PrintBee: o executor seguia `printbee-patterns` (mínimo 3 subagentes → `collab: Wait` / timeouts 124s) porque a restrição anti-subagente só entrava no prompt se o **MCP pai** tivesse `ORCHESTRATOR_CHILD_AGENT` — e nunca tem (a env só existe no CLI filho).
+
+### Fixed
+
+- `tasks/service.py`: `_child_agent_restriction_block()` **sempre** injetado no executor/validator/planner (antes das skills); texto proíbe spawn/wait/collab e ignora rito de N subagentes
+- `agents/process.py`: fail-fast também em `collab: wait` e `command timed out after 124`
+
+### Added
+
+- Features `child_agent_restriction_always_on`, `codex_collab_wait_failfast`
+- Migration `0.4.17-to-0.4.18`
+
+## 0.4.17 - 2026-07-24
+
+Install/update do orquestrador atualiza automaticamente os CLIs dos agentes **já existentes** no PATH (`claude`, `codex`, `kimi`, `opencode`, `gemini`, …). Opt-out: `-SkipAgentUpdates` / `--skip-agent-updates`.
+
+### Added
+
+- `Update-Agents.ps1`: estratégias nativas (`claude|codex|kimi|gemini update`) + fallback npm/chocolatey/scoop conforme `installation_method`; relatório `.orchestrator/runtime/reports/agent-updates.json`
+- `Orchestrator.Common.ps1`: `Get-AgentChocolateyPackageMap`, `Get-AgentScoopPackageMap`
+- `Install-Orchestrator.ps1`: `-SkipAgentUpdates`; Update-Agents **ON por padrão** em `install` e `update`, seguido de re-`Detect-Agents`
+- CLI: `--skip-agent-updates`
+- Migration `0.4.16-to-0.4.17`
+
+### Changed
+
+- Update de agentes deixa de ser opt-in (`-UpdateAgents`); a flag permanece aceita por compatibilidade
+- `-Force` continua forçando fallback npm/choco/scoop mesmo quando o method detectado difere
+
+## 0.4.16 - 2026-07-24
+
+Fixes de produção baseados na análise ao vivo do PrintBee (2026-07-24): lock reentrante asyncio, classificação falsa como "docs", transição idempotente, TTL de zumbis RECEIVED, restrição de subagentes no prompt child.
+
+### Added
+
+- `execution/locks.py`: `WriteLock` rastreia `_owner_task` (asyncio Task); segunda task ≠ owner → `TimeoutError` imediato (single-flight correto — spinning causaria deadlock no event loop)
+- `planning/analyzer.py`: check "doc" usa `\bdoc` (word-boundary) para não cassar em palavras como "produção"; `docs` com intent de implementação é promovido para `implementation` (mesmo padrão de `complex_analysis`)
+- `tasks/state_machine.py`: `assert_transition` trata same-state como no-op (não levanta `InvalidTransitionError`)
+- `tasks/repository.py`: `transition` retorna task sem salvar/emitir evento quando `current == new_state`
+- `config.py`: campo `stale_received_ttl_hours: int = 6` em `RuntimeLimits`; `load_config` lê de `policies.json`
+- `policies.json` (live + template): `stale_received_ttl_hours: 6`
+- `tasks/service.py`: `_cancel_stale_received()` — auto-cancela tasks RECEIVED com idade > TTL; chamado em `create_task`; bloco ORCHESTRATOR_CHILD_AGENT no prompt do executor (P1-E)
+- `diagnostics.py`: features `writelock_asyncio_singleflight`, `produção_not_docs`, `same_state_transition_noop`, `stale_received_ttl_autocancel`, `child_agent_no_subagents_prompt`
+- Testes `runtime/tests/unit/test_0416_fixes.py` (12 casos: lock asyncio single-flight, lock mesmo task reentrant, lock não-async OK, análise "produção" = implementation, impl-vence-docs, same-state no-op, terminal same-state, TTL RECEIVED, TTL respeita limite, child prompt block, no block sem env, config TTL)
+- Migration `0.4.15-to-0.4.16`
+
+### Changed
+
+- `tasks/service.py`: `create_task` chama `_cancel_stale_received()` antes de criar; import `datetime`/`timezone` adicionado
+
+## 0.4.15 - 2026-07-24
+
+Codex Windows sandbox fix: elimina hang de 10–20 min causado por `CreateProcessAsUserW error 740` quando Codex usa `--sandbox workspace-write` no Windows sem elevação. Dois mecanismos: (1) override automático de sandbox para `danger-full-access` quando `os.name == "nt"`; (2) fail-fast no stream — mata o processo após N ocorrências do marcador 740 (padrão 3, configurável em `policies.json`).
+
+### Added
+
+- `agents/process.py`: constante `INFRA_FAIL_MARKERS` (marcadores 740/sandbox importáveis); `CliExecutor.__init__` aceita `infra_fail_fast_count: int = 3`; `run()` detecta marcadores em tempo real no `_reader`, mata o processo após N ocorrências e adiciona `[INFRA-FAIL-FAST] windows sandbox: runner failed` ao stderr (ativa `_validator_infra_failure` em service.py)
+- `agents/base_adapters.py`: `build_command` detecta `os.name == "nt"` e substitui `--sandbox workspace-write` por `--sandbox danger-full-access` no comando Codex; profile JSON mantém `workspace-write` como base documentada
+- `config.py`: campo `agent_infra_fail_fast_count: int = 3` em `RuntimeLimits`; `load_config` lê de `policies.json`
+- `policies.json` (live + template): `agent_infra_fail_fast_count: 3`
+- `agents/profiles/codex.json` (live + template): `notes` documenta override Windows automático
+- `diagnostics.py`: features `codex_infra_failfast` + `codex_sandbox_windows_override`
+- `docs/troubleshooting.md`: nova seção "Codex trava em VALIDATING / processo fica preso por 10–20 min no Windows" com causa, mecanismos de correção e ajuste de sensibilidade
+- Testes `runtime/tests/unit/test_codex_infra_failfast.py` (9 casos: override nt/posix/já-danger/sem-sandbox; fail-fast mata após N/desabilitado/abaixo-do-limiar; config default/policies; service repassa ao executor)
+- Migration `0.4.14-to-0.4.15`
+
+### Changed
+
+- `tasks/service.py`: `TaskService.__init__` repassa `agent_infra_fail_fast_count` ao `CliExecutor`
+
 ## 0.4.14 - 2026-07-24
 
 Learn-then-compact context: ao terminar cada tarefa (COMPLETED/INCOMPLETE/FAILED/CANCELLED após execução), o runtime PRIMEIRO grava um aprendizado durável e SÓ DEPOIS compacta artefatos. O `orchestrator_result`/`orchestrator_status` devolvem um `session_digest` compacto (≤ 1500 chars) para o cliente IDE reter apenas digest + ponteiro de memória e descartar o histórico verboso de polls. A próxima conversa/tarefa recupera esses aprendizados (memória `kind=learning`) e os injeta nos prompts do planner/executor.

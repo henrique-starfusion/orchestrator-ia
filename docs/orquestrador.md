@@ -155,7 +155,8 @@ npx --yes github:henrique-starfusion/orchestrator-ia#latest update
 | `--skip-tool-init` | Detecta tools, não faz `init` / `install --project` |
 | `--skip-global-tools` | Não altera perfil do usuário |
 | `--configure-mcps` | Força rewrite do MCP registry do workspace |
-| `--update-agents` | Tenta atualizar CLIs de agentes (npm) |
+| `--update-agents` | (compat) Update de CLIs — **padrão ON desde 0.4.17** |
+| `--skip-agent-updates` | Não atualiza CLIs de agentes no install/update |
 | `--run-smoke-test` | Probes de agentes |
 
 ### Exit codes
@@ -181,21 +182,23 @@ Ordem real em `scripts/Install-Orchestrator.ps1`:
 6. `Apply-Manifest` — aplica `package/manifest.json`
 7. Sincroniza `.orchestrator/VERSION` se ausente
 8. `Detect-Agents.ps1` — quem está no PATH
-9. `Generate-Adapters.ps1` — CLAUDE.md, rules Cursor, etc.
-10. `Install-Tools.ps1` — OpenWolf + Graphify no **projeto** (init por padrão)
-11. `Install-GlobalTools.ps1` — CLIs/MCPs/plugins/skills no **usuário**
-12. `Configure-Mcps.ps1` — espelho no registry do workspace
-13. `Validate-Orchestrator.ps1` + `Validate-Hooks.ps1`
-14. Opt-ins: `Update-Agents`, `Probe-Agents`
-15. `Write-InstallationReport.ps1` → `runtime/reports/installation-report.md`
-16. Remove lock
+9. `Update-Agents.ps1` — atualiza CLIs já instalados (**padrão ON** desde 0.4.17; opt-out `-SkipAgentUpdates`)
+10. `Detect-Agents.ps1` — re-detect para refrescar versões pós-update
+11. `Generate-Adapters.ps1` — CLAUDE.md, rules Cursor, etc.
+12. `Install-Tools.ps1` — OpenWolf + Graphify no **projeto** (init por padrão)
+13. `Install-GlobalTools.ps1` — CLIs/MCPs/plugins/skills no **usuário**
+14. `Configure-Mcps.ps1` — espelho no registry do workspace
+15. `Validate-Orchestrator.ps1` + `Validate-Hooks.ps1`
+16. Opt-in: `Probe-Agents`
+17. `Write-InstallationReport.ps1` → `runtime/reports/installation-report.md`
+18. Remove lock
 
 ### Pipeline de `update`
 
 1. Preflight
 2. `Sync-PackageSource` — `git pull` se o PackageRoot for clone
 3. `Update-Orchestrator.ps1` — backup se bump/`-Force`; migrations `*.ps1`; template + manifest; VERSION
-4. Redetect agents + adapters
+4. Redetect agents → `Update-Agents.ps1` (padrão ON) → re-detect → adapters
 5. Install-Tools (init por padrão)
 6. Install-GlobalTools + Configure-Mcps
 7. Validate + relatório

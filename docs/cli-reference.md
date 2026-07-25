@@ -318,7 +318,8 @@ A execução é sempre acompanhada: a saída do agente filho é transmitida ao v
 
 | Parâmetro | Descrição |
 |---|---|
-| `-UpdateAgents` | Executa `Update-Agents.ps1` após validação |
+| `-UpdateAgents` | (compat) Etapa de update de CLIs — **padrão ON desde 0.4.17** |
+| `-SkipAgentUpdates` | Pula `Update-Agents.ps1` |
 | `-InstallMissingAgents` | **Não implementado** — aparece como limitação no relatório |
 | `-SkipAgentProbes` | Força skip de probes (padrão implícito sem smoke test) |
 | `-RunSmokeTest` | Ativa probes somente leitura (`--help`) |
@@ -350,17 +351,24 @@ A execução é sempre acompanhada: a saída do agente filho é transmitida ao v
 
 ---
 
-## Comportamento de `-UpdateAgents`
+## Comportamento de Update-Agents (padrão ON desde 0.4.17)
 
-Quando `-UpdateAgents` está presente:
+Em `install` e `update`, o pipeline chama `Update-Agents.ps1` automaticamente (opt-out: `-SkipAgentUpdates` / `--skip-agent-updates`).
 
-1. Para agentes `available`:
-   - `codex` → tenta `codex update`
-   - `claude` → tenta `claude update`
-2. Com **`-Force`** adicional e instalação via npm:
-   - `npm install -g <pacote>` conforme `Get-AgentNpmPackageMap`
+Para cada agente `available` (exceto IDE: cursor/kiro):
 
-Falhas são **avisos** — não abortam o install.
+1. Subcomando nativo quando existir: `claude update`, `codex update`, `kimi update`, `gemini update`
+2. Fallback por `installation_method`:
+   - **npm** → `npm install -g <pacote>` (`Get-AgentNpmPackageMap`)
+   - **chocolatey** → `choco upgrade <id> -y` (ex.: opencode)
+   - **scoop** → `scoop update <app>`
+3. `-Force` também tenta fallbacks npm/choco/scoop mesmo se o method detectado for outro
+
+Depois do update, `Detect-Agents.ps1` roda de novo para refrescar `detected.json`.
+
+Ordem no pipeline (idêntica em `install` e `update`): `Detect-Agents` → `Update-Agents` → `Detect-Agents` (re-detect) → `Generate-Adapters` → … → `Validate-Orchestrator`.
+
+Falhas são **avisos** — não abortam o install. Relatório: `.orchestrator/runtime/reports/agent-updates.json`.
 
 Pacotes npm mapeados: `@anthropic-ai/claude-code`, `@openai/codex`, `@google/gemini-cli`, `opencode-ai`, `@qwen-code/qwen-code`, `@github/copilot`, `aider`, `@continuedev/cli`.
 
