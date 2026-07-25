@@ -48,7 +48,10 @@ param(
     [string]$LegacyAction = 'scan',
     [switch]$Force,
     [switch]$Json,
-    [switch]$PrintOnly
+    [switch]$PrintOnly,
+    # 0.4.20 — propagar update do pacote para projetos registrados
+    [switch]$NoPropagate,
+    [switch]$Discover
 )
 
 Set-StrictMode -Version Latest
@@ -424,6 +427,27 @@ try {
                 ReportData  = $reportData
             } | Out-Null
 
+            # 0.4.20 — registrar workspace; se for o pacote, propagar para registrados
+            if (-not $DryRun) {
+                Register-OrchestratorProject -ProjectPath $projectRoot -Version (Read-WorkspaceVersion -ProjectPath $projectRoot) | Out-Null
+            }
+            $isPackageWs = Test-IsOrchestratorPackageWorkspace -ProjectPath $projectRoot -PackageRoot $packageRootResolved
+            $skipPropagate = $NoPropagate.IsPresent -or ($env:ORCHESTRATOR_PROPAGATING -eq '1')
+            if ($isPackageWs -and -not $skipPropagate) {
+                Write-Host '[ETAPA] Propagar update para projetos registrados'
+                $propArgs = @{
+                    PackageRoot    = $packageRootResolved
+                    PackageVersion = $packageVersion
+                }
+                if ($Discover) { $propArgs.Discover = $true }
+                if ($DryRun) { $propArgs.DryRun = $true }
+                if ($Force) { $propArgs.Force = $true }
+                Invoke-ChildScript -Name 'Propagate-OrchestratorUpdate.ps1' -Arguments $propArgs | Out-Null
+            }
+            elseif ($isPackageWs -and $skipPropagate) {
+                Write-Host '[INFO] Propagacao ignorada (-NoPropagate ou ORCHESTRATOR_PROPAGATING).'
+            }
+
             Write-Host '[OK] Update concluido.'
             Write-Host ("[OK] Workspace: {0} | Pacote: {1}" -f (Read-WorkspaceVersion -ProjectPath $projectRoot), $packageVersion)
             exit 0
@@ -797,6 +821,11 @@ try {
         Mode        = 'install'
         ReportData  = $reportData
     } | Out-Null
+
+    # 0.4.20 — registrar projeto instalado (sem propagar; só no update do pacote)
+    if (-not $DryRun) {
+        Register-OrchestratorProject -ProjectPath $projectRoot -Version (Read-WorkspaceVersion -ProjectPath $projectRoot) | Out-Null
+    }
 
     Write-Host '[OK] Install-Orchestrator concluido.'
     exit 0

@@ -26,6 +26,7 @@ Installer:
   orchestrator route|dispatch        # roteamento / despacho unico
   orchestrator legacy scan|cleanup|status|restore
   (install/update atualizam CLIs de agentes por padrão; opt-out: --skip-agent-updates)
+  (update no pacote propaga para projetos registrados; opt-out: --no-propagate; --discover)
 
 Runtime (persistente):
   orchestrator run --prompt "..."
@@ -227,6 +228,8 @@ function parseArgs(argv) {
       '--non-interactive': '-NonInteractive',
       '--update-agents': '-UpdateAgents',
       '--skip-agent-updates': '-SkipAgentUpdates',
+      '--no-propagate': '-NoPropagate',
+      '--discover': '-Discover',
       '--install-missing-agents': '-InstallMissingAgents',
       '--skip-agent-probes': '-SkipAgentProbes',
       '--skip-tools': '-SkipTools',

@@ -896,6 +896,11 @@ function Sync-PackageSource {
         [switch]$DryRun
     )
 
+    if ($env:ORCHESTRATOR_SKIP_PACKAGE_SYNC -eq '1') {
+        Write-Host '[INFO] Sync do pacote ignorado (ORCHESTRATOR_SKIP_PACKAGE_SYNC=1).'
+        return $false
+    }
+
     $gitDir = Join-Path $PackageRoot '.git'
     if (-not (Test-Path -LiteralPath $gitDir)) {
         Write-Host '[INFO] Pacote sem .git; sync remoto ignorado.'
@@ -944,4 +949,172 @@ function Sync-PackageSource {
     finally {
         $ErrorActionPreference = $previousEap
     }
+}
+
+# ---------------------------------------------------------------------------
+# 0.4.20 — registry de projetos + detecção de workspace do pacote
+# ---------------------------------------------------------------------------
+
+function Get-ProjectRegistryPath {
+    if (-not [string]::IsNullOrWhiteSpace($env:ORCHESTRATOR_PROJECTS_REGISTRY)) {
+        return $env:ORCHESTRATOR_PROJECTS_REGISTRY
+    }
+    $base = Join-Path $env:LOCALAPPDATA 'StarFusion\orchestrator'
+    return (Join-Path $base 'projects.json')
+}
+
+function Read-ProjectRegistry {
+    $path = Get-ProjectRegistryPath
+    if (-not (Test-Path -LiteralPath $path)) {
+        return [pscustomobject]@{
+            projects       = @()
+            discover_roots = @('D:\StarFusion')
+        }
+    }
+    try {
+        $obj = Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json
+        if (-not $obj.PSObject.Properties['projects']) {
+            $obj | Add-Member -NotePropertyName projects -NotePropertyValue @() -Force
+        }
+        if (-not $obj.PSObject.Properties['discover_roots'] -or $null -eq $obj.discover_roots) {
+            $obj | Add-Member -NotePropertyName discover_roots -NotePropertyValue @('D:\StarFusion') -Force
+        }
+        # Normaliza projects para array
+        if ($null -eq $obj.projects) { $obj.projects = @() }
+        elseif ($obj.projects -isnot [System.Array]) { $obj.projects = @($obj.projects) }
+        return $obj
+    }
+    catch {
+        Write-Host ("[AVISO] Registry corrompido ({0}); recriando." -f $path)
+        return [pscustomobject]@{
+            projects       = @()
+            discover_roots = @('D:\StarFusion')
+        }
+    }
+}
+
+function Save-ProjectRegistry {
+    param(
+        [Parameter(Mandatory = $true)]
+        $Registry,
+        [switch]$DryRun
+    )
+    $path = Get-ProjectRegistryPath
+    if ($DryRun.IsPresent) {
+        Write-Host ("[DRY-RUN] Save-ProjectRegistry -> {0}" -f $path)
+        return $path
+    }
+    Ensure-Directory -Path (Split-Path -Parent $path) | Out-Null
+    $json = $Registry | ConvertTo-Json -Depth 6
+    Set-Content -LiteralPath $path -Value $json -Encoding UTF8
+    return $path
+}
+
+function Register-OrchestratorProject {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ProjectPath,
+        [string]$Version,
+        [switch]$DryRun
+    )
+    if (-not (Test-Path -LiteralPath (Join-Path $ProjectPath '.orchestrator'))) {
+        return $null
+    }
+    try {
+        $resolved = (Resolve-Path -LiteralPath $ProjectPath).Path
+    }
+    catch {
+        return $null
+    }
+    if ([string]::IsNullOrWhiteSpace($Version)) {
+        $Version = Read-WorkspaceVersion -ProjectPath $resolved
+    }
+    $reg = Read-ProjectRegistry
+    $list = [System.Collections.Generic.List[object]]::new()
+    foreach ($p in @($reg.projects)) {
+        if ($null -eq $p) { continue }
+        $pp = [string]$p.path
+        if ([string]::IsNullOrWhiteSpace($pp)) { continue }
+        if (-not [string]::Equals($pp, $resolved, [StringComparison]::OrdinalIgnoreCase)) {
+            $list.Add($p) | Out-Null
+        }
+    }
+    $list.Add([pscustomobject]@{
+            path      = $resolved
+            last_seen = (Get-Date).ToUniversalTime().ToString('o')
+            version   = $Version
+        }) | Out-Null
+    $reg.projects = @($list.ToArray())
+    Save-ProjectRegistry -Registry $reg -DryRun:$DryRun | Out-Null
+    Write-Host ("[OK] Projeto registrado: {0} (v={1})" -f $resolved, $Version)
+    return $resolved
+}
+
+function Test-IsOrchestratorPackageWorkspace {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ProjectPath,
+        [Parameter(Mandatory = $true)]
+        [string]$PackageRoot
+    )
+    try {
+        $proj = (Resolve-Path -LiteralPath $ProjectPath).Path.TrimEnd('\', '/')
+        $pkg = (Resolve-Path -LiteralPath $PackageRoot).Path.TrimEnd('\', '/')
+    }
+    catch {
+        return $false
+    }
+    if ([string]::Equals($proj, $pkg, [StringComparison]::OrdinalIgnoreCase)) {
+        return $true
+    }
+    $pj = Join-Path $ProjectPath 'package.json'
+    if (Test-Path -LiteralPath $pj) {
+        try {
+            $j = Get-Content -LiteralPath $pj -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($j.name -eq '@starfusion/orchestrator') { return $true }
+        }
+        catch { }
+    }
+    return $false
+}
+
+function Find-OrchestratorProjects {
+    <#
+    .SYNOPSIS
+        Descobre pastas com .orchestrator/VERSION sob raízes (profundidade limitada).
+    #>
+    param(
+        [string[]]$Roots,
+        [int]$MaxDepth = 3
+    )
+    $found = [System.Collections.Generic.List[string]]::new()
+    foreach ($root in @($Roots)) {
+        if ([string]::IsNullOrWhiteSpace($root) -or -not (Test-Path -LiteralPath $root)) {
+            continue
+        }
+        $versionHere = Join-Path $root '.orchestrator\VERSION'
+        if (Test-Path -LiteralPath $versionHere) {
+            try { $found.Add((Resolve-Path -LiteralPath $root).Path) | Out-Null } catch { }
+        }
+        try {
+            Get-ChildItem -LiteralPath $root -Directory -Force -ErrorAction SilentlyContinue |
+                ForEach-Object {
+                    $v1 = Join-Path $_.FullName '.orchestrator\VERSION'
+                    if (Test-Path -LiteralPath $v1) {
+                        $found.Add($_.FullName) | Out-Null
+                    }
+                    if ($MaxDepth -ge 3) {
+                        Get-ChildItem -LiteralPath $_.FullName -Directory -Force -ErrorAction SilentlyContinue |
+                            ForEach-Object {
+                                $v2 = Join-Path $_.FullName '.orchestrator\VERSION'
+                                if (Test-Path -LiteralPath $v2) {
+                                    $found.Add($_.FullName) | Out-Null
+                                }
+                            }
+                    }
+                }
+        }
+        catch { }
+    }
+    return @($found | Select-Object -Unique)
 }

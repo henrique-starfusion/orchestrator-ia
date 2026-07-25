@@ -61,6 +61,8 @@ function Invoke-TestInstall {
         SkipAgentUpdates = $true
         # Evita mutar ~/.cursor/mcp.json do desenvolvedor durante a suite
         CursorMcpScope   = 'project'
+        # 0.4.20: suite nao propaga update para projetos reais do host
+        NoPropagate      = $true
     }
     foreach ($key in $ExtraParams.Keys) {
         $params[$key] = $ExtraParams[$key]

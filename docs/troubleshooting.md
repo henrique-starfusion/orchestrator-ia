@@ -47,6 +47,20 @@ Cache do one-liner PowerShell:
 
 ---
 
+## 0.4.20 — Atualizar o pacote e esquecer PrintBee/GuardLine
+
+**Sintoma (antes):** `npm install -g` / `orchestrator update` no bootstrap atualizava só aquele workspace; consumidores ficavam em VERSION antiga.
+
+**Comportamento (0.4.20):** update no workspace do pacote registra o path e propaga para todos em `%LOCALAPPDATA%\StarFusion\orchestrator\projects.json` com VERSION atrás. Relatório em `.orchestrator/runtime/reports/propagate-update.json`.
+
+```bash
+orchestrator update --project D:/StarFusion/bootstrap-agents
+orchestrator update --project D:/StarFusion/bootstrap-agents --discover   # acha novos
+orchestrator update --project D:/StarFusion/bootstrap-agents --no-propagate
+```
+
+Override de testes: `ORCHESTRATOR_PROJECTS_REGISTRY`.
+
 ## 0.4.19 — Duas tasks no mesmo projeto ao mesmo tempo
 
 **Sintoma (antes):** segunda `orchestrator_run` competia pelo WriteLock, ficava `RECEIVED` com `blocked_by_lock` ou parecia travada; chat cancelava.

@@ -33,6 +33,8 @@ Installer: Cursor MCP do **projeto** roda por padrão em `init`/`install`/`updat
 orchestrator init
 orchestrator update --skip-cursor              # nao tocar no MCP do Cursor
 orchestrator update --cursor-mcp-scope user    # so global
+orchestrator update --discover                 # (pacote) achar projetos com .orchestrator
+orchestrator update --no-propagate             # (pacote) nao atualizar registrados
 ```
 
 ---

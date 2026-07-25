@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 0.4.20 - 2026-07-25
+
+Propagação automática: ao atualizar o **pacote** (`@starfusion/orchestrator`), os projetos registrados com orquestrador também são atualizados.
+
+### Added
+
+- Registry `%LOCALAPPDATA%\StarFusion\orchestrator\projects.json` (upsert em install/update)
+- `Propagate-OrchestratorUpdate.ps1` — leva FIFO com `-SkipAgentUpdates -NoPropagate`
+- Flags `--no-propagate` / `--discover` (JS → `-NoPropagate` / `-Discover`)
+- `Find-OrchestratorProjects` para descoberta opcional
+- Migration `0.4.19-to-0.4.20` · teste `Test-ProjectPropagate.ps1`
+
+### Behavior
+
+- Propagação **só** quando `ProjectPath` é o workspace do pacote
+- Update num consumidor (PrintBee) **não** propaga
+- Opt-out: `--no-propagate`; discover: `--discover`
+
 ## 0.4.19 - 2026-07-24
 
 Fila FIFO por workspace: se o orquestrador já executa uma task no projeto, novas submissões entram em `QUEUED` e iniciam automaticamente quando a ativa termina/cancela.
