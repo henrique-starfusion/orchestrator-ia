@@ -251,6 +251,78 @@ function Get-ManagedChecksumRecord {
     return $null
 }
 
+function Test-IsJsonObject {
+    param($Value)
+    return ($Value -is [System.Management.Automation.PSCustomObject])
+}
+
+function Merge-JsonObjectAdditive {
+    <#
+    .SYNOPSIS
+      Copia para $Existing apenas as chaves que o template tem e o destino nao.
+      NUNCA sobrescreve valor existente do usuario. Recursivo em objetos.
+    .OUTPUTS
+      [bool] $true se algo foi adicionado.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]$Template,
+        [Parameter(Mandatory = $true)]$Existing
+    )
+
+    $changed = $false
+    foreach ($prop in $Template.PSObject.Properties) {
+        $name = $prop.Name
+        if (-not $Existing.PSObject.Properties[$name]) {
+            $Existing | Add-Member -NotePropertyName $name -NotePropertyValue $prop.Value -Force
+            $changed = $true
+            continue
+        }
+        $templateValue = $prop.Value
+        $existingValue = $Existing.$name
+        if ((Test-IsJsonObject $templateValue) -and (Test-IsJsonObject $existingValue)) {
+            if (Merge-JsonObjectAdditive -Template $templateValue -Existing $existingValue) {
+                $changed = $true
+            }
+        }
+    }
+    return $changed
+}
+
+function Merge-JsonFileAdditive {
+    <#
+    .SYNOPSIS
+      bug-003: mode=merge so pulava o arquivo existente, entao chaves NOVAS do
+      template (ex.: model_flag de opencode/gemini, stale_received_ttl_hours)
+      nunca chegavam a projetos ja instalados. Agora o update injeta as chaves
+      ausentes preservando todos os valores do usuario.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$TemplatePath,
+        [Parameter(Mandatory = $true)][string]$DestinationPath,
+        [switch]$DryRun
+    )
+
+    if ([IO.Path]::GetExtension($DestinationPath).ToLowerInvariant() -ne '.json') {
+        return $false
+    }
+    $template = Get-JsonFileContent -Path $TemplatePath
+    $existing = Get-JsonFileContent -Path $DestinationPath
+    if ($null -eq $template -or $null -eq $existing) { return $false }
+    if (-not (Test-IsJsonObject $template) -or -not (Test-IsJsonObject $existing)) {
+        return $false
+    }
+
+    if (-not (Merge-JsonObjectAdditive -Template $template -Existing $existing)) {
+        return $false
+    }
+    if ($DryRun.IsPresent) {
+        Write-Host ("[DRY-RUN] merge aditivo -> {0}" -f $DestinationPath)
+        return $true
+    }
+    Write-JsonFile -Path $DestinationPath -Object $existing -Depth 12
+    return $true
+}
+
 function Copy-ManagedFile {
     param(
         [Parameter(Mandatory = $true)]
@@ -273,6 +345,10 @@ function Copy-ManagedFile {
         }
         'merge' {
             if ($destExists) {
+                $mergedKeys = Merge-JsonFileAdditive -TemplatePath $SourcePath -DestinationPath $DestinationPath -DryRun:$DryRun
+                if ($mergedKeys) {
+                    return @{ action = 'merged_new_keys'; copied = $false }
+                }
                 return @{ action = 'skipped_merge'; copied = $false }
             }
         }
@@ -344,6 +420,16 @@ function Apply-Manifest {
         }
         elseif ($mode -eq 'merge' -and $destExists) {
             $shouldCopy = $false
+            # bug-003: injeta chaves novas do template sem tocar nos valores do usuario.
+            $mergedKeys = Merge-JsonFileAdditive -TemplatePath $sourcePath -DestinationPath $destPath -DryRun:$DryRun
+            if ($mergedKeys) {
+                $results.Add([pscustomobject]@{
+                        destination = $destRelative
+                        mode        = $mode
+                        action      = 'merged_new_keys'
+                    }) | Out-Null
+                continue
+            }
         }
         elseif ($mode -eq 'managed' -and $destExists -and -not $Force.IsPresent) {
             $shouldCopy = $false
@@ -1012,8 +1098,12 @@ function Save-ProjectRegistry {
 
 function Test-IsOrchestratorTestProject {
     param([Parameter(Mandatory = $true)][string]$ProjectPath)
-    # Fixtures de testes PowerShell — nunca poluir o registry global.
-    # (ORCHESTRATOR_SKIP_PACKAGE_SYNC não entra aqui: testes de propagate usam registry isolado.)
+    # Fixtures de testes PowerShell — nunca poluir o registry GLOBAL.
+    # Quando ORCHESTRATOR_PROJECTS_REGISTRY aponta para um registry isolado
+    # (Test-ProjectPropagate), nao ha registry global a proteger e a fixture
+    # PRECISA ser registrada — sem esta excecao a suite reprovava 'install
+    # registra projeto no registry' e 'propagate atualiza registrado' (bug-032).
+    if (-not [string]::IsNullOrWhiteSpace($env:ORCHESTRATOR_PROJECTS_REGISTRY)) { return $false }
     if ($ProjectPath -match '(?i)[\\/]Temp[\\/]orchestrator-tests-') { return $true }
     if ($ProjectPath -match '(?i)AppData[\\/]Local[\\/]Temp[\\/]orchestrator-tests-') { return $true }
     return $false

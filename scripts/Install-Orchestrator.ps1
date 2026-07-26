@@ -317,6 +317,9 @@ try {
             if ($Force) { $adapterArgs.Force = $true }
             Invoke-ChildScript -Name 'Generate-Adapters.ps1' -Arguments $adapterArgs | Out-Null
 
+            # bug-033: remove hooks que disparam um processo por chamada de ferramenta
+            Invoke-ChildScript -Name 'Repair-AgentHooks.ps1' -Arguments @{ ProjectPath = $projectRoot } | Out-Null
+
             if (-not $SkipTools) {
                 $toolsArgs = @{ ProjectPath = $projectRoot }
                 if ($RefreshTools) { $toolsArgs.RefreshTools = $true }
@@ -643,6 +646,9 @@ try {
     }
     if ($Force) { $adapterArgs.Force = $true }
     Invoke-ChildScript -Name 'Generate-Adapters.ps1' -Arguments $adapterArgs | Out-Null
+
+    # bug-033: remove hooks que disparam um processo por chamada de ferramenta
+    Invoke-ChildScript -Name 'Repair-AgentHooks.ps1' -Arguments @{ ProjectPath = $projectRoot } | Out-Null
 
     if (-not $SkipTools) {
         $toolsArgs = @{ ProjectPath = $projectRoot }

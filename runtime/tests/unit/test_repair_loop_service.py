@@ -126,9 +126,12 @@ def test_lock_timeout_does_not_mark_task_failed(project, monkeypatch):
     monkeypatch.setattr(service.lock, "acquire", _boom)
     result = asyncio.run(service.run_task(task.id))
     refreshed = service.get(task.id)
-    assert refreshed.status == TaskState.RECEIVED
+    # Contrato real: lock ocupado NUNCA vira FAILED. Desde 0.4.19 (fila por
+    # workspace) o destino e QUEUED — service.py:485-492 enfileira em vez de
+    # deixar em RECEIVED, para que a task seja retomada quando o lock liberar.
     assert refreshed.status != TaskState.FAILED
-    assert result.status == TaskState.RECEIVED
+    assert refreshed.status == TaskState.QUEUED
+    assert result.status == TaskState.QUEUED
 
 
 def test_double_run_task_is_noop_while_running(project):

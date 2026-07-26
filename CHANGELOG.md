@@ -2,6 +2,48 @@
 
 ## Unreleased
 
+## 0.4.26 - 2026-07-26
+
+Onboarding vendor-neutro do orquestrador + varredura de bugs abertos.
+
+Auditoria da frota (10 projetos, rodada pelo próprio orquestrador — task
+`ca2c5142e0ae`) mostrou 86 tasks com 9,3% de conclusão e 68,6% de cancelamento.
+Causa raiz do não-uso: as instruções operacionais viviam só em
+`.cursor/rules/multiagent-orchestrator.mdc`, que apenas o Cursor lê.
+
+### Added
+
+- Bloco canônico vendor-neutro `orchestrator:how-to-use` distribuído a
+  `CLAUDE.md`, `AGENTS.md`, `GEMINI.md` e `KIMI.md` de todos os projetos:
+  comandos essenciais, MCP vs CLI, contrato de poll, anti-recursão, tempos
+  normais por estado (para não cancelar por impaciência) e o que não vasculhar
+- `scripts/Repair-AgentHooks.ps1` — remove hooks que disparam um processo por
+  chamada de ferramenta; roda em todo install/update (bug-033)
+- `Merge-JsonFileAdditive` / `Merge-JsonObjectAdditive` — deep-merge aditivo em
+  arquivos `mode=merge` (bug-003)
+- `parse_declared_criteria` — ACs escritos no prompt vencem a inferência (bug-031)
+- Testes: `Test-MergeAdditive.ps1`, `test_0426_declared_acceptance_criteria.py`,
+  `test_0426_cancel_race_no_zombie_event.py`, `test_0426_cancel_stops_loop_e2e.py`
+
+### Fixed
+
+- **bug-003** — `mode=merge` só pulava o arquivo existente: chaves novas do
+  template (ex.: `model_flag`, `stale_received_ttl_hours`) nunca chegavam a
+  projetos instalados. Agora entram preservando os valores do usuário
+- **bug-022/bug-029** — após cancel concorrente, `transition()` emitia
+  `STATE_CHANGED` de uma transição que `save()` já havia neutralizado e o loop
+  seguia (19 eventos zumbis medidos na frota)
+- **bug-028** — `Get-Content -Raw` sem `-Encoding UTF8` no `Generate-Adapters`
+  gravava dupla codificação nos adapters; 30 arquivos da frota reparados
+- **bug-030** — `test_lock_timeout_does_not_mark_task_failed` esperava
+  `RECEIVED`; desde 0.4.19 o destino correto é `QUEUED`
+- **bug-031** — ACs do prompt eram descartados e o plano injetava `tests_pass` /
+  `docs_example`, reprovando auditoria read-only por suíte alheia
+- **bug-032** — `docs/superpowers/` rastreado no HEAD contradizia
+  `Test-NoLegacyArtifacts`; conteúdo movido para `docs/archive/superpowers/`.
+  `Test-ProjectPropagate` falhava porque fixtures de teste eram puladas no
+  registro mesmo com registry isolado por `ORCHESTRATOR_PROJECTS_REGISTRY`
+
 ## 0.4.25 - 2026-07-25
 
 Planner com Claude: usa o melhor modelo e faz fallback automático se a cota esgotar.

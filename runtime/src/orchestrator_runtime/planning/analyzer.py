@@ -166,8 +166,62 @@ def wants_soma_module(prompt: str) -> bool:
     return bool(_SOMA_MODULE_RE.search(cleaned))
 
 
+# ACs declarados pelo usuario no proprio prompt: "AC-001: <descricao>",
+# tolerando marcador de lista e qualificador entre parenteses.
+_DECLARED_AC_RE = re.compile(
+    r"^[ \t]*[-*•]?[ \t]*AC[-_ ]?(\d{1,3})[ \t]*(?:\([^)\n]{0,80}\))?[ \t]*[:–-][ \t]*(\S.*?)[ \t]*$",
+    re.MULTILINE,
+)
+_MAX_DECLARED_AC = 10
+
+
+def parse_declared_criteria(prompt: str) -> list[AcceptanceCriterion]:
+    """ACs escritos no prompt vencem a inferencia por palavra-chave.
+
+    Sem isto, uma auditoria read-only que declara "AC-001: criar relatorio X"
+    era julgada pelos ACs genericos (tests_pass / docs_example em README.md) e
+    reprovava por falha de suite alheia ao trabalho (bug-031/bug-032).
+    """
+    out: list[AcceptanceCriterion] = []
+    seen: set[str] = set()
+    for num, desc in _DECLARED_AC_RE.findall(prompt or ""):
+        text = desc.strip().rstrip(".")
+        if len(text) < 8 or text.lower() in VAGUE:
+            continue
+        cid = f"AC-{int(num):03d}"
+        if cid in seen:
+            continue
+        seen.add(cid)
+        low = text.lower()
+        # Unico kind deterministico seguro de inferir: "suite de testes passa".
+        # Todo o resto vira EVIDENCE (julgamento do validador), que e o
+        # comportamento correto para criterio escrito em linguagem natural.
+        if ("suite" in low or "exit code" in low) and (
+            "test" in low or "teste" in low
+        ):
+            kind = CriterionKind.TESTS_PASS
+        else:
+            kind = CriterionKind.EVIDENCE
+        out.append(
+            AcceptanceCriterion(
+                id=cid,
+                description=text,
+                kind=kind,
+                check=CriterionCheck(kind=kind, params={}),
+                required=True,
+            )
+        )
+        if len(out) >= _MAX_DECLARED_AC:
+            break
+    return out
+
+
 class CriteriaBuilder:
     def build(self, prompt: str, analysis: TaskAnalysis) -> list[AcceptanceCriterion]:
+        declared = parse_declared_criteria(prompt)
+        if declared:
+            return declared
+
         criteria: list[AcceptanceCriterion] = []
         idx = 1
         lowered = prompt.lower()
