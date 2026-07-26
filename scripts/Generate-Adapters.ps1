@@ -60,11 +60,16 @@ foreach ($vendor in $vendorsToCopy) {
             # Qualificador opcional para varias secoes no mesmo alvo: X.<vendor>.section.md -> X.md
             $targetName = $_.Name -replace '(\.[A-Za-z0-9_-]+)?\.section\.md$', '.md'
             $destPath = Join-Path $projectRoot $targetName
-            $sectionContent = Get-Content -LiteralPath $_.FullName -Raw
+            # -Encoding UTF8 obrigatorio na LEITURA: sem isso o PS 5.1 decodifica
+            # os bytes UTF-8 como ANSI (CP1252) e o Add-Content -Encoding UTF8
+            # re-encoda o resultado, gravando dupla codificacao (documentacao ->
+            # documentaAAo). Medido em 2026-07-26: 65 sequencias corrompidas por
+            # arquivo em 9 projetos da frota.
+            $sectionContent = Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
             $marker = ($sectionContent -split "`r?`n")[0].Trim()
 
             if (Test-Path -LiteralPath $destPath) {
-                $existing = Get-Content -LiteralPath $destPath -Raw
+                $existing = Get-Content -LiteralPath $destPath -Raw -Encoding UTF8
                 if ($existing.Contains($marker)) {
                     $skipped++
                     return

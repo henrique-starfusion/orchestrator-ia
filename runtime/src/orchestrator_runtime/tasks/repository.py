@@ -265,6 +265,18 @@ class TaskRepository:
         if error:
             task.error = error
         self.save(task)
+        if task.status != new_state:
+            # save() (0.4.24) reverteu para o estado terminal do DB: um cancel
+            # concorrente venceu a corrida entre a releitura (linha ~245) e a
+            # gravação. Sem este guard o evento STATE_CHANGED era emitido para
+            # uma transição que NÃO aconteceu (eventos zumbis do bug-022) e o
+            # loop seguia como se tivesse avançado.
+            from orchestrator_runtime.errors import CancelledError
+
+            raise CancelledError(
+                f"task {task.id} terminou como {task.status.value} durante "
+                f"{previous.value} -> {new_state.value}; transição descartada"
+            )
         self.add_event(
             RuntimeEvent(
                 task_id=task.id,
