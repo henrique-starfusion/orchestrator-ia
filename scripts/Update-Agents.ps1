@@ -15,7 +15,10 @@ param(
     [switch]$Force,
     [switch]$DryRun,
     # Compat: pai sempre passa -UpdateAgents:$true; sozinho sem flag ainda atualiza (0.4.17+)
-    [switch]$UpdateAgents
+    [switch]$UpdateAgents,
+    # Nao baixar/rodar instalador oficial de agentes que nao se auto-atualizam
+    # (kimi nativo no Windows). Com isto, esses agentes so reportam o comando.
+    [switch]$NoNativeInstaller
 )
 
 Set-StrictMode -Version Latest
@@ -37,6 +40,9 @@ $detected = Get-JsonFileContent -Path $detectedPath
 $npmMap = Get-AgentNpmPackageMap
 $chocoMap = Get-AgentChocolateyPackageMap
 $scoopMap = Get-AgentScoopPackageMap
+$nativeInstallerMap = Get-AgentNativeInstallerMap
+$installerCacheDir = Join-Path $orchestratorRoot 'runtime\installers'
+$isWindows = ($env:OS -eq 'Windows_NT')
 $npmCmd = Get-Command npm -ErrorAction SilentlyContinue
 $chocoCmd = Get-Command choco -ErrorAction SilentlyContinue
 $scoopCmd = Get-Command scoop -ErrorAction SilentlyContinue
@@ -64,6 +70,47 @@ function Get-ManualUpdateHint {
     $m = [regex]::Match($Output, '(?im)^\s*To update manually,\s*run:\s*(.+?)\s*$')
     if ($m.Success) { $hint = $m.Groups[1].Value }
     return $hint
+}
+
+# Baixa o instalador oficial (URL curada em Get-AgentNativeInstallerMap, nunca
+# lida da saida do CLI) e executa. Fica em disco para auditoria: o log traz
+# tamanho e SHA256 do que foi rodado.
+function Invoke-NativeInstaller {
+    param(
+        [string]$Name,
+        [hashtable]$Spec,
+        [string]$CacheDir
+    )
+    $url = [string]$Spec.url
+    Write-Host ("[INFO] native-installer:{0}: baixando {1}" -f $Name, $url)
+    if ($DryRun) {
+        Write-Host ("[DRY-RUN] baixar e executar {0}" -f $url)
+        return @{ ok = $true; exit_code = 0; sha256 = $null; path = $null }
+    }
+    Ensure-Directory -Path $CacheDir | Out-Null
+    $target = Join-Path $CacheDir ("{0}-install.ps1" -f $Name)
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri $url -OutFile $target -UseBasicParsing -TimeoutSec 120
+    }
+    catch {
+        Write-Host ("[AVISO] native-installer:{0}: download falhou: {1}" -f $Name, $_.Exception.Message)
+        return @{ ok = $false; exit_code = 1; sha256 = $null; path = $null }
+    }
+    $info = Get-Item -LiteralPath $target
+    $sha = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
+    Write-Host ("[INFO] native-installer:{0}: {1} bytes sha256={2}" -f $Name, $info.Length, $sha)
+    if ($info.Length -le 0) {
+        Write-Host ("[AVISO] native-installer:{0}: instalador vazio; nao executado." -f $Name)
+        return @{ ok = $false; exit_code = 1; sha256 = $sha; path = $target }
+    }
+    $result = Invoke-ExternalCommand -FilePath $target -TimeoutSeconds 600 `
+        -WorkingDirectory $projectRoot -EchoOutput
+    $ok = ($result.exit_code -eq 0)
+    if (-not $ok) {
+        Write-Host ("[AVISO] native-installer:{0} falhou (exit {1}): {2}" -f $Name, $result.exit_code, $result.stderr)
+    }
+    return @{ ok = $ok; exit_code = $result.exit_code; sha256 = $sha; path = $target }
 }
 
 function Invoke-AgentUpdateAttempt {
@@ -153,11 +200,40 @@ foreach ($agent in @($detected.agents)) {
 
     # Instalacao nativa nao se atualiza sozinha E nao deve ser coberta por npm/
     # choco/scoop: o gerenciador instalaria uma copia paralela, e o PATH passaria
-    # a resolver uma versao diferente da que o usuario instalou.
+    # a resolver uma versao diferente da que o usuario instalou. O caminho certo
+    # e o instalador oficial do proprio agente.
     if ($manualHint) {
+        $spec = $null
+        if ($nativeInstallerMap.ContainsKey($name)) { $spec = $nativeInstallerMap[$name] }
+        $osOk = ($null -ne $spec) -and (($spec.os -ne 'windows') -or $isWindows)
+        if ($spec -and $osOk -and -not $NoNativeInstaller.IsPresent) {
+            $install = Invoke-NativeInstaller -Name $name -Spec $spec -CacheDir $installerCacheDir
+            $methodUsed = ("native-installer:{0}" -f $name)
+            $exitCode = $install.exit_code
+            if ($install.ok) {
+                $updated = $true
+                $notes += ('instalador oficial aplicado (sha256={0})' -f $install.sha256)
+                $manualHint = $null
+            }
+            else {
+                $notes += ('instalador oficial falhou exit={0}' -f $install.exit_code)
+            }
+        }
+        elseif ($spec -and -not $osOk) {
+            $notes += 'instalador oficial mapeado para outro SO'
+        }
+        elseif ($NoNativeInstaller.IsPresent) {
+            $notes += 'instalador oficial desabilitado (-NoNativeInstaller)'
+        }
+        else {
+            $notes += 'sem instalador oficial mapeado'
+        }
+    }
+
+    if ($manualHint -or ($methodUsed -like 'native-installer:*')) {
         $results += [pscustomobject]@{
             agent     = $name
-            status    = 'manual_required'
+            status    = $(if ($updated) { 'updated' } else { 'manual_required' })
             method    = $methodUsed
             exit_code = $exitCode
             installation_method = [string]$agent.installation_method

@@ -937,6 +937,18 @@ function Get-AgentNpmPackageMap {
     }
 }
 
+function Get-AgentNativeInstallerMap {
+    # Agentes cuja instalacao NATIVA nao sabe se auto-atualizar: o CLI so imprime
+    # o comando manual. A URL fica curada AQUI de proposito — executar o comando
+    # lido da saida do CLI seria injecao: qualquer texto que ele imprimisse
+    # viraria codigo. O script e baixado para arquivo (auditavel, com hash no
+    # log) e so entao executado.
+    return @{
+        'kimi'      = @{ url = 'https://code.kimi.com/kimi-code/install.ps1'; os = 'windows' }
+        'kimi-code' = @{ url = 'https://code.kimi.com/kimi-code/install.ps1'; os = 'windows' }
+    }
+}
+
 function Get-AgentChocolateyPackageMap {
     # IDs Chocolatey usados no fallback de Update-Agents (0.4.17+).
     return @{

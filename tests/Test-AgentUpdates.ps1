@@ -76,6 +76,29 @@ To update manually, run: irm https://code.kimi.com/kimi-code/install.ps1 | iex
         'anuncio sem comando nao caiu no texto generico: {0}' -f $noCmd
     )
 
+    # Instalador oficial: a URL vem de mapa curado, NUNCA da saida do CLI —
+    # executar texto vindo de stdout seria injecao de comando.
+    . (Join-Path $repoRoot 'scripts\Orchestrator.Common.ps1')
+    $installerMap = Get-AgentNativeInstallerMap
+    Assert-Test -Condition ($installerMap.ContainsKey('kimi')) -Message 'kimi ausente no mapa de instaladores nativos'
+    Assert-Test -Condition ($installerMap['kimi'].url -like 'https://*') -Message 'instalador do kimi nao e HTTPS'
+    Assert-Test -Condition (-not ($srcText -match '(?m)iex\s*\(')) -Message (
+        'Update-Agents nao pode canalizar saida para iex; instalador vai para arquivo e e executado'
+    )
+    Assert-Test -Condition ($srcText -match 'Get-FileHash') -Message (
+        'instalador baixado tem que ter hash registrado no log (auditoria)'
+    )
+
+    # -NoNativeInstaller: reporta o comando e nao baixa nada.
+    $noInstallerCode = Invoke-TestScript -ScriptName 'Update-Agents.ps1' -Arguments @{
+        ProjectPath       = $tempDir
+        DryRun            = [switch]::Present
+        NoNativeInstaller = [switch]::Present
+    }
+    Assert-Test -Condition ($noInstallerCode -eq 0) -Message (
+        'Update-Agents -NoNativeInstaller exited with code {0}' -f $noInstallerCode
+    )
+
     Write-Host ('PASS: {0}' -f $TestName) -ForegroundColor Green
     $exitCode = 0
 }

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Added
+
+- Estrategia `native-installer` no `Update-Agents`: agente cuja instalacao
+  nativa nao se auto-atualiza (kimi no Windows) passa a ser atualizado pelo
+  **instalador oficial do proprio agente**, em vez de so reportar o comando.
+  A URL vem de `Get-AgentNativeInstallerMap` — mapa curado no codigo, nunca o
+  comando lido da saida do CLI: executar texto vindo de stdout seria injecao.
+  O script e baixado para `.orchestrator/runtime/installers/` e so entao
+  executado; tamanho e SHA256 vao para o log. `-NoNativeInstaller` desliga e
+  volta ao comportamento de so reportar.
+  **Implicacao:** com isto, `orchestrator update` baixa e executa um script
+  remoto do fornecedor do agente — mesma classe de `npm install -g` e
+  `choco upgrade`, que a cadeia ja fazia, mas vale saber
+
 ### Fixed
 
 - **bug-042** — `Update-Agents` reportava como **atualizado** um CLI que nao se
