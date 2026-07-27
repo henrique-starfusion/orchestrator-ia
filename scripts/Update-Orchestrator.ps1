@@ -99,6 +99,9 @@ $applyParams = @{
 }
 if ($Force) { $applyParams.Force = $true }
 if ($DryRun) { $applyParams.DryRun = $true }
+# 0.4.28 — update atualiza arquivos do pacote (managed). Sem isto, correcao de
+# conteudo (guard, profiles, skills) so valia em instalacao nova.
+$applyParams.RefreshManaged = $true
 Apply-Manifest @applyParams | Out-Null
 
 if (-not $DryRun) {

@@ -409,6 +409,7 @@ function Apply-Manifest {
         [Parameter(Mandatory = $true)]
         [string]$PackageRoot,
         [switch]$Force,
+        [switch]$RefreshManaged,
         [switch]$DryRun
     )
 
@@ -447,7 +448,13 @@ function Apply-Manifest {
                 continue
             }
         }
-        elseif ($mode -eq 'managed' -and $destExists -and -not $Force.IsPresent) {
+        elseif ($mode -eq 'managed' -and $destExists -and -not $Force.IsPresent `
+                -and -not $RefreshManaged.IsPresent) {
+            # 'managed' = arquivo do PACOTE. Sem RefreshManaged o update so copiava
+            # quando ausente, entao toda correcao de CONTEUDO ficava presa no
+            # template (guard, profiles, skills nunca chegavam aos projetos ja
+            # instalados). O update passa a atualiza-los; user-owned e merge
+            # seguem protegidos.
             $shouldCopy = $false
         }
         elseif (($mode -eq 'generated' -or $mode -eq 'runtime') -and $destExists -and -not $Force.IsPresent) {

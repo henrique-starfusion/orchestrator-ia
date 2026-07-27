@@ -73,6 +73,16 @@ Cancelar e refazer inline desperdiça o trabalho já pago e é a maior causa de
 tarefas perdidas nesta frota. Se cancelar mesmo assim, registre o motivo no
 prompt da próxima task.
 
+### Ao rodar comandos de terminal, mostre o que está acontecendo
+
+Comando longo em segundo plano **sem saída visível** é indistinguível de travado —
+foi o que fez tasks vivas parecerem congeladas nesta frota.
+
+- **Não** encadeie a saída em `| tail`, `| head` ou `> arquivo` num comando longo:
+  o pipe segura tudo até o fim e o painel fica mudo. Deixe transmitir e filtre depois.
+- Reporte o que está rodando e o resultado — silêncio nunca é sucesso.
+- Acompanhe até o fim: um processo em background sem ninguém olhando é trabalho perdido.
+
 ### O que NÃO vasculhar
 
 `.orchestrator/backups/`, `.orchestrator/runtime/results/` e `.orchestrator/data/`
