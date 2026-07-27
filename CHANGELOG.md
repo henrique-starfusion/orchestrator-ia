@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Fixed
+
+- **bug-042** — `Update-Agents` reportava como **atualizado** um CLI que nao se
+  atualizou. O kimi instalado por instalador nativo no Windows nao sabe se
+  auto-atualizar: ele imprime o aviso e sai com **exit 0**. Como a decisao
+  olhava so o exit code, virava `updated`. Quando a checagem de versao falhava
+  por rede, o mesmo agente virava `[AVISO] native:kimi falhou` — dois desfechos
+  errados para o mesmo CLI. Agora o que decide e o que o CLI disse: ao anunciar
+  "auto-update is not supported", o agente entra em `manual_required`, o comando
+  manual que ele mesmo imprime e extraido da saida e repetido no fim do log
+  (`[ACAO] kimi: atualize manualmente -> ...`), e os fallbacks npm/choco/scoop
+  sao pulados — instalariam uma copia paralela a nativa e o PATH passaria a
+  resolver outra versao. Falha transitoria de rede segue como aviso, com
+  fallback intacto
+
 ## 0.4.30 - 2026-07-27
 
 O agente que nunca nascia.

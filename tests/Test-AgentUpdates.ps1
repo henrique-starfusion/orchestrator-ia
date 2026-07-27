@@ -42,6 +42,40 @@ try {
         'verify -SkipAgentUpdates exited with code {0}' -f $skipCode
     )
 
+    # 0.4.31 — CLI que nao sabe se auto-atualizar (kimi instalado nativo no
+    # Windows) reporta isso ele mesmo. Nao pode virar "falhou", e o comando
+    # manual que ele imprime tem que sobreviver ate o relatorio.
+    $updateAgentsSrc = Join-Path $repoRoot 'scripts\Update-Agents.ps1'
+    $srcText = Get-Content -LiteralPath $updateAgentsSrc -Raw -Encoding UTF8
+    $fnStart = $srcText.IndexOf('function Get-ManualUpdateHint')
+    Assert-Test -Condition ($fnStart -ge 0) -Message 'Get-ManualUpdateHint ausente em Update-Agents.ps1'
+    $fnEnd = $srcText.IndexOf("`nfunction Invoke-AgentUpdateAttempt", $fnStart)
+    Invoke-Expression $srcText.Substring($fnStart, $fnEnd - $fnStart)
+
+    $kimiOutput = @'
+A newer version of @moonshot-ai/kimi-code is available (0.29.0 -> 0.29.1).
+Detected install source: native (windows). Auto-update is not supported on this platform.
+To update manually, run: irm https://code.kimi.com/kimi-code/install.ps1 | iex
+'@
+    $hint = Get-ManualUpdateHint -Output $kimiOutput
+    Assert-Test -Condition ($hint -eq 'irm https://code.kimi.com/kimi-code/install.ps1 | iex') -Message (
+        'comando manual do kimi nao extraido: {0}' -f $hint
+    )
+
+    # Falha comum de rede NAO pode virar "manual" — perderia o fallback.
+    $transient = Get-ManualUpdateHint -Output 'error: failed to check for updates: This operation was aborted'
+    Assert-Test -Condition ($null -eq $transient) -Message 'falha transitoria classificada como manual_required'
+
+    # Update normal tambem nao.
+    $okOutput = Get-ManualUpdateHint -Output 'Already up to date.'
+    Assert-Test -Condition ($null -eq $okOutput) -Message 'update bem-sucedido classificado como manual_required'
+
+    # Anuncia sem imprimir comando: ainda e manual, com texto generico.
+    $noCmd = Get-ManualUpdateHint -Output 'Auto-update is not supported on this platform.'
+    Assert-Test -Condition ($noCmd -eq 'consulte a documentacao do CLI') -Message (
+        'anuncio sem comando nao caiu no texto generico: {0}' -f $noCmd
+    )
+
     Write-Host ('PASS: {0}' -f $TestName) -ForegroundColor Green
     $exitCode = 0
 }
