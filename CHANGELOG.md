@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+## 0.4.32 - 2026-07-27
+
+Todo update reconfere os agentes da maquina.
+
+### Changed
+
+- `Probe-Agents` volta a rodar **por padrao** em install/update (opt-out:
+  `-SkipAgentProbes`). Estava desligado por default: o `probe-results.json`
+  desta maquina estava parado em `skipped: true` desde **19/07**, oito dias sem
+  reconferir nada
+- O probe passou a **conferir o profile contra o CLI instalado**, nao so a rodar
+  `--help`. Pede o help do comando que o profile realmente invoca — as flags do
+  codex (`--sandbox`, `--skip-git-repo-check`) so aparecem em
+  `codex exec --help`, e pedir o help de topo gerava falso "flag ausente" — e
+  verifica se cada flag existe. Grava versao do CLI, flags esperadas e ausentes
+  em `probe-results.json`, e imprime `[ACAO]` para cada profile suspeito
+
+### Fixed
+
+- **bug-043** — o profile do kimi invocava o CLI de um jeito que ele recusa.
+  `prompt_flag: null` mandava o prompt como argumento nu e o kimi respondia
+  `unknown command 'Responda apenas: ok'`. Agora usa `-p`, o modo nao-interativo
+  documentado, conferido contra o CLI 0.29.2. O kimi era **fallback em 80
+  planos** da frota — nunca chegou a ser acionado, e teria falhado 100% das
+  vezes. `sandbox_flags` fica vazio de proposito: o CLI recusa `--auto` e
+  `--yolo` junto com `-p`. `model_flag: "-m"` adicionado em `models.json`, que
+  nao tinha nenhum — o modelo resolvido nunca chegava ao kimi
+- `invoke.prompt_stdin: false` no profile do kimi e respeitado pelo adapter:
+  `-p` exige valor, entao o fallback de stdin da 0.4.30 deixaria um `-p` vazio.
+  Prompt grande demais para argv falha com erro explicito em vez de comando
+  invalido
+
 ## 0.4.31 - 2026-07-27
 
 Atualizacao de agente que nao mente.

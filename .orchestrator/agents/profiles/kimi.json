@@ -1,18 +1,24 @@
 {
   "id": "kimi",
   "kind": "cli",
-  "verified": false,
+  "verified": true,
   "invoke": {
     "subcommand": [],
     "prompt_via": "arg",
-    "prompt_flag": null,
+    "prompt_flag": "-p",
+    "prompt_stdin": false,
     "sandbox_flags": []
   },
   "output": {
     "format": "text",
-    "json_flags": []
+    "json_flags": [
+      "--output-format",
+      "stream-json"
+    ]
   },
-  "exit_codes": { "success": 0 },
+  "exit_codes": {
+    "success": 0
+  },
   "timeout_default_s": 2400,
-  "notes": "Best-effort de docs; validar flags reais quando o CLI estiver no PATH e marcar verified=true."
+  "notes": "kimi -p = modo prompt nao-interativo (verificado no CLI 0.29.2). sandbox_flags VAZIO de proposito: o CLI recusa --auto e --yolo junto com -p (\"Cannot combine --prompt with --auto\") — em modo -p ele ja roda sem perguntar. prompt_stdin=false: -p exige valor, entao o prompt NAO pode ir por stdin; prompt grande demais para argv falha com erro explicito em vez de -p vazio. Antes deste ajuste o profile mandava o prompt como argumento nu e o kimi respondia \"unknown command\" — kimi era fallback em 80 planos da frota e teria falhado 100% das vezes se fosse alcancado."
 }

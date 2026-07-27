@@ -749,7 +749,13 @@ try {
         }
     }
 
-    $shouldSkipProbes = $true
+    # Probe roda por padrao em install/update: atualizar o orquestrador (ou os
+    # proprios CLIs) pode mudar as flags que cada agente aceita, e o profile
+    # precisa ser reconferido contra o que esta instalado na maquina. Ficou
+    # desligado por default ate 0.4.31 — probe-results.json da frota estava
+    # parado em skipped=true, e foi assim que o profile do kimi seguiu invocando
+    # o CLI de um jeito que ele recusa. Opt-out explicito: -SkipAgentProbes.
+    $shouldSkipProbes = $false
     if ($RunSmokeTest) {
         $shouldSkipProbes = $false
     }

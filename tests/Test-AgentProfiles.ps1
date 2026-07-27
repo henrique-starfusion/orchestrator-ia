@@ -92,7 +92,22 @@ try {
         Remove-TestProjectDirectory -Path $tempDir
     }
 
-    Write-Host ('PASS: {0}' -f $TestName) -ForegroundColor Green
+        # 0.4.32 — profile tem que declarar COMO invocar o agente. O do kimi dizia
+    # prompt_flag=null e mandava o texto como argumento nu; o CLI respondia
+    # "unknown command". Ele era fallback em 80 planos da frota.
+    $kimiProfile = Get-Content -LiteralPath (Join-Path $repoRoot 'package\template\.orchestrator\agents\profiles\kimi.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    Assert-Test -Condition ($kimiProfile.invoke.prompt_flag -eq '-p') -Message (
+        'kimi.invoke.prompt_flag deve ser -p (modo nao-interativo), veio: {0}' -f $kimiProfile.invoke.prompt_flag
+    )
+    Assert-Test -Condition (@($kimiProfile.invoke.sandbox_flags).Count -eq 0) -Message (
+        'kimi.invoke.sandbox_flags deve ficar vazio: o CLI recusa --auto/--yolo junto com -p'
+    )
+    Assert-Test -Condition ($kimiProfile.invoke.prompt_stdin -eq $false) -Message (
+        'kimi.invoke.prompt_stdin deve ser false: -p exige valor, prompt nao pode ir por stdin'
+    )
+    Assert-Test -Condition ($kimiProfile.verified -eq $true) -Message 'kimi.verified deve ser true apos conferencia contra o CLI'
+
+Write-Host ('PASS: {0}' -f $TestName) -ForegroundColor Green
     $exitCode = 0
 }
 catch {

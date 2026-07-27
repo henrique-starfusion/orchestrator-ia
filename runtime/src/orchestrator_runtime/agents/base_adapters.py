@@ -136,7 +136,12 @@ class ProfileCliAdapter(AgentAdapter):
         stdin_text: str | None = None
         invoke = self.profile.get("invoke") or {}
         prompt_via = str((invoke.get("prompt_via") or "arg")).lower()
-        if prompt_via == "stdin" or _argv_len(command) > ARGV_LIMIT:
+        # Nem todo CLI le o prompt do stdin. `kimi -p <prompt>` EXIGE o valor:
+        # remover o texto deixaria um `-p` vazio e o CLI recusaria o comando.
+        # Nesse caso e melhor estourar no argv com erro explicito (WinError 206
+        # ja se explica) do que montar um comando invalido.
+        stdin_ok = invoke.get("prompt_stdin", True) is not False
+        if stdin_ok and (prompt_via == "stdin" or _argv_len(command) > ARGV_LIMIT):
             command = self.build_command(request, prompt_in_argv=False)
             if status.path and command:
                 command = [status.path, *command[1:]]

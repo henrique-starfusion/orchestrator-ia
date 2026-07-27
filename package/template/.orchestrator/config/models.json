@@ -311,7 +311,8 @@
         "implementation": "balanced",
         "complex_analysis": "max"
       },
-      "notes": "Usar modelo mais novo exposto pelo CLI Kimi; ajustar quando houver tiers oficiais."
+      "notes": "Usar modelo mais novo exposto pelo CLI Kimi; ajustar quando houver tiers oficiais.",
+      "model_flag": "-m"
     }
   },
   "role_model_preferences": {
