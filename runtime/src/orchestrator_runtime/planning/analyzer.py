@@ -83,10 +83,15 @@ class TaskAnalyzer:
         languages = detect_languages(prompt, project_files)
         lowered = prompt.lower()
         task_type = "implementation"
+        # Menção a segurança em QUALQUER lugar do prompt não faz a tarefa ser uma
+        # revisão de segurança: uma implementação de 10k chars que explica "isso
+        # causa falha de seguranca" continua sendo implementação. Exige-se INTENÇÃO
+        # (verbo de revisão ligado ao termo, ou trabalho de segurança nomeado).
+        mentions_security = bool(_SECURITY_MENTION_RE.search(lowered))
         # Ordem: auditoria/análise antes de "doc" (substring em "documentação").
-        if any(w in lowered for w in ("security", "segurança", "seguranca")):
+        if _SECURITY_INTENT_RE.search(lowered):
             task_type = "security_review"
-        elif any(w in lowered for w in ("arquitet", "architecture", "design")):
+        elif _ARCHITECTURE_RE.search(lowered):
             task_type = "architecture"
         elif any(
             w in lowered
@@ -104,7 +109,13 @@ class TaskAnalyzer:
         has_impl_intent = any(w in cleaned for w in _IMPLEMENTATION_INTENT) or re.search(
             r"\bfix(es|ed|ing)?\b", cleaned
         )
-        if task_type in ("complex_analysis", "docs") and has_impl_intent:
+        # Verbo de implementação vence a keyword de classificação — inclusive
+        # para security_review/architecture, que antes eram imunes ao override
+        # e faziam bug fix virar revisão de segurança.
+        if (
+            task_type in ("complex_analysis", "docs", "security_review", "architecture")
+            and has_impl_intent
+        ):
             task_type = "implementation"
 
         complexity = "medium"
@@ -113,8 +124,11 @@ class TaskAnalyzer:
         elif len(prompt) < 80 and task_type == "docs":
             complexity = "low"
 
+        # Risco alto acompanha a MENÇÃO a segurança, não a classificação: um bug
+        # fix que corrige vazamento continua sendo trabalho de risco alto mesmo
+        # classificado como implementation.
         risk = "medium"
-        if task_type == "security_review":
+        if task_type == "security_review" or mentions_security:
             risk = "high"
 
         requirements = extract_requirements(prompt)
@@ -124,7 +138,10 @@ class TaskAnalyzer:
         # landing" é complex_analysis, "corrigir o bug" é implementation).
         loop_id = detect_loop(prompt)
         loop = get_loop(loop_id)
-        if loop is not None and not has_impl_intent:
+        # O loop REFINA o padrão; nunca derruba classificação explícita. Sem esta
+        # guarda, "security review of the checkout flow" virava complex_analysis
+        # só porque "checkout" é palavra-chave do loop de landing.
+        if loop is not None and not has_impl_intent and task_type == "implementation":
             task_type = loop.task_type
 
         return TaskAnalysis(
@@ -163,6 +180,34 @@ _NEGATED_CLAUSE_RE = re.compile(
 
 _AUDIT_TASK_TYPES = frozenset(
     {"complex_analysis", "security_review", "architecture"}
+)
+
+# Qualquer citação a segurança — usada só para elevar o RISCO, nunca para
+# classificar a tarefa.
+_SECURITY_MENTION_RE = re.compile(
+    r"\b(security|seguran[çc]a|vulnerabilidad\w*|vulnerabilit\w*|cve-\d)", re.IGNORECASE
+)
+
+# INTENÇÃO de trabalho de segurança: verbo de revisão ligado ao termo, termo
+# seguido de review/audit, ou trabalho de segurança nomeado.
+_SECURITY_INTENT_RE = re.compile(
+    r"(?:"
+    r"\b(?:revis\w*|audit\w*|auditor\w*|analis\w*|avali\w*|verific\w*|review\w*|assess\w*|"
+    r"scan\w*|threat\s*model\w*)\s+(?:a\s+|as\s+|o\s+|os\s+|de\s+|da\s+|do\s+|the\s+)*"
+    r"(?:security|seguran[çc]a|vulnerabilidad\w*|vulnerabilit\w*)"
+    r"|(?:security|seguran[çc]a)\s+(?:review|audit\w*|assessment|scan\w*)"
+    r"|\b(?:pentest\w*|owasp|hardening|threat\s*model\w*)\b"
+    r")",
+    re.IGNORECASE,
+)
+
+# Arquitetura com fronteira de palavra: 'design' cru casava em 'designer',
+# 'design system' e 'redesign' de qualquer pedido de UI.
+_ARCHITECTURE_RE = re.compile(
+    r"\b(?:arquitet\w*|architecture|architectural|"
+    r"(?:design|desenho)\s+(?:de\s+|da\s+|do\s+|the\s+)?"
+    r"(?:sistema|system|solu[çc][ãa]o|solution|arquitetura))",
+    re.IGNORECASE,
 )
 
 
