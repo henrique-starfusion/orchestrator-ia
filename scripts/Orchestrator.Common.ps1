@@ -476,6 +476,10 @@ function Apply-Manifest {
             Mode            = [string]$mode
         }
         if ($Force.IsPresent) { $copyParams.Force = $true }
+        # Copy-ManagedFile refaz a checagem de 'managed existente' por conta
+        # propria; sem repassar o Force aqui, a decisao do RefreshManaged acima
+        # era descartada na segunda camada e o arquivo continuava sem atualizar.
+        if ($RefreshManaged.IsPresent -and $mode -eq 'managed') { $copyParams.Force = $true }
         if ($DryRun.IsPresent) { $copyParams.DryRun = $true }
         try {
             $copyResult = Copy-ManagedFile @copyParams
