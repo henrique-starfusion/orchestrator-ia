@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.4.33 - 2026-07-27
+
+O update tambem reconfere — nao so o install.
+
+### Fixed
+
+- O branch `update` do instalador **nunca chamava** `Probe-Agents`: so o
+  `install` chamava. A 0.4.32 ligou o probe por padrao, mas isso so valia para
+  quem instalava do zero — nos 9 projetos propagados o `probe-results.json`
+  seguiu congelado na data da instalacao (medido: **21/07**, seis dias e varias
+  versoes atras). Agora o probe roda no update tambem, logo apos o refresh de
+  deteccao, com o mesmo opt-out `-SkipAgentProbes`. `Test-AgentUpdates` apaga o
+  arquivo, roda um update e exige que ele volte com `skipped != true`
+
 ## 0.4.32 - 2026-07-27
 
 Todo update reconfere os agentes da maquina.

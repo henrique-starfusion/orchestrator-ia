@@ -99,6 +99,29 @@ To update manually, run: irm https://code.kimi.com/kimi-code/install.ps1 | iex
         'Update-Agents -NoNativeInstaller exited with code {0}' -f $noInstallerCode
     )
 
+    # 0.4.32 — todo update reconfere os agentes da maquina. O branch update nao
+    # chamava Probe-Agents, entao o probe-results.json dos projetos propagados
+    # ficava congelado na data da INSTALACAO (medido na frota: 21/07, seis dias
+    # atras, enquanto a versao ja tinha avancado varias vezes).
+    $probePath = Join-Path $tempDir '.orchestrator\agents\probe-results.json'
+    if (Test-Path -LiteralPath $probePath) { Remove-Item -LiteralPath $probePath -Force }
+
+    $updCode = Invoke-TestScript -ScriptName 'Install-Orchestrator.ps1' -Arguments @{
+        Command     = 'update'
+        ProjectPath = $tempDir
+        PackageRoot = $repoRoot
+        NoPropagate = [switch]::Present
+        SkipAgentUpdates = [switch]::Present
+    }
+    Assert-Test -Condition ($updCode -eq 0) -Message ('update exited with code {0}' -f $updCode)
+    Assert-Test -Condition (Test-Path -LiteralPath $probePath) -Message (
+        'update nao gerou probe-results.json: agentes nao foram reconferidos'
+    )
+    $probe = Get-Content -LiteralPath $probePath -Raw -Encoding UTF8 | ConvertFrom-Json
+    Assert-Test -Condition ($probe.skipped -ne $true) -Message (
+        'update gravou probe-results com skipped=true; probe deve rodar por padrao'
+    )
+
     Write-Host ('PASS: {0}' -f $TestName) -ForegroundColor Green
     $exitCode = 0
 }

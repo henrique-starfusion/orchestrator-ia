@@ -313,6 +313,25 @@ try {
                 Write-Host '[INFO] Update-Agents ignorado (-SkipAgentUpdates).'
             }
 
+            # 0.4.32: reconferir os agentes a cada update. O branch update nunca
+            # chamava Probe-Agents — so o install chamava — entao o
+            # probe-results.json dos projetos propagados ficava congelado na data
+            # da instalacao. Atualizar o orquestrador (ou os CLIs) pode mudar as
+            # flags que cada agente aceita; o profile tem que ser reconferido
+            # contra o que esta instalado. Opt-out: -SkipAgentProbes.
+            if ($SkipAgentProbes) {
+                Invoke-ChildScript -Name 'Probe-Agents.ps1' -Arguments @{
+                    ProjectPath     = $projectRoot
+                    SkipAgentProbes = $true
+                } | Out-Null
+            }
+            else {
+                Invoke-ChildScript -Name 'Probe-Agents.ps1' -Arguments @{
+                    ProjectPath    = $projectRoot
+                    TimeoutSeconds = 30
+                } | Out-Null
+            }
+
             $adapterArgs = @{ ProjectPath = $projectRoot; PackageRoot = $packageRootResolved }
             if ($Force) { $adapterArgs.Force = $true }
             Invoke-ChildScript -Name 'Generate-Adapters.ps1' -Arguments $adapterArgs | Out-Null
