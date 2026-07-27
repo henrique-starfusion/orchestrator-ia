@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## 0.4.30 - 2026-07-27
+
+O agente que nunca nascia.
+
+### Fixed
+
+- **bug-041** — prompt grande estourava o limite de linha de comando do Windows
+  e o agente NUNCA rodava. `CreateProcess` corta em 32767 chars; o Popen morria
+  com "Linha de comando muito longa" (WinError 206) e o `executor-codex.txt`
+  ficava com 30 bytes — zero arquivo tocado — mas a task seguia para validacao
+  como se tivesse executado e terminava INCOMPLETE com score 0.8. Parecia
+  trabalho ruim do agente; era processo que nunca nasceu. Passou a estourar na
+  0.4.27, quando o prompt do executor passou a carregar skills + rules + loop:
+  prompt de usuario de ~6KB ja bastava. Medido no printbee: 2 tasks, executor E
+  corrector. Agora, quando argv passaria de 30000 chars, o prompt vai por stdin
+  — caminho nativo dos dois CLIs (`codex exec` e `claude -p` leem stdin quando
+  nao recebem o texto). `invoke.prompt_via: "stdin"` forca o modo. WinError 206
+  residual agora retorna erro explicado em vez de 30 bytes crus
+- Testes `test_0429_prompt_via_stdin.py` (6 casos, codex e claude)
+
 ## 0.4.29 - 2026-07-27
 
 O orquestrador sabe quem o chamou — e o sinal de vida finalmente chega em quem
@@ -31,19 +51,6 @@ esta olhando.
   ja na 0.4.28 e uma task VIVA em EXECUTING: zero eventos `agent_progress`.
   A logica saiu de dentro de `_run_agent` para `_register_heartbeat`, que agora
   tem teste
-- **bug-041** — prompt grande estourava o limite de linha de comando do Windows
-  e o agente NUNCA rodava. `CreateProcess` corta em 32767 chars; o Popen morria
-  com "Linha de comando muito longa" (WinError 206) e o `executor-codex.txt`
-  ficava com 30 bytes — zero arquivo tocado — mas a task seguia para validacao
-  como se tivesse executado e terminava INCOMPLETE com score 0.8. Parecia
-  trabalho ruim do agente; era processo que nunca nasceu. Passou a estourar na
-  0.4.27, quando o prompt do executor passou a carregar skills + rules + loop:
-  prompt de usuario de ~6KB ja bastava. Medido no printbee: 2 tasks, executor E
-  corrector. Agora, quando argv passaria de 30000 chars, o prompt vai por stdin
-  — caminho nativo dos dois CLIs (`codex exec` e `claude -p` leem stdin quando
-  nao recebem o texto). `invoke.prompt_via: "stdin"` forca o modo. WinError 206
-  residual agora retorna erro explicado em vez de 30 bytes crus
-- Testes `test_0429_prompt_via_stdin.py` (6 casos, codex e claude)
 
 ## 0.4.28 - 2026-07-27
 

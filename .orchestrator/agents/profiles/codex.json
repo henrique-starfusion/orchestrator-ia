@@ -14,5 +14,5 @@
   },
   "exit_codes": { "success": 0 },
   "timeout_default_s": 2400,
-  "notes": "codex exec = modo nao-interativo; prompt posicional. model_flag -m vem de config/models.json. sandbox_flags usa workspace-write como base documentada; no Windows (os.name==nt) o adapter substitui automaticamente por danger-full-access para evitar CreateProcessAsUserW erro 740 (requer elevação). 0.4.29: prompt vai por stdin automaticamente quando argv passaria de 30000 chars (Windows corta em 32767 — WinError 206); invoke.prompt_via="stdin" forca o modo."
+  "notes": "codex exec = modo nao-interativo; prompt posicional. model_flag -m vem de config/models.json. sandbox_flags usa workspace-write como base documentada; no Windows (os.name==nt) o adapter substitui automaticamente por danger-full-access para evitar CreateProcessAsUserW erro 740 (requer elevação). 0.4.29: prompt vai por stdin automaticamente quando argv passaria de 30000 chars (Windows corta em 32767 — WinError 206); invoke.prompt_via='stdin' forca o modo."
 }
