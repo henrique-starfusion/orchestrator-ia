@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+## 0.4.29 - 2026-07-27
+
+O orquestrador sabe quem o chamou — e o sinal de vida finalmente chega em quem
+esta olhando.
+
+### Added
+
+- `callers.py`: deteccao da superficie que originou a chamada (`claude-code`,
+  `cursor`, `codex`, `mcp`, `cli`), com override por `ORCHESTRATOR_CALLER`. Cada
+  uma tem contrato diferente: sessao bloqueante fica muda sem eco no console;
+  quem faz polling nao ganha nada com stdout e depende dos eventos
+- Perfil por chamador aplicado em tres pontos: eco do CLI filho, cadencia do
+  heartbeat (20s em sessao bloqueante, 30s em quem faz polling) e escolha de
+  executor — o CLI que ja esta ocupado atendendo o usuario deixa de ser a
+  primeira escolha (preferencia, nao restricao: se for o unico, e usado)
+- Campo `caller` gravado na analise da task, para relatorio e auditoria
+- Testes `test_0429_caller_awareness.py` (11 casos) e
+  `test_0429_heartbeat_persisted.py` (3 casos)
+
+### Fixed
+
+- **bug-040** — `agent_progress` nunca chegava ao banco. A 0.4.28 fez o
+  heartbeat do CLI virar evento, mas emitia so no `EventBus` (stderr + historico
+  em memoria); a persistencia vive em `repo.add_event`. Resultado: o publico que
+  a correcao existia para atender — quem observa por MCP/DB e via EXECUTING
+  parado por 10-30 min — seguia sem ver nada. Medido na frota com GuardLine.BR
+  ja na 0.4.28 e uma task VIVA em EXECUTING: zero eventos `agent_progress`.
+  A logica saiu de dentro de `_run_agent` para `_register_heartbeat`, que agora
+  tem teste
+
 ## 0.4.28 - 2026-07-27
 
 Plano executado ate o fim + progresso visivel.

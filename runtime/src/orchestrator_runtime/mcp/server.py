@@ -8,6 +8,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from orchestrator_runtime.callers import MCP_ENV as _MCP_ENV
+
+# Marca a origem para o runtime: sem console, o evento e o unico canal.
+os.environ.setdefault(_MCP_ENV, "1")
+
 from orchestrator_runtime.mcp.prompts import get_prompt, list_prompts
 from orchestrator_runtime.mcp.resources import OrchestratorMcpResources
 from orchestrator_runtime.mcp.tools import OrchestratorMcpTools

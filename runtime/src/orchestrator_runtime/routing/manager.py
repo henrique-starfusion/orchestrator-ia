@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from orchestrator_runtime.agents import AgentRegistry
+from orchestrator_runtime.callers import caller_profile, detect_caller
 from orchestrator_runtime.config import RuntimeConfig
 from orchestrator_runtime.tasks.models import OrchestrationPlan, TaskAnalysis, TaskRecord
 
@@ -52,8 +53,13 @@ class RulesRouter:
         executor: str | None = None,
         validator: str | None = None,
     ) -> OrchestrationPlan:
+        # 0.4.29 — o CLI que ja esta atendendo o usuario nao deve virar executor
+        # sem necessidade: disputa cota/rate limit do mesmo provedor e concentra
+        # o risco num agente so. Override explicito do usuario sempre vence.
+        busy = caller_profile(detect_caller()).busy_agent
+
         planner_id = self._pick("planner", analysis, planner)
-        executor_id = self._pick("executor", analysis, executor)
+        executor_id = self._pick("executor", analysis, executor, avoid=busy)
         validator_id = self._pick("validator", analysis, validator)
         # Independent validation obrigatória quando a policy exige
         if (
@@ -94,7 +100,14 @@ class RulesRouter:
             },
         )
 
-    def _pick(self, role: str, analysis: TaskAnalysis, preferred: str | None) -> str:
+    def _pick(
+        self,
+        role: str,
+        analysis: TaskAnalysis,
+        preferred: str | None,
+        *,
+        avoid: str | None = None,
+    ) -> str:
         if preferred == "cursor":
             raise ValueError("Cursor nao pode ser selecionado como worker")
         candidates = self.registry.prefer_mvp_order(role, preferred)
@@ -107,6 +120,11 @@ class RulesRouter:
         )
         if preferred and preferred in ranked:
             return preferred
+        # 'avoid' e preferencia, nunca restricao: se for o unico disponivel, usa.
+        if avoid:
+            alternatives = [a for a in ranked if a != avoid]
+            if alternatives:
+                return alternatives[0]
         return ranked[0]
 
     def resolve_model(

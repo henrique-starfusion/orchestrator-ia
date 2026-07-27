@@ -18,6 +18,7 @@ _log = logging.getLogger(__name__)
 from orchestrator_runtime.agents import AgentRegistry
 from orchestrator_runtime.agents.base import AgentRequest, AgentResult
 from orchestrator_runtime.agents.process import CliExecutor
+from orchestrator_runtime.callers import caller_profile, detect_caller
 from orchestrator_runtime.config import RuntimeConfig, load_config
 from orchestrator_runtime.documentation import DocumentationUpdater
 from orchestrator_runtime.errors import CancelledError, TaskNotFoundError
@@ -68,12 +69,19 @@ class TaskService:
         verbose: bool = True,
     ) -> None:
         self.config = config
-        self.bus = EventBus(verbose=verbose)
+        # 0.4.29 — quem chamou define o tratamento: superficie sem console (MCP,
+        # Cursor) nao ganha nada com eco no stdout e depende dos eventos;
+        # sessao bloqueante (Claude Code, Codex) precisa ver saida ao vivo.
+        self.caller = detect_caller()
+        self.caller_profile = caller_profile(self.caller)
+        echo = verbose and self.caller_profile.echo
+        self.bus = EventBus(verbose=echo)
         self.repo = TaskRepository(str(config.db_path))
         self.executor = CliExecutor(
             config.project_path,
-            echo=verbose,
+            echo=echo,
             infra_fail_fast_count=config.limits.agent_infra_fail_fast_count,
+            heartbeat_s=self.caller_profile.heartbeat_s,
         )
         self.registry = AgentRegistry(config, self.executor)
         self.router = RulesRouter(config, self.registry)
@@ -529,7 +537,9 @@ class TaskService:
     async def _dry_run(self, task: TaskRecord) -> TaskRecord:
         analysis = await self.manager.analyze_task(task.prompt)
         plan_roles = await self.manager.select_strategy(task, analysis)
-        task.analysis = analysis.model_dump()
+        _a = analysis.model_dump()
+        _a["caller"] = self.caller
+        task.analysis = _a
         task.plan = self.planner.plan(task, analysis, plan_roles)
         task.acceptance_criteria = analysis.acceptance_criteria
         self.repo.save(task)
@@ -587,6 +597,8 @@ class TaskService:
         ):
             if key in prior_analysis:
                 merged_analysis[key] = prior_analysis[key]
+        # 0.4.29 — origem da chamada fica registrada na task (relatorio/auditoria)
+        merged_analysis["caller"] = self.caller
         task.analysis = merged_analysis
         self.repo.save(task)
 
@@ -1855,6 +1867,39 @@ class TaskService:
             result.changed_files = list(from_git)
         return result
 
+    def _register_heartbeat(self, task: TaskRecord, *, role: str, agent_id: str) -> None:
+        """Sinal de vida do CLI durante EXECUTING.
+
+        0.4.28 fez o heartbeat virar evento; 0.4.29 fez o evento ser PERSISTIDO
+        (o bus so imprime no console de quem chamou) e a cadencia vir do perfil
+        do chamador — sessao bloqueante fica muda entre um sinal e outro.
+        """
+        if getattr(self, "executor", None) is None:
+            return
+
+        def _emit_heartbeat(elapsed: int, pid: int, _t=task, _r=role, _a=agent_id):
+            evt = RuntimeEvent(
+                task_id=_t.id,
+                type=EventType.AGENT_PROGRESS,
+                role=_r,
+                agent=_a,
+                data={
+                    "elapsed_s": elapsed,
+                    "pid": pid,
+                    "summary": f"{_r}/{_a} rodando ha {elapsed}s",
+                },
+            )
+            try:
+                self.bus.emit(evt)
+                self.repo.add_event(evt)
+            except Exception:  # noqa: BLE001
+                pass  # sinal de vida nunca derruba a execucao
+
+        try:
+            self.executor.on_heartbeat = _emit_heartbeat
+        except Exception:  # noqa: BLE001
+            pass
+
     async def _run_agent(
         self,
         agent_id: str,
@@ -1864,29 +1909,7 @@ class TaskService:
         *,
         timeout_cap_s: int | None = None,
     ):
-        # 0.4.28 — progresso visivel durante EXECUTING: cada heartbeat do CLI
-        # vira evento de task, para quem observa por MCP/DB/outra sessao ver que
-        # a task esta viva em vez de concluir que travou.
-        if getattr(self, "executor", None) is not None:
-            def _emit_heartbeat(elapsed: int, pid: int, _t=task, _r=role, _a=agent_id):
-                self.bus.emit(
-                    RuntimeEvent(
-                        task_id=_t.id,
-                        type=EventType.AGENT_PROGRESS,
-                        role=_r,
-                        agent=_a,
-                        data={
-                            "elapsed_s": elapsed,
-                            "pid": pid,
-                            "summary": f"{_r}/{_a} rodando ha {elapsed}s",
-                        },
-                    )
-                )
-
-            try:
-                self.executor.on_heartbeat = _emit_heartbeat
-            except Exception:  # noqa: BLE001
-                pass
+        self._register_heartbeat(task, role=role, agent_id=agent_id)
 
         adapter = self.registry.get(agent_id)
         if adapter is None or not adapter.detect().available:

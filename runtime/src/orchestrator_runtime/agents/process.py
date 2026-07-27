@@ -86,9 +86,14 @@ class CliExecutor:
         project_path: Path,
         echo: bool = True,
         infra_fail_fast_count: int = 3,
+        heartbeat_s: int = 30,
     ) -> None:
         self.project_path = project_path.resolve()
         self.echo = echo
+        # 0.4.29 — cadencia do sinal de vida, vinda do perfil de quem chamou:
+        # superficie bloqueante fica muda entre um heartbeat e outro, entao bate
+        # mais rapido; quem faz polling le o banco no proprio ritmo.
+        self.heartbeat_s = heartbeat_s
         # 0.4.15: matar processo após este nº de marcadores de infra consecutivos
         # (740 / sandbox Windows). 0 desabilita o fail-fast.
         self.infra_fail_fast_count = infra_fail_fast_count
@@ -106,9 +111,11 @@ class CliExecutor:
         cwd: Path | None = None,
         timeout_s: int = 600,
         env: dict[str, str] | None = None,
-        heartbeat_s: int = 30,
+        heartbeat_s: int | None = None,
         allow_nested: bool = False,
     ) -> ProcessResult:
+        if heartbeat_s is None:
+            heartbeat_s = self.heartbeat_s
         if not allow_nested and os.environ.get("ORCHESTRATOR_CHILD_AGENT"):
             raise RecursionBlockedError(
                 "ORCHESTRATOR_CHILD_AGENT presente: agente filho nao pode delegar."
