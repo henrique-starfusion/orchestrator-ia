@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.4.31 - 2026-07-27
+
+Atualizacao de agente que nao mente.
+
 ### Added
 
 - Estrategia `native-installer` no `Update-Agents`: agente cuja instalacao
