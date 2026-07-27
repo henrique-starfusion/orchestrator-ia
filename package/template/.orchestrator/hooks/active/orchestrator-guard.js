@@ -30,14 +30,21 @@ const SOURCE_EXT = new Set([
 ]);
 
 // Caminhos que nunca contam como "codigo-fonte do produto".
+// Comparados SEMPRE com '/': o Claude Code envia file_path com barra normal no
+// Windows, entao usar path.sep aqui fazia as isencoes falharem em silencio e o
+// guard bloqueava edicao em .wolf/, .claude/ e .cursor/.
 const EXEMPT_PARTS = [
-  `${path.sep}.orchestrator${path.sep}`,
-  `${path.sep}.wolf${path.sep}`,
-  `${path.sep}.claude${path.sep}`,
-  `${path.sep}.cursor${path.sep}`,
-  `${path.sep}node_modules${path.sep}`,
-  `${path.sep}.git${path.sep}`,
+  '/.orchestrator/',
+  '/.wolf/',
+  '/.claude/',
+  '/.cursor/',
+  '/node_modules/',
+  '/.git/',
 ];
+
+function normalize(p) {
+  return String(p).replace(/\\/g, '/').toLowerCase();
+}
 
 function readStdin() {
   try {
@@ -72,8 +79,8 @@ function main() {
   const target = String(input.file_path || input.path || '');
   if (!target) return 0;
 
-  const lowered = target.toLowerCase();
-  if (EXEMPT_PARTS.some((p) => lowered.includes(p.toLowerCase()))) return 0;
+  const lowered = normalize(target);
+  if (EXEMPT_PARTS.some((p) => lowered.includes(p))) return 0;
   if (!SOURCE_EXT.has(path.extname(lowered))) return 0;
 
   // Uma interrupcao por SESSAO: o marcador leva o session_id do payload, senao

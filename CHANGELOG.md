@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+## 0.4.28 - 2026-07-27
+
+Plano executado ate o fim + progresso visivel.
+
+### Added
+
+- Continuacao de plano: quando o executor volta com o plano incompleto, o
+  runtime manda CONTINUAR de onde parou em vez de validar trabalho pela metade.
+  Contrato explicito `PLAN_STATUS: {"complete": bool, "remaining": [...]}` no
+  fim da saida do executor, com fallback por frases de parada ("quer que eu
+  continue?", "parte 1 de 3", "shall I continue"). Orcamento
+  `max_plan_continuations` (default 5) em policies.json; continuacao NAO gasta
+  iteracao de validacao
+- Evento `agent_progress`: cada heartbeat do CLI vira evento de task. Sem isso o
+  heartbeat so existia no console de quem chamou, e quem observava por MCP/DB
+  via a task parada em EXECUTING por 10-30 min e concluia que travou
+- Testes `test_0428_plan_continuation.py` (8 casos, 2 e2e)
+
+### Fixed
+
+- `orchestrator-guard`: isencoes de caminho comparavam com `path.sep`, mas o
+  Claude Code envia `file_path` com barra normal no Windows — as isencoes
+  falhavam em silencio e o guard bloqueava edicao em `.wolf/`, `.claude/` e
+  `.cursor/`
+
 ## 0.4.27 - 2026-07-27
 
 Loops de execução + regras do projeto no prompt do executor.

@@ -94,6 +94,10 @@ class CliExecutor:
         self.infra_fail_fast_count = infra_fail_fast_count
         # PIDs de CLIs em execução — alvo do cancel (kill de filhos).
         self._active_pids: set[int] = set()
+        # 0.4.28 — callback de progresso: sem isto o heartbeat so existia no
+        # console do processo que chamou, entao quem observa por MCP/DB via a
+        # task parada em EXECUTING por 10-30min e concluia que travou.
+        self.on_heartbeat = None
 
     def run(
         self,
@@ -209,11 +213,17 @@ class CliExecutor:
                             self._kill_tree(proc.pid)
 
         def _heartbeat() -> None:
-            if not self.echo or heartbeat_s <= 0:
+            if heartbeat_s <= 0:
                 return
             while not stop_heartbeat.wait(heartbeat_s):
                 elapsed = int(time.monotonic() - started)
-                _live(f"[heartbeat] running {elapsed}s pid={proc.pid}")
+                if self.echo:
+                    _live(f"[heartbeat] running {elapsed}s pid={proc.pid}")
+                if self.on_heartbeat is not None:
+                    try:
+                        self.on_heartbeat(elapsed, proc.pid)
+                    except Exception:  # noqa: BLE001
+                        pass  # progresso nunca derruba a execucao
 
         t_out = threading.Thread(
             target=_reader, args=(proc.stdout, stdout_chunks, "  > "), daemon=True

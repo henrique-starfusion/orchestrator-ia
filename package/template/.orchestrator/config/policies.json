@@ -43,12 +43,21 @@
     "caveman_enabled": true,
     "caveman_default": "full",
     "model_routing": "config/models.json",
-    "forbid_max_tier_for": ["trivial", "classify", "docs", "documentation"],
+    "forbid_max_tier_for": [
+      "trivial",
+      "classify",
+      "docs",
+      "documentation"
+    ],
     "require_task_class_before_call_agent": true,
     "required_agent_tooling": {
       "openwolf": {
         "always_on": true,
-        "files": [".wolf/STATUS.md", ".wolf/cerebrum.md", ".wolf/anatomy.md"],
+        "files": [
+          ".wolf/STATUS.md",
+          ".wolf/cerebrum.md",
+          ".wolf/anatomy.md"
+        ],
         "instruction": "Leia .wolf/STATUS.md ANTES de qualquer ação; consulte .wolf/cerebrum.md (Do-Not-Repeat) antes de gerar código; use .wolf/anatomy.md como índice de arquivos."
       },
       "graphify": {
@@ -67,5 +76,6 @@
         "instruction": "Prosa concisa sem artigos/enchimento. NUNCA abreviar JSON, logs, erros, planos, docs ou código."
       }
     }
-  }
+  },
+  "max_plan_continuations": 5
 }

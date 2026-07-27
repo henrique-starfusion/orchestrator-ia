@@ -13,6 +13,8 @@ from pydantic import BaseModel, Field
 class RuntimeLimits(BaseModel):
     maximum_iterations: int = 3
     same_issue_repeat_limit: int = 2
+    # 0.4.28 — quantas vezes mandar CONTINUAR quando o plano volta incompleto
+    max_plan_continuations: int = 5
     minimum_validation_score: float = 0.9
     minimum_score_improvement: float = 0.03
     maximum_duration_seconds: int = 3600
@@ -218,6 +220,7 @@ def load_config(
     limits = RuntimeLimits(
         maximum_iterations=int(policies.get("maximum_iterations", 3)),
         same_issue_repeat_limit=int(policies.get("same_issue_repeat_limit", 2)),
+        max_plan_continuations=int(policies.get("max_plan_continuations", 5)),
         minimum_validation_score=float(policies.get("minimum_validation_score", 0.9)),
         minimum_score_improvement=float(policies.get("minimum_score_improvement", 0.03)),
         maximum_duration_seconds=int(

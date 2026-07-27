@@ -18,6 +18,8 @@ class EventType(str, Enum):
     AGENT_STARTED = "agent_started"
     AGENT_OUTPUT = "agent_output"
     AGENT_COMPLETED = "agent_completed"
+    # 0.4.28 — heartbeat do CLI: prova de vida durante EXECUTING
+    AGENT_PROGRESS = "agent_progress"
     TEST_STARTED = "test_started"
     TEST_COMPLETED = "test_completed"
     VALIDATION_STARTED = "validation_started"

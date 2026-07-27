@@ -689,6 +689,9 @@ class TaskService:
         last_validation: dict[str, Any] = {}
         last_test_results: list[dict[str, Any]] = []
         issue_counts: dict[str, int] = {}
+        # 0.4.28 — continuação de plano incompleto (não é iteração de validação)
+        continuations = 0
+        continuation_note = ""
 
         while True:
             task = self._ensure_runnable(self.get(task.id))
@@ -750,6 +753,7 @@ class TaskService:
                 memories,
                 test_results=last_test_results,
                 learnings=learnings,
+                continuation_note=continuation_note,
             )
             try:
                 exec_result = await self._run_agent(
@@ -918,6 +922,66 @@ class TaskService:
                 dict.fromkeys(changed_files + exec_result.changed_files)
             )
             self._run_ctx["changed_files"] = changed_files
+
+            # ---------------------------------------------------------------
+            # 0.4.28 — plano incompleto: mandar CONTINUAR em vez de validar.
+            # Agentes de CLI param no meio de planos longos ("concluí 1-3, quer
+            # que eu siga?"). Sem isto o runtime tratava a parada como execução
+            # terminada e ia validar trabalho pela metade.
+            # ---------------------------------------------------------------
+            plan_status = self._parse_plan_status(exec_result.stdout)
+            plan_incomplete = self._is_plan_incomplete(plan_status, exec_result.stdout)
+            if plan_incomplete and not exec_result.timed_out:
+                if continuations < self.config.limits.max_plan_continuations:
+                    continuations += 1
+                    remaining = []
+                    if isinstance(plan_status, dict):
+                        remaining = [str(x) for x in (plan_status.get("remaining") or [])]
+                    self.bus.emit(
+                        RuntimeEvent(
+                            task_id=task.id,
+                            type=EventType.AGENT_COMPLETED,
+                            role=role,
+                            agent=plan_roles.executor,
+                            data={
+                                "status": "incomplete_plan",
+                                "continuation": continuations,
+                                "remaining": remaining[:10],
+                                "summary": (
+                                    f"plano incompleto — continuando "
+                                    f"({continuations}/"
+                                    f"{self.config.limits.max_plan_continuations})"
+                                ),
+                            },
+                        )
+                    )
+                    continuation_note = self._continuation_note(
+                        remaining, changed_files, continuations
+                    )
+                    # Continuar não é nova iteração de validação: devolve o
+                    # contador que o topo do loop vai incrementar de novo.
+                    task.iteration = max(0, task.iteration - 1)
+                    self.repo.save(task)
+                    continue
+                # Orçamento de continuações esgotado: segue para validação com o
+                # que existe, mas registra que o plano não fechou sozinho.
+                self.bus.emit(
+                    RuntimeEvent(
+                        task_id=task.id,
+                        type=EventType.AGENT_COMPLETED,
+                        role=role,
+                        agent=plan_roles.executor,
+                        data={
+                            "status": "continuation_budget_exhausted",
+                            "summary": (
+                                f"plano seguiu incompleto após "
+                                f"{continuations} continuações; validando o que há"
+                            ),
+                        },
+                    )
+                )
+            continuation_note = ""
+
             agent_timed_out = bool(exec_result.timed_out)
             if agent_timed_out and not exec_result.changed_files:
                 # Padrão Codex/Windows (quoting/heredoc PowerShell): timeout sem
@@ -1412,6 +1476,7 @@ class TaskService:
         *,
         test_results: list[dict[str, Any]] | None = None,
         learnings: list[dict] | None = None,
+        continuation_note: str = "",
     ) -> str:
         parts = [
             f"Tarefa: {task.prompt}",
@@ -1421,6 +1486,8 @@ class TaskService:
         loop_block = self._loop_block(task)
         if loop_block:
             parts.append(loop_block)
+        if continuation_note:
+            parts.append(continuation_note)
         parts.extend(
             [
                 "Critérios:",
@@ -1484,6 +1551,14 @@ class TaskService:
             "escopo definido."
         )
         parts.append(
+            "NÃO pare no meio do plano para perguntar se deve continuar: trabalhe "
+            "até cumprir todos os critérios. Ao encerrar, emita como ÚLTIMA linha:\n"
+            'PLAN_STATUS: {"complete": true}\n'
+            'ou, se algo ficou pendente: PLAN_STATUS: {"complete": false, '
+            '"remaining": ["o que falta", "..."]}\n'
+            "O orquestrador usa essa linha para mandar continuar automaticamente."
+        )
+        parts.append(
             "Somente se estiver bloqueado por decisão externa obrigatória, "
             'escreva uma única linha REQUIRES_INPUT: {"question": "...", '
             '"options": ["..."]} e encerre imediatamente sem alterar arquivos.'
@@ -1518,6 +1593,83 @@ class TaskService:
     _REQUIRES_INPUT_RE = re.compile(
         r"^\s*REQUIRES_INPUT\s*:\s*(.+)$", re.MULTILINE
     )
+
+    # Contrato explícito de conclusão emitido pelo executor.
+    _PLAN_STATUS_RE = re.compile(
+        r"^\s*PLAN_STATUS\s*:\s*(\{.*\})\s*$", re.MULTILINE
+    )
+
+    # Fallback: frases com que os CLIs param no meio do plano pedindo permissão.
+    _EARLY_STOP_RE = re.compile(
+        r"(?:"
+        r"quer(?:e|ia)?\s+que\s+eu\s+(?:continue|siga|prossiga)"
+        r"|posso\s+(?:continuar|seguir|prosseguir)"
+        r"|deseja\s+que\s+eu\s+(?:continue|siga|prossiga)"
+        r"|(?:me\s+)?avise\s+se\s+(?:quiser|deseja|posso)"
+        r"|continuo\s*\?"
+        r"|shall\s+i\s+(?:continue|proceed)"
+        r"|(?:do\s+you\s+)?want\s+me\s+to\s+(?:continue|proceed)"
+        r"|let\s+me\s+know\s+if\s+you(?:'d| would)?\s+like\s+me\s+to"
+        r"|(?:next|remaining)\s+steps?\s*:"
+        r"|(?:proximos|próximos)\s+passos\s*:"
+        r"|(?:ainda\s+)?falta(?:m|ndo)?\s+(?:implementar|fazer|concluir|as\s+etapas)"
+        r"|n[aã]o\s+implementei"
+        r"|parte\s+\d+\s+de\s+\d+"
+        r"|etapa\s+\d+\s+de\s+\d+"
+        r")",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def _parse_plan_status(cls, stdout: str | None) -> dict[str, Any] | None:
+        """Lê a linha PLAN_STATUS que o executor deve emitir ao terminar."""
+        match = cls._PLAN_STATUS_RE.search(stdout or "")
+        if not match:
+            return None
+        try:
+            data = json.loads(match.group(1).strip())
+        except json.JSONDecodeError:
+            return None
+        return data if isinstance(data, dict) else None
+
+    @classmethod
+    def _is_plan_incomplete(
+        cls, plan_status: dict[str, Any] | None, stdout: str | None
+    ) -> bool:
+        """Plano ficou pela metade?
+
+        Primeiro o contrato explícito (PLAN_STATUS). Sem ele, cai nas frases de
+        parada que os CLIs usam para pedir permissão de seguir — o comportamento
+        que o usuário relata como "o agente para no meio do plano".
+        """
+        if isinstance(plan_status, dict) and "complete" in plan_status:
+            return not bool(plan_status.get("complete"))
+        if plan_status is not None:
+            return False
+        return bool(cls._EARLY_STOP_RE.search(stdout or ""))
+
+    @staticmethod
+    def _continuation_note(
+        remaining: list[str], changed_files: list[str], attempt: int
+    ) -> str:
+        parts = [
+            f"CONTINUACAO {attempt}: a execucao anterior parou com o plano "
+            "INCOMPLETO. Retome de onde parou; NAO recomece do zero e NAO "
+            "refaca o que ja esta no disco.",
+        ]
+        if changed_files:
+            parts.append(
+                "Ja alterado: " + ", ".join(changed_files[:12])
+                + (" ..." if len(changed_files) > 12 else "")
+            )
+        if remaining:
+            parts.append("Falta concluir:")
+            parts.extend(f"- {item}" for item in remaining[:10])
+        parts.append(
+            "Trabalhe ate cumprir TODOS os criterios de aceitacao. Nao pergunte "
+            "se deve continuar — continue."
+        )
+        return "\n".join(parts)
 
     @classmethod
     def _parse_requires_input(cls, stdout: str | None) -> dict[str, Any] | None:
@@ -1712,6 +1864,30 @@ class TaskService:
         *,
         timeout_cap_s: int | None = None,
     ):
+        # 0.4.28 — progresso visivel durante EXECUTING: cada heartbeat do CLI
+        # vira evento de task, para quem observa por MCP/DB/outra sessao ver que
+        # a task esta viva em vez de concluir que travou.
+        if getattr(self, "executor", None) is not None:
+            def _emit_heartbeat(elapsed: int, pid: int, _t=task, _r=role, _a=agent_id):
+                self.bus.emit(
+                    RuntimeEvent(
+                        task_id=_t.id,
+                        type=EventType.AGENT_PROGRESS,
+                        role=_r,
+                        agent=_a,
+                        data={
+                            "elapsed_s": elapsed,
+                            "pid": pid,
+                            "summary": f"{_r}/{_a} rodando ha {elapsed}s",
+                        },
+                    )
+                )
+
+            try:
+                self.executor.on_heartbeat = _emit_heartbeat
+            except Exception:  # noqa: BLE001
+                pass
+
         adapter = self.registry.get(agent_id)
         if adapter is None or not adapter.detect().available:
             # try fallbacks from plan

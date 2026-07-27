@@ -6,7 +6,7 @@
     "subcommand": [],
     "prompt_via": "arg",
     "prompt_flag": "-p",
-    "sandbox_flags": ["--permission-mode", "acceptEdits"]
+    "sandbox_flags": ["--permission-mode", "bypassPermissions"]
   },
   "output": {
     "format": "text",
@@ -14,5 +14,5 @@
   },
   "exit_codes": { "success": 0 },
   "timeout_default_s": 2400,
-  "notes": "Aliases de modelo (haiku/sonnet/opus/fable) e model_flag vem de config/models.json. -p = modo print nao-interativo."
+  "notes": "Aliases de modelo (haiku/sonnet/opus/fable) e model_flag vem de config/models.json. -p = modo print nao-interativo. 0.4.28: bypassPermissions (era acceptEdits) — acceptEdits auto-aceita EDICAO mas ainda pede aprovacao de Bash; sem terminal o agente spawnado ficava pendurado ate o timeout de 2400s ao tentar rodar teste/git/npm. Escopo segue contido: cwd travado no projeto (assert_within_project) e ORCHESTRATOR_CHILD_AGENT bloqueia delegacao aninhada."
 }
