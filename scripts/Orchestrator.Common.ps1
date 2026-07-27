@@ -312,7 +312,23 @@ function Merge-JsonFileAdditive {
         return $false
     }
 
-    if (-not (Merge-JsonObjectAdditive -Template $template -Existing $existing)) {
+    $merged = Merge-JsonObjectAdditive -Template $template -Existing $existing
+    if (-not $merged) {
+        # Sem chaves novas: ainda assim normaliza arquivo gravado com BOM por
+        # versoes anteriores (quebrava migrations que leem com utf-8 puro).
+        $head = New-Object byte[] 3
+        try {
+            $fs = [System.IO.File]::OpenRead($DestinationPath)
+            try { $read = $fs.Read($head, 0, 3) } finally { $fs.Dispose() }
+        }
+        catch { $read = 0 }
+        $hasBom = ($read -eq 3 -and $head[0] -eq 0xEF -and $head[1] -eq 0xBB -and $head[2] -eq 0xBF)
+        if (-not $hasBom) { return $false }
+        if ($DryRun.IsPresent) {
+            Write-Host ("[DRY-RUN] normalizaria BOM -> {0}" -f $DestinationPath)
+            return $false
+        }
+        Write-JsonFile -Path $DestinationPath -Object $existing -Depth 12
         return $false
     }
     if ($DryRun.IsPresent) {
@@ -887,7 +903,12 @@ function Write-JsonFile {
         Ensure-Directory -Path $parent | Out-Null
     }
 
-    Set-Content -LiteralPath $Path -Value ($Object | ConvertTo-Json -Depth $Depth) -Encoding UTF8
+    # UTF-8 SEM BOM: 'Set-Content -Encoding UTF8' no PS 5.1 grava BOM, e
+    # consumidores Python que leem com encoding="utf-8" quebram no
+    # (migrations do proprio pacote falharam assim em 8 projetos na 0.4.27).
+    $json = ($Object | ConvertTo-Json -Depth $Depth)
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Path, $json, $utf8NoBom)
 }
 
 function Get-AgentNpmPackageMap {

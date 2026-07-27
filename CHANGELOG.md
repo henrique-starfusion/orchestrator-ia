@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+## 0.4.27 - 2026-07-27
+
+Loops de execução + regras do projeto no prompt do executor.
+
+Um prompt termina numa resposta; um loop termina num resultado verificado. O
+pedido agora escolhe um roteiro nomeado com etapas obrigatórias e critérios
+próprios, e o executor passa a receber as regras que o time já escreveu.
+
+### Added
+
+- `planning/loops.py` — 5 loops de execução selecionados pelo pedido:
+  - `/loop-bug` — reproduzir → diagnosticar → teste que falha → corrigir na raiz → validar
+  - `/loop-mvp` — planejar → construir → executar → corrigir → repetir até abrir
+  - `/loop-landing` — auditoria em oferta, copy, clareza, mobile e conversão
+  - `/loop-conteudo` — pesquisar ângulos → variações → criticar → melhorar → escolher
+  - `/loop-saas` — produto → desenvolvimento → marketing → validação → revisão final
+- Seleção automática por palavra-chave; override explícito por prefixo
+  (`/loop-bug ...`) ou `orchestrator run --loop bug`. Sem match, nenhum loop é imposto
+- Etapas do loop injetadas no prompt do executor (`_loop_block`) e no plano
+  (`loop`, `loop_stages`, `loop_done_when`)
+- `rules/discovery.py` — descoberta de regras do projeto por frontmatter
+  (`description`, `globs`, `alwaysApply`) e seleção por relevância ao pedido;
+  injetadas no prompt do executor (`_rules_block`). Antes, as regras existiam em
+  `.cursor/rules/` e nunca chegavam ao agente
+- Catálogo global: `marketingskills` (41.8k stars, MIT) e `anthropics/skills`
+  (164k stars), com mapa `departments` cobrindo os 7 times de skills
+- Testes `test_0427_loops_and_rules.py` (13 casos)
+
+### Changed
+
+- `TaskAnalysis.loop` — campo novo com o loop escolhido
+- Precedência de critérios: ACs declarados no prompt > critérios do loop > heurística
+
 ## 0.4.26 - 2026-07-26
 
 Onboarding vendor-neutro do orquestrador + varredura de bugs abertos.

@@ -81,6 +81,45 @@
       "id": "caveman",
       "source": "juliusbrussee/caveman",
       "notes": "modo caveman — ~75% menos tokens de prosa"
+    },
+    {
+      "id": "marketingskills",
+      "source": "coreyhaines31/marketingskills",
+      "notes": "Times Marketing e Social/Content: seo-audit, programmatic-seo, ai-seo, cro, ad-creative, mktg-psychology, copywriting, estrategia-de-conteudo, conteudo-pilar, fluxos-de-email (41.8k stars, MIT, ativo 2026-07-23)"
+    },
+    {
+      "id": "anthropic-skills",
+      "source": "anthropics/skills",
+      "notes": "Times Design/Operacoes/Legal: canvas-design, algorithmic-art, web-artifacts-builder, brand-guidelines, xlsx, docx, pptx, pdf, mcp-builder, skill-creator (164k stars, oficial Anthropic)"
     }
-  ]
+  ],
+  "departments": {
+    "_comment": "Mapa dos 7 times (42 skills) para o que o orquestrador instala. Cobertura verificada em 2026-07-27.",
+    "desenvolvedores": {
+      "cobertura": "completa",
+      "fontes": ["superpowers", "context7@claude-plugins-official", "anthropic-skills (mcp-builder, skill-creator)", "webapp-testing (superpowers)", "claude-mem@thedotmack"]
+    },
+    "design": {
+      "cobertura": "quase completa",
+      "fontes": ["frontend-design@claude-plugins-official", "anthropic-skills (canvas-design, algorithmic-art, web-artifacts-builder, slack-gif-creator)"],
+      "faltando": "ui-ux-pro-max — instalacao propria via `npx ui-ux-pro-max-cli` (npm 2.11.0), fora do padrao `skills add`; instalar a mao se desejado"
+    },
+    "marketing": { "cobertura": "completa", "fontes": ["marketingskills"] },
+    "social_content": { "cobertura": "completa", "fontes": ["marketingskills"] },
+    "financeiro": {
+      "cobertura": "parcial",
+      "fontes": ["plugin finance@claude-plugins-official (journal-entry, reconciliation, financial-statements, variance-analysis)", "anthropic-skills (xlsx para modelagem)"],
+      "faltando": "dcf-modelo, lbo-modelo, analise-comparativa, precificacao, pitch-deck — sem fonte publica verificada"
+    },
+    "operacoes": {
+      "cobertura": "parcial",
+      "fontes": ["plugin engineering@claude-plugins-official (incident-response, documentation, deploy-checklist)", "anthropic-skills (xlsx)"],
+      "faltando": "sop-builder, business-case, playbook-de-lancamento — sem fonte publica verificada"
+    },
+    "legal": {
+      "cobertura": "boa",
+      "fontes": ["plugin legal@claude-plugins-official (review-contract, triage-nda, compliance-check, legal-risk-assessment)", "anthropic-skills (docx)"],
+      "faltando": "consultas-sql — coberto por MCP de banco quando configurado"
+    }
+  }
 }

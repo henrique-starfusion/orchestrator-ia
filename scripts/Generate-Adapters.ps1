@@ -71,7 +71,25 @@ foreach ($vendor in $vendorsToCopy) {
             if (Test-Path -LiteralPath $destPath) {
                 $existing = Get-Content -LiteralPath $destPath -Raw -Encoding UTF8
                 if ($existing.Contains($marker)) {
-                    $skipped++
+                    # Marcador presente: SINCRONIZA o bloco em vez de pular.
+                    # Sem isto, toda atualizacao do texto (ex.: loops de execucao
+                    # em 0.4.27) ficava presa no template e nunca chegava aos
+                    # projetos ja instalados.
+                    $start = $existing.IndexOf($marker)
+                    $head = $existing.Substring(0, $start)
+                    $rest = $existing.Substring($start + $marker.Length)
+                    $nextRel = $rest.IndexOf('<!-- orchestrator:')
+                    $tail = ''
+                    if ($nextRel -ge 0) { $tail = $rest.Substring($nextRel) }
+                    $rebuilt = $head + $sectionContent.TrimEnd()
+                    if ($tail) { $rebuilt = $rebuilt + "`r`n`r`n" + $tail }
+                    else { $rebuilt = $rebuilt + "`r`n" }
+                    if ($rebuilt -eq $existing) {
+                        $skipped++
+                        return
+                    }
+                    Set-Content -LiteralPath $destPath -Value $rebuilt -Encoding UTF8 -NoNewline
+                    $copied++
                     return
                 }
                 Add-Content -LiteralPath $destPath -Value ("`r`n" + $sectionContent) -Encoding UTF8

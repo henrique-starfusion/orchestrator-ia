@@ -35,7 +35,8 @@ import sys
 from pathlib import Path
 
 path = Path(sys.argv[1])
-data = json.loads(path.read_text(encoding="utf-8"))
+# utf-8-sig: tolera BOM deixado por Set-Content -Encoding UTF8 do PS 5.1.
+data = json.loads(path.read_text(encoding="utf-8-sig"))
 changed = False
 
 clients = data.setdefault("clients", {})

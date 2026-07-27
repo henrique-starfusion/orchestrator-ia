@@ -122,11 +122,25 @@ def run_cmd(
     executor: Optional[str] = typer.Option(None, "--executor"),
     validator: Optional[str] = typer.Option(None, "--validator"),
     manager_provider: Optional[str] = typer.Option(None, "--manager-provider"),
+    loop: Optional[str] = typer.Option(
+        None, "--loop", help="Loop de execucao (bug|mvp|landing|conteudo|saas)"
+    ),
     fake_agents: bool = typer.Option(False, "--fake-agents", help="Adapters falsos (CI)"),
     json_out: bool = typer.Option(False, "--json"),
     dry_run: bool = typer.Option(False, "--dry-run"),
     verbose: bool = typer.Option(True, "--verbose/--quiet"),
 ) -> None:
+    if loop:
+        from orchestrator_runtime.planning.loops import LOOPS
+
+        key = loop.strip().lower().lstrip("/").removeprefix("loop-")
+        if key not in LOOPS:
+            typer.echo(
+                f"[ERRO] loop desconhecido: {loop}. "
+                f"Disponiveis: {', '.join(sorted(LOOPS))}"
+            )
+            raise typer.Exit(2)
+        prompt = f"/loop-{key} {prompt}"
     service = build_service(
         project,
         fake_agents=fake_agents,

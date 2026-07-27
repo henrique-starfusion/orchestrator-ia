@@ -101,4 +101,70 @@ if ($removedTotal -eq 0) {
 else {
     Write-Host ("[OK] Repair-AgentHooks: {0} hook(s) removidos." -f $removedTotal)
 }
+
+# ---------------------------------------------------------------------------
+# 0.4.27 — instala o guard do orquestrador (PreToolUse em Write|Edit|MultiEdit).
+# Sem ponto de interceptacao, "orquestrar e o modo padrao" fica so no texto do
+# CLAUDE.md e o agente edita direto assim mesmo.
+# ---------------------------------------------------------------------------
+$guardRelative = '.orchestrator/hooks/active/orchestrator-guard.js'
+$guardPath = Join-Path $projectRoot ($guardRelative -replace '/', '\')
+if (-not (Test-Path -LiteralPath $guardPath)) {
+    Write-Host '[INFO] Guard do orquestrador ausente no workspace; instalacao do hook ignorada.'
+    exit 0
+}
+
+$guardCommand = 'node "$CLAUDE_PROJECT_DIR/' + $guardRelative + '"'
+$settingsPath = Join-Path $projectRoot '.claude\settings.json'
+
+if (-not (Test-Path -LiteralPath $settingsPath)) {
+    $settings = [pscustomobject]@{ hooks = [pscustomobject]@{} }
+}
+else {
+    try {
+        $settings = Get-Content -LiteralPath $settingsPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    }
+    catch {
+        Write-Host '[AVISO] settings.json invalido; guard nao instalado.'
+        exit 0
+    }
+}
+if ($null -eq $settings) { $settings = [pscustomobject]@{} }
+if (-not $settings.PSObject.Properties['hooks'] -or $null -eq $settings.hooks) {
+    $settings | Add-Member -NotePropertyName hooks -NotePropertyValue ([pscustomobject]@{}) -Force
+}
+if (-not $settings.hooks.PSObject.Properties['PreToolUse'] -or $null -eq $settings.hooks.PreToolUse) {
+    $settings.hooks | Add-Member -NotePropertyName PreToolUse -NotePropertyValue @() -Force
+}
+
+$already = $false
+foreach ($group in @($settings.hooks.PreToolUse)) {
+    if ($null -eq $group -or -not $group.PSObject.Properties['hooks']) { continue }
+    foreach ($hook in @($group.hooks)) {
+        if ($null -ne $hook -and $hook.PSObject.Properties['command'] `
+                -and ([string]$hook.command) -like '*orchestrator-guard.js*') {
+            $already = $true
+        }
+    }
+}
+
+if ($already) {
+    Write-Host '[OK] Guard do orquestrador ja registrado.'
+    exit 0
+}
+
+if ($DryRun) {
+    Write-Host '[DRY-RUN] registraria orchestrator-guard em PreToolUse (Write|Edit|MultiEdit).'
+    exit 0
+}
+
+$newGroup = [pscustomobject]@{
+    matcher = 'Write|Edit|MultiEdit'
+    hooks   = @([pscustomobject]@{ type = 'command'; command = $guardCommand; timeout = 5 })
+}
+$settings.hooks.PreToolUse = @(@($settings.hooks.PreToolUse) + $newGroup)
+
+Ensure-Directory -Path (Split-Path -Parent $settingsPath) | Out-Null
+($settings | ConvertTo-Json -Depth 12) | Set-Content -LiteralPath $settingsPath -Encoding UTF8
+Write-Host '[OK] Guard do orquestrador registrado em .claude/settings.json.'
 exit 0

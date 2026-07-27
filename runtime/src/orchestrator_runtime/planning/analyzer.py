@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable
 
+from orchestrator_runtime.planning.loops import detect_loop, get_loop
 from orchestrator_runtime.tasks.models import (
     AcceptanceCriterion,
     CriterionCheck,
@@ -118,6 +119,14 @@ class TaskAnalyzer:
 
         requirements = extract_requirements(prompt)
 
+        # 0.4.27 — loop de execução por pedido. O loop define o task_type quando
+        # ele é mais específico que a heurística de keyword (ex.: "auditar a
+        # landing" é complex_analysis, "corrigir o bug" é implementation).
+        loop_id = detect_loop(prompt)
+        loop = get_loop(loop_id)
+        if loop is not None and not has_impl_intent:
+            task_type = loop.task_type
+
         return TaskAnalysis(
             task_type=task_type,
             languages=languages,
@@ -126,6 +135,7 @@ class TaskAnalyzer:
             requirements=requirements,
             acceptance_criteria=[],
             summary=prompt.strip()[:240],
+            loop=loop_id,
         )
 
 
@@ -218,9 +228,14 @@ def parse_declared_criteria(prompt: str) -> list[AcceptanceCriterion]:
 
 class CriteriaBuilder:
     def build(self, prompt: str, analysis: TaskAnalysis) -> list[AcceptanceCriterion]:
+        # Precedência: ACs escritos pelo usuário > critérios do loop > heurística.
         declared = parse_declared_criteria(prompt)
         if declared:
             return declared
+
+        loop = get_loop(getattr(analysis, "loop", None))
+        if loop is not None:
+            return loop.to_criteria()
 
         criteria: list[AcceptanceCriterion] = []
         idx = 1
@@ -316,7 +331,17 @@ class Planner:
     def plan(
         self, task: TaskRecord, analysis: TaskAnalysis, roles: OrchestrationPlan
     ) -> dict:
+        loop = get_loop(getattr(analysis, "loop", None))
+        loop_block: dict = {}
+        if loop is not None:
+            loop_block = {
+                "loop": loop.id,
+                "loop_title": loop.title,
+                "loop_stages": list(loop.stages),
+                "loop_done_when": loop.done_when,
+            }
         return {
+            **loop_block,
             "strategy": roles.strategy,
             "steps": [
                 {"role": "planner", "agent": roles.planner, "action": "refine_plan"},

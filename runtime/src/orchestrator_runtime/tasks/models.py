@@ -156,3 +156,5 @@ class TaskAnalysis(BaseModel):
     requirements: list[str] = Field(default_factory=list)
     acceptance_criteria: list[AcceptanceCriterion] = Field(default_factory=list)
     summary: str = ""
+    # 0.4.27 — loop de execução escolhido pelo pedido (planning/loops.py)
+    loop: str | None = None

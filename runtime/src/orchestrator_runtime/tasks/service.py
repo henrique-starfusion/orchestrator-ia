@@ -1322,6 +1322,39 @@ class TaskService:
             + "\n".join(lines)
         )
 
+    def _rules_block(self, task: TaskRecord) -> str:
+        """Regras do projeto aplicáveis ao pedido (0.4.27).
+
+        Sem isto o executor reimplementava padrões que o time já tinha escrito
+        em `.cursor/rules/` — as regras existiam mas nunca chegavam ao agente.
+        """
+        from orchestrator_runtime.rules.discovery import select_rules
+
+        analysis_d = task.analysis if isinstance(task.analysis, dict) else {}
+        languages = list(analysis_d.get("languages") or [])
+        try:
+            rules = select_rules(
+                self.config.project_path, task.prompt, languages=languages
+            )
+        except Exception:  # noqa: BLE001
+            return ""
+        if not rules:
+            return ""
+
+        lines = [
+            "Regras do projeto aplicáveis (autoritativas; LEIA o arquivo antes "
+            "de mexer na área que ele cobre):"
+        ]
+        for rule in rules:
+            try:
+                rel = rule.path.relative_to(self.config.project_path)
+            except ValueError:
+                rel = rule.path
+            marker = " [sempre]" if rule.always_apply else ""
+            desc = f" — {rule.description[:160]}" if rule.description else ""
+            lines.append(f"- {rel.as_posix()}{marker}{desc}")
+        return "\n".join(lines)
+
     @staticmethod
     def _learnings_block(learnings: list[dict] | None) -> str:
         """Render prior-task learnings for prompt injection (0.4.14)."""
@@ -1357,6 +1390,20 @@ class TaskService:
             "Faça escopo/implementação/testes você mesmo, sequencialmente."
         )
 
+    def _loop_block(self, task: TaskRecord) -> str:
+        """Roteiro do loop escolhido — o que faz o agente seguir etapas."""
+        from orchestrator_runtime.planning.loops import get_loop
+
+        loop_id = None
+        analysis = task.analysis if isinstance(task.analysis, dict) else {}
+        loop_id = analysis.get("loop")
+        if not loop_id and isinstance(task.plan, dict):
+            loop_id = task.plan.get("loop")
+        loop = get_loop(loop_id)
+        if loop is None:
+            return ""
+        return loop.briefing()
+
     def _build_executor_prompt(
         self,
         task: TaskRecord,
@@ -1370,9 +1417,16 @@ class TaskService:
             f"Tarefa: {task.prompt}",
             # Antes das skills — senão o modelo compromete-se com 3 subagentes
             self._child_agent_restriction_block(),
-            "Critérios:",
-            *[f"- {c.id}: {c.description}" for c in task.acceptance_criteria],
         ]
+        loop_block = self._loop_block(task)
+        if loop_block:
+            parts.append(loop_block)
+        parts.extend(
+            [
+                "Critérios:",
+                *[f"- {c.id}: {c.description}" for c in task.acceptance_criteria],
+            ]
+        )
         if validation.get("blocking_issues"):
             parts.append("Corrija os issues:")
             for issue in validation["blocking_issues"]:
@@ -1418,6 +1472,9 @@ class TaskService:
         skills = self._skills_block(task)
         if skills:
             parts.append(skills)
+        rules = self._rules_block(task)
+        if rules:
+            parts.append(rules)
         tooling = self._required_tooling_block()
         if tooling:
             parts.append(tooling)

@@ -42,6 +42,26 @@ orchestrator version --json             # versão + code_fingerprint (detecta MC
 Overrides úteis: `--executor <agente> --validator <agente> --max-iterations N`.
 No Windows, **não** use `codex` como validator (trava por sandbox; use `claude`).
 
+### Loops de execução
+
+O pedido escolhe sozinho um roteiro com etapas obrigatórias e critérios próprios
+— um prompt termina numa resposta, um loop termina num resultado verificado:
+
+| Loop | Para quê | Etapas |
+|---|---|---|
+| `/loop-bug` | defeito | reproduzir → diagnosticar → teste que falha → corrigir na raiz → validar |
+| `/loop-mvp` | ideia → app | planejar → construir → executar → corrigir → repetir até abrir |
+| `/loop-landing` | página | oferta, copy, clareza, mobile, conversão → priorizar |
+| `/loop-conteudo` | texto | ângulos → 3 variações → criticar → melhorar → escolher |
+| `/loop-saas` | entrega ampla | produto → dev → marketing → validação → revisão final |
+
+Para forçar um loop, comece o prompt com `/loop-<id>` (ou use `--loop <id>`).
+Sem palavra-chave que case, nenhum loop é imposto.
+
+O executor recebe automaticamente as **skills** e as **regras do projeto**
+(`.cursor/rules/`, `.orchestrator/rules/`) mais relevantes ao pedido — mantenha
+`description` no frontmatter das suas regras para que a seleção funcione.
+
 ### Acompanhe até o fim — não cancele por impaciência
 
 Estados normais e o que esperar: `SELECTING_AGENTS` (~2 min), `EXECUTING`
