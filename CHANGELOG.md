@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+## 0.4.34 - 2026-07-27
+
+O lembrete que falava uma vez e calava.
+
+### Fixed
+
+- **bug-044** — `orchestrator-guard` avisava **uma unica vez por sessao**. Numa
+  sessao de 12h no proprio repo do orquestrador ele disparou as 01:03 e nunca
+  mais: 1 interrupcao para dezenas de arquivos de codigo editados direto depois.
+  A mensagem ainda ensinava o desvio — *"repita a operacao: este aviso so
+  aparece uma vez por sessao"*. Um ponto de interceptacao que fala uma vez e
+  cala e uma formalidade, nao um controle
+- O aviso agora **rearma** a cada `ORCHESTRATOR_GUARD_REARM_MIN` minutos (padrao
+  20) e informa **quantos arquivos** ja foram editados direto na sessao. A
+  repeticao imediata segue passando — o objetivo continua sendo forcar a decisao
+  consciente, nao travar a sessao. `ORCHESTRATOR_GUARD_REARM_MIN=0` volta ao
+  comportamento antigo; `ORCHESTRATOR_GUARD=off` desliga
+- O marcador virou JSON (`{edits,last_at}`) e tolera BOM na leitura: uma
+  ferramenta que reescrevesse o arquivo no Windows quebrava o `JSON.parse` em
+  silencio e a contagem reiniciava
+- `Test-Hooks` cobre bloqueio, silencio dentro da janela, rearme apos a janela,
+  contador e isencao de documentacao. O teste entrega o payload por **redirect**
+  e nao por pipe: o pipe do PowerShell nao chega ao `fs.readFileSync(0)` do node,
+  e o hook lia vazio — daria teste verde para um guard que nunca bloqueou
+
 ## 0.4.33 - 2026-07-27
 
 O update tambem reconfere — nao so o install.
