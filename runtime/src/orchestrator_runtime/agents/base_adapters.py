@@ -19,6 +19,16 @@ from orchestrator_runtime.agents.base import (
 from orchestrator_runtime.agents.process import CliExecutor, which
 from orchestrator_runtime.errors import AgentUnavailableError
 
+# Windows: CreateProcess corta a linha de comando em 32767 chars. A margem cobre
+# aspas e o executavel resolvido por path absoluto. Em POSIX o teto e ~2MB, mas
+# um prompt desse tamanho vai por stdin nos dois — um caminho so.
+ARGV_LIMIT = 30000
+
+
+def _argv_len(argv: list[str]) -> int:
+    # +1 por argumento: o separador que o Windows conta ao montar a linha.
+    return sum(len(a) + 1 for a in argv)
+
 
 class ProfileCliAdapter(AgentAdapter):
     def __init__(
@@ -56,7 +66,9 @@ class ProfileCliAdapter(AgentAdapter):
     def capabilities(self) -> AgentCapabilities:
         return self._capabilities
 
-    def build_command(self, request: AgentRequest) -> list[str]:
+    def build_command(
+        self, request: AgentRequest, *, prompt_in_argv: bool = True
+    ) -> list[str]:
         invoke = self.profile.get("invoke") or {}
         args: list[str] = [self.id]
         for part in invoke.get("subcommand") or []:
@@ -80,9 +92,15 @@ class ProfileCliAdapter(AgentAdapter):
         # JSON null -> None; missing key defaults to -p for safety only if documented
         if "prompt_flag" in invoke:
             prompt_flag = invoke.get("prompt_flag")
+        # prompt_in_argv=False: o prompt vai pelo stdin (ver ARGV_LIMIT abaixo).
+        # `codex exec` e `claude -p` leem stdin quando nao recebem o texto —
+        # e o mesmo caminho que ja imprimia "Reading additional input from
+        # stdin..." quando o stdin era DEVNULL.
         if prompt_flag:
-            args.extend([str(prompt_flag), request.prompt])
-        else:
+            args.append(str(prompt_flag))
+            if prompt_in_argv:
+                args.append(request.prompt)
+        elif prompt_in_argv:
             args.append(request.prompt)
         args.extend(request.extra_args)
         return args
@@ -109,11 +127,26 @@ class ProfileCliAdapter(AgentAdapter):
             timeout = int(request.timeout_s)
         else:
             timeout = int(self.profile.get("timeout_default_s") or 1800)
+        # 0.4.29 (bug-041) — Windows corta a linha de comando em 32767 chars e o
+        # Popen morre com "Linha de comando muito longa" ANTES de o agente rodar:
+        # 30 bytes de saida, zero arquivo tocado, e a task ainda seguia para
+        # validacao como se tivesse executado. Desde a 0.4.27 o prompt carrega
+        # skills + rules + loop, entao passou a estourar com prompt de usuario a
+        # partir de ~6KB. Medido no printbee: 2 tasks, executor E corrector.
+        stdin_text: str | None = None
+        invoke = self.profile.get("invoke") or {}
+        prompt_via = str((invoke.get("prompt_via") or "arg")).lower()
+        if prompt_via == "stdin" or _argv_len(command) > ARGV_LIMIT:
+            command = self.build_command(request, prompt_in_argv=False)
+            if status.path and command:
+                command = [status.path, *command[1:]]
+            stdin_text = request.prompt
         result = self.executor.run(
             command,
             cwd=Path(request.cwd),
             timeout_s=timeout,
             env=request.env,
+            stdin_text=stdin_text,
         )
         success_code = 0
         exit_codes = self.profile.get("exit_codes") or {}

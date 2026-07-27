@@ -113,6 +113,7 @@ class CliExecutor:
         env: dict[str, str] | None = None,
         heartbeat_s: int | None = None,
         allow_nested: bool = False,
+        stdin_text: str | None = None,
     ) -> ProcessResult:
         if heartbeat_s is None:
             heartbeat_s = self.heartbeat_s
@@ -150,11 +151,13 @@ class CliExecutor:
         try:
             # stdin=DEVNULL: CLIs como `codex exec` leem prompt do stdin se
             # herdarem pipe/TTY vazio ("Reading additional input from stdin...").
+            # 0.4.29: com stdin_text esse mesmo caminho vira o canal do prompt,
+            # para argv nao estourar o teto de 32767 chars do Windows (bug-041).
             proc = subprocess.Popen(
                 resolved_command,
                 cwd=str(workdir),
                 env=merged,
-                stdin=subprocess.DEVNULL,
+                stdin=subprocess.PIPE if stdin_text is not None else subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -198,7 +201,38 @@ class CliExecutor:
                     command=resolved_command,
                     cwd=str(workdir),
                 )
+            if winerr == 206:
+                # ERROR_FILENAME_EXCED_RANGE — "Linha de comando muito longa".
+                # 0.4.29: o prompt grande passou a ir por stdin, mas se algo
+                # ainda estourar o teto o erro tem que se explicar: antes vinham
+                # 30 bytes crus e a task seguia para validacao como se tivesse
+                # executado.
+                detail = (
+                    f"[WinError 206] linha de comando excede o limite do Windows "
+                    f"(32767): {sum(len(a) + 1 for a in resolved_command)} chars em "
+                    f"{len(resolved_command)} argumentos. O prompt deveria ter ido "
+                    f"por stdin (invoke.prompt_via). original={exc}"
+                )
+                return ProcessResult(
+                    exit_code=126,
+                    stdout="",
+                    stderr=detail,
+                    timed_out=False,
+                    duration_s=time.monotonic() - started,
+                    command=resolved_command,
+                    cwd=str(workdir),
+                )
             raise
+
+        if stdin_text is not None and proc.stdin is not None:
+            # Escrever e FECHAR: o CLI so comeca a trabalhar ao ver EOF. Falha
+            # aqui (pipe quebrado) nao derruba a execucao — o agente ja morreu
+            # e o exit code conta a historia.
+            try:
+                proc.stdin.write(stdin_text)
+                proc.stdin.close()
+            except OSError:
+                pass
 
         self._active_pids.add(proc.pid)
         stop_heartbeat = threading.Event()
