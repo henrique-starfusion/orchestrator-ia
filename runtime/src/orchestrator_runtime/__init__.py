@@ -1,3 +1,3 @@
 """Runtime persistente do Orquestrador Multiagente StarFusion."""
 
-__version__ = "0.4.39"
+__version__ = "0.4.40"

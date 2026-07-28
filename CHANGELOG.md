@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+## 0.4.40 - 2026-07-28
+
+Auditoria de uso da frota — descoberta de testes cega a stack em subdiretórios.
+
+### Fixed
+
+- **bug-056** — projetos com a stack fora da raiz e sem repos git filhos
+  (printbee: `src/backend` .NET + `src/frontend` Angular) rodavam 100% das
+  tasks com teste `<none>/skipped`: o bug-048 cobriu repos aninhados
+  (GuardLine), mas subdiretórios comuns ficaram de fora. Quando raiz +
+  extra_dirs não acham stack, o `TestRunner.run_all` varre subdiretórios até
+  profundidade 2 (`TestDiscovery.discover_subdirs`), pulando
+  node_modules/bin/obj/ocultos e repos filhos com `.git` (estes seguem via
+  extra_dirs). Comportamento inalterado quando a raiz já tem stack.
+
+### Notes
+
+- Testes: runtime 297 passed / 3 skipped (5 novos em
+  `test_0440_discovery_subdirs.py`).
+- Achados da auditoria fleet (2026-07-28): 4 projetos com DB de tasks
+  (GuardLine.BR, printbee, bootstrap-agents, adzora); os demais 6 só têm o
+  orquestrador instalado, sem uso. GuardLine pós-0.4.38: primeira task
+  COMPLETED 1.0 genuína (2bd9da5de2dd). 0.4.39 (bug-055, graphify
+  anti-janela) estava commitada local sem push — vai neste push.
+
+## 0.4.39 - 2026-07-28
+
 ## 0.4.39 - 2026-07-28
 
 O commit que piscava janela — reparo do graphify vira etapa do update.

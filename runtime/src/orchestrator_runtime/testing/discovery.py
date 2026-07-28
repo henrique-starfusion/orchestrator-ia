@@ -73,6 +73,60 @@ class TestDiscovery:
                 found.append(DiscoveredTest(["make", "test"], "unit", "Makefile"))
         return found
 
+    _SUBDIR_SKIP = frozenset(
+        {
+            "node_modules", "bin", "obj", "dist", "build", "out", "target",
+            "vendor", "packages", ".git", ".hg", ".svn", "__pycache__",
+            ".orchestrator", ".wolf", ".codegraph", "graphify-out",
+        }
+    )
+    _SUBDIR_MARKERS = (
+        "package.json", "pyproject.toml", "setup.py", "requirements.txt",
+        "Cargo.toml", "go.mod", "pom.xml", "build.gradle", "Makefile",
+    )
+
+    def discover_subdirs(self, project_path: Path, max_depth: int = 2) -> list[str]:
+        """Subdiretórios (até ``max_depth``) que têm marcador de stack próprio.
+
+        bug-056 — projetos com a stack fora da raiz (printbee: src/backend,
+        src/frontend) ficavam sem teste nenhum. Varredura limitada: pula
+        dirs ocultos e de ruído (node_modules, bin, obj...), não desce em
+        repo filho com .git (esses entram via extra_dirs do bug-048).
+        """
+        found: list[str] = []
+        root = project_path.resolve()
+
+        def _has_marker(d: Path) -> bool:
+            if any((d / m).is_file() for m in self._SUBDIR_MARKERS):
+                return True
+            if list(d.glob("*.sln")) or list(d.glob("*.csproj")):
+                return True
+            tests_dir = d / "tests"
+            return tests_dir.is_dir() and any(tests_dir.rglob("*.py"))
+
+        def _walk(d: Path, depth: int) -> None:
+            if depth > max_depth:
+                return
+            try:
+                children = sorted(d.iterdir())
+            except OSError:
+                return
+            for child in children:
+                if not child.is_dir():
+                    continue
+                name = child.name
+                if name.startswith(".") or name.lower() in self._SUBDIR_SKIP:
+                    continue
+                if (child / ".git").exists():
+                    continue
+                if _has_marker(child):
+                    found.append(str(child.relative_to(root)).replace("\\", "/"))
+                    continue  # não desce abaixo de um diretório com stack própria
+                _walk(child, depth + 1)
+
+        _walk(project_path, 1)
+        return found
+
 
 def stack_test_commands(project_path: Path) -> list[str]:
     """Comandos de teste da stack detectada — para injetar nos prompts de
@@ -114,6 +168,24 @@ class TestRunner:
                         sub_path,
                     )
                 )
+        if not tests:
+            # bug-056 — raiz sem marcador E sem repos filhos: projeto com a
+            # stack em subdiretórios comuns (printbee: src/backend .NET +
+            # src/frontend Angular). Sem este fallback toda task rodava com
+            # teste "<none>/skipped" — portão de testes cego para sempre.
+            for sub in discovery.discover_subdirs(project_path):
+                sub_path = project_path / sub
+                for t in discovery.discover(sub_path):
+                    tests.append(
+                        (
+                            DiscoveredTest(
+                                command=t.command,
+                                category=t.category,
+                                source=f"{sub}/{t.source}",
+                            ),
+                            sub_path,
+                        )
+                    )
         results = []
         if not tests:
             results.append(
