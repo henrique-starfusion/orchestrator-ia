@@ -45,7 +45,6 @@ from orchestrator_runtime.tasks.state_machine import (
     TaskState,
     can_resume,
 )
-from orchestrator_runtime.textutil import repair_mojibake
 
 TERMINAL_LIKE = TERMINAL_STATES
 from orchestrator_runtime.testing import TestRunner
