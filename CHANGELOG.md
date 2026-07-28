@@ -2,6 +2,44 @@
 
 ## Unreleased
 
+## 0.4.38 - 2026-07-28
+
+Terceira rodada GuardLine.BR (parte 2) — a task que o validador aprovava e o
+sistema reprovava. Todas medidas na task ff270e3ff814.
+
+### Fixed
+
+- **bug-051** — o validador determinístico reprovava critérios EVIDENCE/CUSTOM
+  sem parâmetros (inverificáveis por definição) quando `changed=[]` e testes
+  skipped — caso de task re-executada sobre entrega já existente — e o
+  "prefer stricter" vetava a aprovação 1.0 do validador LLM que leu os
+  arquivos. Agora EVIDENCE/CUSTOM sem evidência objetiva fica
+  `satisfied=None` (indeterminado, marcado `unverifiable`) e nunca bloqueia;
+  kinds verificáveis (workspace_changes, tests_pass, soma_module,
+  docs_example) seguem reprovando sem evidência.
+- **bug-052** — `same_issue_repeat_limit` contava por id posicional
+  (`VAL-001` = 1ª issue da rodada): problemas diferentes com o mesmo id entre
+  iterações ("Critério não atendido: coleção Postman..." → "Teste falhou: go
+  test") encerravam a task por coincidência de posição. Identidade da issue
+  agora é `id + descrição normalizada`.
+- **bug-053** — validator==executor após rotação de infra (executor girou
+  para o agente do validator pós-EXEC-SPAWN, ou validator caiu no agente do
+  executor por quota/ENOTFOUND) virava `VAL-IND` bloqueante em toda iteração
+  — aprovação impossível por infra. Antes de bloquear, o validator gira para
+  um fallback disponível ≠ executor; `VAL-IND` só resta sem alternativa.
+- **bug-054** — `go test ./...` executava testes live (rede + certs mTLS)
+  que falham offline (`TestLive_OAuthMTLS_DES`) e bloqueavam o portão para
+  sempre. Descoberta Go agora roda `go test -short ./...` — `testing.Short()`
+  é o idiom padrão Go para pular live/integração.
+
+### Notes
+
+- Testes: runtime 292 passed / 3 skipped (6 novos em
+  `test_0438_guardline_round3.py`; `test_unknown_criterion_requires_evidence`
+  atualizado para o contrato do bug-051).
+- O bug-050 (0.4.37) segurou o `make test` inexistente como
+  `skipped/tool_missing` nesta mesma task — confirmado em produção.
+
 ## 0.4.37 - 2026-07-28
 
 Terceira rodada GuardLine.BR — ferramenta ausente não é teste falho.

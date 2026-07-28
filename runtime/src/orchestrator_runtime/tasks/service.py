@@ -1076,21 +1076,49 @@ class TaskService:
                 self.config.limits.require_independent_validation
                 and val_agent == plan_roles.executor
             ):
-                det["status"] = "rejected"
-                det["blocking_issues"] = list(det.get("blocking_issues") or []) + [
-                    {
-                        "id": "VAL-IND",
-                        "severity": "blocking",
-                        "description": (
-                            "validator==executor com require_independent_validation"
-                        ),
-                    }
-                ]
-                det["score"] = min(float(det.get("score") or 0.0), 0.5)
-                det["summary"] = (
-                    det.get("summary", "")
-                    + " | blocking: validator==executor (independent validation required)"
-                )
+                # bug-053 — validator==executor após rotação de infra (ex.:
+                # executor girou para o agente do validator após EXEC-SPAWN,
+                # ou o validator caiu no agente do executor por quota) tornava
+                # a aprovação IMPOSSÍVEL: VAL-IND bloqueava toda iteração até o
+                # repeat-limit, mesmo com entrega válida (task ff270e3ff814).
+                # Antes de bloquear, girar o validator para um fallback
+                # disponível ≠ executor; só bloqueia se não houver alternativa.
+                rotated = self._next_validator_fallback(task, plan_roles, val_agent)
+                if rotated:
+                    self.bus.emit(
+                        RuntimeEvent(
+                            task_id=task.id,
+                            type=EventType.AGENT_COMPLETED,
+                            role="validator",
+                            agent=rotated,
+                            data={
+                                "status": "validator_rotated",
+                                "reason": (
+                                    f"validator==executor ({val_agent}); "
+                                    f"validator → {rotated} (independent validation)"
+                                ),
+                            },
+                        )
+                    )
+                    plan_roles.validator = rotated
+                    val_agent = rotated
+                else:
+                    det["status"] = "rejected"
+                    det["blocking_issues"] = list(det.get("blocking_issues") or []) + [
+                        {
+                            "id": "VAL-IND",
+                            "severity": "blocking",
+                            "description": (
+                                "validator==executor com require_independent_validation "
+                                "e nenhum validator alternativo disponível"
+                            ),
+                        }
+                    ]
+                    det["score"] = min(float(det.get("score") or 0.0), 0.5)
+                    det["summary"] = (
+                        det.get("summary", "")
+                        + " | blocking: validator==executor (independent validation required)"
+                    )
             val_prompt = self._build_validator_prompt(task, det, test_results, changed_files)
             val_result = await self._run_agent(val_agent, "validator", val_prompt, task)
             last_validation = self.llm_validator.parse(val_result.stdout, det)
@@ -1189,7 +1217,14 @@ class TaskService:
                 # same_issue_repeat (evita INCOMPLETE falso por entrega "vazia").
                 if agent_timed_out and self._is_empty_delivery_issue(issue):
                     continue
-                issue_counts[iid] = issue_counts.get(iid, 0) + 1
+                # bug-052 — identidade da issue = id + descrição normalizada.
+                # IDs são posicionais (VAL-001 = 1ª issue da rodada): problemas
+                # DIFERENTES caem no mesmo id entre iterações (iter1 "Critério
+                # não atendido: coleção Postman..." → iter3 "Teste falhou: go
+                # test") e o repeat-limit encerrava a task por coincidência de
+                # posição, não por repetição real (task ff270e3ff814).
+                norm = " ".join(str(desc or "").lower().split())[:160]
+                issue_counts[f"{iid}|{norm}"] = issue_counts.get(f"{iid}|{norm}", 0) + 1
 
             task.last_score = float(last_validation.get("score") or 0)
             self._run_ctx["last_validation"] = last_validation

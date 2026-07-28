@@ -49,7 +49,7 @@ def test_ferramenta_ausente_vira_skipped_tool_missing(tmp_path: Path, monkeypatc
 
     results = TestRunner(FakeExecutor()).run_all(root, extra_dirs=["travelex-api"])
     assert len(results) == 2
-    assert {r["command"] for r in results} == {"go test ./...", "make test"}
+    assert {r["command"] for r in results} == {"go test -short ./...", "make test"}
     for r in results:
         assert r["status"] == "skipped"
         assert r["failure_kind"] == "tool_missing"
@@ -76,7 +76,7 @@ def test_ferramenta_presente_executa_normal(tmp_path: Path, monkeypatch: pytest.
             return _FakeResult()
 
     results = TestRunner(FakeExecutor()).run_all(root, extra_dirs=["travelex-api"])
-    assert executed == [["go", "test", "./..."]]
+    assert executed == [["go", "test", "-short", "./..."]]
     assert results[0]["status"] == "passed"
     assert results[0]["failure_kind"] is None
 
@@ -105,8 +105,8 @@ def test_misto_ausente_e_presente_só_roda_o_possível(tmp_path: Path, monkeypat
 
     results = TestRunner(FakeExecutor()).run_all(root, extra_dirs=["travelex-api"])
     by_cmd = {r["command"]: r for r in results}
-    assert by_cmd["go test ./..."]["status"] == "skipped"
-    assert by_cmd["go test ./..."]["failure_kind"] == "tool_missing"
+    assert by_cmd["go test -short ./..."]["status"] == "skipped"
+    assert by_cmd["go test -short ./..."]["failure_kind"] == "tool_missing"
     assert by_cmd["pytest -q"]["status"] == "passed"
     assert executed == [["pytest", "-q"]]
 

@@ -52,7 +52,11 @@ class TestDiscovery:
         if (project_path / "Cargo.toml").is_file():
             found.append(DiscoveredTest(["cargo", "test"], "unit", "Cargo.toml"))
         if (project_path / "go.mod").is_file():
-            found.append(DiscoveredTest(["go", "test", "./..."], "unit", "go.mod"))
+            # bug-054 — `-short` honra testing.Short(): testes live/integração
+            # (rede, certs mTLS) pulam. Sem isso, TestLive_* falhava offline e
+            # o portão bloqueava toda iteração por ambiente (TestLive_OAuthMTLS_DES
+            # na task ff270e3ff814, GuardLine). Testes unitários rodam normal.
+            found.append(DiscoveredTest(["go", "test", "-short", "./..."], "unit", "go.mod"))
         if list(project_path.glob("*.sln")) or list(project_path.glob("*.csproj")):
             found.append(
                 DiscoveredTest(["dotnet", "test"], "unit", "dotnet")

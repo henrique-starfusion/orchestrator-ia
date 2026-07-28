@@ -62,13 +62,18 @@ def test_unknown_criterion_requires_evidence(project):
             )
         ],
     )
+    # bug-051 (0.4.38): EVIDENCE sem verificador determinístico NÃO reprova —
+    # ausência de evidência objetiva não prova falha (artefato pode já existir
+    # de run anterior); fica indeterminado (satisfied=None) e o validador LLM
+    # decide o mérito.
     det = DeterministicValidator().evaluate(
         task,
         changed_files=[],
         test_results=[],
         project_path=project,
     )
-    assert det["status"] == "rejected"
+    assert det["status"] == "approved"
+    assert det["criteria"][0]["satisfied"] is None
     det_ok = DeterministicValidator().evaluate(
         task,
         changed_files=["src/feature.py"],
@@ -76,6 +81,7 @@ def test_unknown_criterion_requires_evidence(project):
         project_path=project,
     )
     assert det_ok["status"] == "approved"
+    assert det_ok["criteria"][0]["satisfied"] is True
 
 
 def test_legacy_criterion_infers_soma_kind(project):

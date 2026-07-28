@@ -35,17 +35,26 @@ class DeterministicValidator:
             ok = self._check_criterion(
                 criterion, changed_files, test_results, project_path
             )
-            criterion.satisfied = ok
             kind = self._kind_of(criterion)
+            # bug-051 — EVIDENCE/CUSTOM sem parâmetros não é verificável
+            # deterministicamente: ok=None ("desconhecido"), NUNCA reprova.
+            # O validador LLM (que lê os arquivos) julga o mérito. Antes, o
+            # det marcava False quando changed_files=[] e testes skipped —
+            # ex.: task re-executada sobre entrega já existente — e o
+            # "prefer stricter" vetava aprovação 1.0 do validador (task
+            # ff270e3ff814 iter 1, GuardLine).
+            unverifiable = ok is None
+            criterion.satisfied = ok
             criteria_results.append(
                 {
                     "id": criterion.id,
                     "description": criterion.description,
                     "kind": kind.value,
                     "satisfied": ok,
+                    **({"unverifiable": True} if unverifiable else {}),
                 }
             )
-            if criterion.required and not ok:
+            if criterion.required and ok is False:
                 issues.append(
                     {
                         "id": next_issue_id(idx),
@@ -109,7 +118,7 @@ class DeterministicValidator:
         changed_files: list[str],
         test_results: list[dict[str, Any]],
         project_path: Path,
-    ) -> bool:
+    ) -> bool | None:
         kind = self._kind_of(criterion)
         params = self._params(criterion)
         handlers = {
@@ -121,7 +130,13 @@ class DeterministicValidator:
             CriterionKind.CUSTOM: self._check_evidence,
         }
         handler = handlers.get(kind, self._check_evidence)
-        return handler(params, changed_files, test_results, project_path)
+        result = handler(params, changed_files, test_results, project_path)
+        # bug-051 — EVIDENCE/CUSTOM: ausência de evidência determinística não
+        # prova falha (artefato pode já existir de run anterior). True =
+        # confirmado; None = indeterminado, o LLM decide. Nunca False.
+        if kind in {CriterionKind.EVIDENCE, CriterionKind.CUSTOM} and not result:
+            return None
+        return result
 
     def _check_soma_module(
         self,
