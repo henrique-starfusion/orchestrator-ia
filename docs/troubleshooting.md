@@ -503,6 +503,35 @@ A partir de 0.4.24 o `save` não sobrescreve estado terminal e `transition` abor
 
 `Prune-OrchestratorProjectRegistry` (automático no propagate 0.4.24+) remove paths mortos e fixtures de teste. Install/update de fixtures não registra mais no registry global.
 
+## Task reprova por critérios que ninguém pediu (bug-045/046, 0.4.35+)
+
+Sintoma: validação rejeita com ACs de outro tipo de trabalho — ex. *"Defeito
+reproduzido com evidência"* numa task de documentação/coleção Postman — até
+`same_issue_repeat_limit` → INCOMPLETE.
+
+Causa (até 0.4.34): `detect_loop` casava substring sem fronteira de palavra
+("erro" dentro de "errors", "mvp" em "o MVP já existe", "se gap for bug" em
+cláusula condicional) e o template do loop substituía critérios escritos no
+prompt como "Critérios: a; b; c" (só `AC-001:` era reconhecido).
+
+A partir de 0.4.35: palavra inteira, condicionais não contam, hit isolado em
+prompt longo não impõe loop, e a seção "Critérios:" (prosa ou bullets) vira os
+ACs da task com precedência sobre o loop. Dica: declarar critérios no prompt é
+sempre o caminho mais confiável.
+
+## `changed=[]` / `AGENT-TIMEOUT-NO-OUTPUT` com trabalho real feito (bug-047, 0.4.35+)
+
+Sintoma: o executor trabalha (stderr mostra diffs), mas `changed_files` fica
+vazio, `workspace_changes` nunca passa e timeout vira `AGENT-TIMEOUT-NO-OUTPUT`.
+
+Causa: workspace é uma pasta-mãe contendo repos git **aninhados** (ex.:
+`GuardLine.BR/travelex-api`, cada filho com `.git` próprio). `git status` na
+raiz não desce em repo aninhado.
+
+A partir de 0.4.35 o baseline captura o porcelain de cada repo filho imediato e
+o diff reporta `filho/arquivo` — inclusive quando a raiz não é repo git. Só o
+primeiro nível de aninhamento é observado.
+
 ## Ver também
 
 - [`cli-reference.md`](cli-reference.md)

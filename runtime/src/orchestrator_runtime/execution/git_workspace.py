@@ -13,10 +13,19 @@ GIT_TIMEOUT_S = 30
 
 @dataclass
 class GitBaseline:
-    """Snapshot de ``git status --porcelain`` no início da task."""
+    """Snapshot de ``git status --porcelain`` no início da task.
+
+    ``nested`` guarda o porcelain de cada repo git FILHO imediato do workspace
+    (bug-047): em projetos que agrupam vários repos numa pasta-mãe (ex.:
+    GuardLine.BR contém travelex-api/, onp-api/ — cada um com .git próprio),
+    ``git status`` na raiz não desce no repo aninhado e todo o trabalho do
+    executor ficava invisível — changed=[] sempre, workspace_changes nunca
+    passava e timeout com trabalho real virava AGENT-TIMEOUT-NO-OUTPUT.
+    """
 
     porcelain: dict[str, str] = field(default_factory=dict)
     available: bool = False
+    nested: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 def _run_git(project_path: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -61,30 +70,64 @@ def _parse_porcelain(stdout: str) -> dict[str, str]:
     return mapping
 
 
+def _nested_repo_dirs(project_path: Path) -> list[str]:
+    """Filhos imediatos com .git próprio (dir ou arquivo de worktree).
+
+    Só o primeiro nível: é o layout observado (pasta-mãe de repos). Descer
+    mais fundo custaria um walk completo a cada agente — sem caso de uso.
+    """
+    out: list[str] = []
+    try:
+        for child in project_path.iterdir():
+            if child.name == ".git" or not child.is_dir():
+                continue
+            if (child / ".git").exists():
+                out.append(child.name)
+    except OSError:
+        return []
+    return sorted(out)
+
+
 def capture_baseline(project_path: Path) -> GitBaseline:
-    """Captura status git atual; ``available=False`` se não for um repo git."""
+    """Captura status git atual; ``available=False`` se não for um repo git.
+
+    Repos aninhados (filhos imediatos com .git) entram em ``nested`` mesmo
+    quando a raiz não é repo — bug-047.
+    """
+    baseline = GitBaseline()
     probe = _run_git(project_path, "rev-parse", "--is-inside-work-tree")
-    if probe.returncode != 0 or (probe.stdout or "").strip() != "true":
-        return GitBaseline(available=False)
-    status = _run_git(project_path, "status", "--porcelain")
-    if status.returncode != 0:
-        return GitBaseline(available=False)
-    return GitBaseline(
-        porcelain=_parse_porcelain(status.stdout or ""),
-        available=True,
-    )
+    if probe.returncode == 0 and (probe.stdout or "").strip() == "true":
+        status = _run_git(project_path, "status", "--porcelain")
+        if status.returncode == 0:
+            baseline.porcelain = _parse_porcelain(status.stdout or "")
+            baseline.available = True
+    for name in _nested_repo_dirs(project_path):
+        status = _run_git(project_path / name, "status", "--porcelain")
+        if status.returncode == 0:
+            baseline.nested[name] = _parse_porcelain(status.stdout or "")
+    return baseline
 
 
 def changed_files_since(project_path: Path, baseline: GitBaseline) -> list[str]:
-    """Paths cujo status porcelain mudou (ou são novos) desde o baseline."""
-    if not baseline.available:
-        return []
-    status = _run_git(project_path, "status", "--porcelain")
-    if status.returncode != 0:
-        return []
-    current = _parse_porcelain(status.stdout or "")
-    out: list[str] = []
-    for path, code in current.items():
-        if path not in baseline.porcelain or baseline.porcelain[path] != code:
-            out.append(path)
+    """Paths cujo status porcelain mudou (ou são novos) desde o baseline.
+
+    Inclui repos aninhados capturados no baseline, com o path prefixado pelo
+    diretório do repo filho ("travelex-api/main.go").
+    """
+    out: set[str] = set()
+    if baseline.available:
+        status = _run_git(project_path, "status", "--porcelain")
+        if status.returncode == 0:
+            current = _parse_porcelain(status.stdout or "")
+            for path, code in current.items():
+                if baseline.porcelain.get(path) != code:
+                    out.add(path)
+    for name, base_map in baseline.nested.items():
+        status = _run_git(project_path / name, "status", "--porcelain")
+        if status.returncode != 0:
+            continue
+        current = _parse_porcelain(status.stdout or "")
+        for path, code in current.items():
+            if base_map.get(path) != code:
+                out.add(f"{name}/{path}")
     return sorted(out)

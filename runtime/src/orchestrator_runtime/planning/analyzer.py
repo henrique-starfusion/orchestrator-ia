@@ -247,16 +247,7 @@ def parse_declared_criteria(prompt: str) -> list[AcceptanceCriterion]:
         if cid in seen:
             continue
         seen.add(cid)
-        low = text.lower()
-        # Unico kind deterministico seguro de inferir: "suite de testes passa".
-        # Todo o resto vira EVIDENCE (julgamento do validador), que e o
-        # comportamento correto para criterio escrito em linguagem natural.
-        if ("suite" in low or "exit code" in low) and (
-            "test" in low or "teste" in low
-        ):
-            kind = CriterionKind.TESTS_PASS
-        else:
-            kind = CriterionKind.EVIDENCE
+        kind = _infer_declared_kind(text)
         out.append(
             AcceptanceCriterion(
                 id=cid,
@@ -271,10 +262,84 @@ def parse_declared_criteria(prompt: str) -> list[AcceptanceCriterion]:
     return out
 
 
+def _infer_declared_kind(text: str) -> CriterionKind:
+    """Unico kind deterministico seguro de inferir: "suite de testes passa".
+
+    Todo o resto vira EVIDENCE (julgamento do validador), que e o
+    comportamento correto para criterio escrito em linguagem natural.
+    """
+    low = text.lower()
+    if ("suite" in low or "exit code" in low) and (
+        "test" in low or "teste" in low
+    ):
+        return CriterionKind.TESTS_PASS
+    return CriterionKind.EVIDENCE
+
+
+# bug-046 — usuarios escrevem criterios como prosa ("Criterios: a; b; c.") ou
+# lista, nao no formato AC-001:. O parser rigido ignorava esses criterios e o
+# template do loop vencia — a task nascia com ACs inatendiveis (GuardLine:
+# task de colecao Postman julgada por "Defeito reproduzido com evidencia").
+_CRITERIA_HEADER_RE = re.compile(
+    r"\b(?:crit[eé]rios?(?:\s+de\s+aceita[çc][aã]o)?|acceptance\s+criteria)\s*:[ \t]*",
+    re.IGNORECASE,
+)
+_CRITERIA_BULLET_RE = re.compile(r"^\s*(?:[-*•]|\d+[.)]|\(\d+\))\s*(\S.*?)\s*$")
+_MIN_SECTION_ITEM_LEN = 8
+
+
+def parse_criteria_section(prompt: str) -> list[AcceptanceCriterion]:
+    """ACs de uma secao "Criterios:" em prosa ou lista de bullets.
+
+    Inline: itens separados por ";" ate o fim da frase (primeiro ". " encerra
+    a secao — pontos internos como "docs/postman.md" nao encerram). Ceiling
+    conhecido: item com ". " no meio e truncado ali.
+    Bloco: header sozinho na linha, itens nas linhas-bullet seguintes.
+    """
+    match = _CRITERIA_HEADER_RE.search(prompt or "")
+    if not match:
+        return []
+    tail = prompt[match.end():]
+    inline = tail.split("\n", 1)[0].strip()
+
+    items: list[str] = []
+    if inline:
+        sentence_end = re.search(r"\.(?=\s|$)", inline)
+        if sentence_end:
+            inline = inline[: sentence_end.start()]
+        items = [part.strip(" .\t") for part in inline.split(";")]
+    else:
+        for line in tail.split("\n")[1:]:
+            bullet = _CRITERIA_BULLET_RE.match(line)
+            if not bullet:
+                break
+            items.append(bullet.group(1).strip(" ."))
+
+    out: list[AcceptanceCriterion] = []
+    for text in items:
+        if len(text) < _MIN_SECTION_ITEM_LEN or text.lower() in VAGUE:
+            continue
+        kind = _infer_declared_kind(text)
+        out.append(
+            AcceptanceCriterion(
+                id=f"AC-{len(out) + 1:03d}",
+                description=text,
+                kind=kind,
+                check=CriterionCheck(kind=kind, params={}),
+                required=True,
+            )
+        )
+        if len(out) >= _MAX_DECLARED_AC:
+            break
+    return out
+
+
 class CriteriaBuilder:
     def build(self, prompt: str, analysis: TaskAnalysis) -> list[AcceptanceCriterion]:
-        # Precedência: ACs escritos pelo usuário > critérios do loop > heurística.
-        declared = parse_declared_criteria(prompt)
+        # Precedência: ACs escritos pelo usuário (formato AC-001: ou seção
+        # "Critérios:") > critérios do loop > heurística. bug-046: o loop nunca
+        # pode vencer critérios que o usuário escreveu no prompt.
+        declared = parse_declared_criteria(prompt) or parse_criteria_section(prompt)
         if declared:
             return declared
 

@@ -88,9 +88,10 @@ LOOPS: dict[str, LoopSpec] = {
         ),
         done_when="o teste que falhava passa e a suíte segue verde",
         keywords=(
-            "bug", "erro", "falha", "quebrad", "corrig", "conserta", "fix",
-            "stacktrace", "traceback", "exception", "nao funciona",
-            "não funciona", "regressao", "regressão", "defeito",
+            "bug", "erro", "erros", "falha*", "quebrad*", "corrig*",
+            "conserta*", "fix", "stacktrace", "traceback", "exception",
+            "nao funciona", "não funciona", "regressao", "regressão",
+            "defeito*",
         ),
     ),
     "mvp": LoopSpec(
@@ -112,7 +113,7 @@ LOOPS: dict[str, LoopSpec] = {
         ),
         done_when="o projeto abre/executa sem erro",
         keywords=(
-            "mvp", "prototip", "protótip", "do zero", "criar um app",
+            "mvp", "prototip*", "protótip*", "do zero", "criar um app",
             "criar app", "nova aplicacao", "nova aplicação", "novo projeto",
             "ideia em", "poc",
         ),
@@ -141,8 +142,9 @@ LOOPS: dict[str, LoopSpec] = {
         ),
         done_when="os 5 eixos têm veredito e as ações estão priorizadas",
         keywords=(
-            "landing", "lp ", "pagina de venda", "página de venda", "conversao",
-            "conversão", "cta", "copy da pagina", "copy da página", "checkout",
+            "landing", "lp ", "pagina de venda*", "página de venda*",
+            "conversao", "conversão", "cta", "copy da pagina",
+            "copy da página", "checkout",
         ),
     ),
     "conteudo": LoopSpec(
@@ -211,6 +213,36 @@ _IMPL_INTENT_RE = re.compile(
 # Override explícito no início do prompt: "/loop-bug ..." ou "/bug ...".
 _EXPLICIT_RE = re.compile(r"^\s*/(?:loop[-_])?([a-z0-9_-]{2,20})\b", re.IGNORECASE)
 
+# bug-045 — cláusula condicional não é o pedido principal: "se gap for bug,
+# corrigir com testes" descrevia um ramo hipotético e ligava o loop de bug numa
+# task de publicação de docs. O lookbehind poupa reflexivos ("trata-se").
+_CONDITIONAL_CLAUSE_RE = re.compile(
+    r"(?<![\w-])(?:se|caso|if)\b[^.!?;\n]{0,160}",
+    re.IGNORECASE,
+)
+
+# bug-045 — 1 hit incidental num prompt longo (specs de 1500+ chars citando
+# "erros"/"mvp" de passagem) não define o roteiro da task inteira. Em prompt
+# curto, a palavra-chave É o assunto.
+_SHORT_PROMPT_LEN = 240
+
+
+def _kw_regex(kw: str) -> re.Pattern[str]:
+    """Palavra inteira; sufixo ``*`` marca radical ("corrig*" → corrigir/ido).
+
+    Sem fronteira, "erro" casava dentro de "errors" (inglês) e "lp " dentro de
+    qualquer palavra — bug-045.
+    """
+    stem = kw.endswith("*")
+    body = re.escape(kw[:-1] if stem else kw)
+    return re.compile(r"\b" + body + (r"\w*" if stem else r"\b"))
+
+
+_KEYWORD_RES: dict[str, tuple[re.Pattern[str], ...]] = {
+    loop_id: tuple(_kw_regex(kw) for kw in spec.keywords)
+    for loop_id, spec in LOOPS.items()
+}
+
 
 def detect_loop(prompt: str) -> str | None:
     """Loop mais provável para o pedido; None quando nada casa com folga."""
@@ -223,12 +255,15 @@ def detect_loop(prompt: str) -> str | None:
     if explicit and explicit.group(1) in LOOPS:
         return explicit.group(1)
 
+    scan = _CONDITIONAL_CLAUSE_RE.sub(" ", text)
     scores: dict[str, int] = {}
-    for loop_id, spec in LOOPS.items():
-        hits = sum(1 for kw in spec.keywords if kw in text)
+    for loop_id, patterns in _KEYWORD_RES.items():
+        hits = sum(1 for pat in patterns if pat.search(scan))
         if hits:
             scores[loop_id] = hits
     if not scores:
+        return None
+    if max(scores.values()) < 2 and len(text) > _SHORT_PROMPT_LEN:
         return None
 
     # Pedido de código não vira auditoria de landing nem produção de conteúdo.

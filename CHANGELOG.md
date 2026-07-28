@@ -2,6 +2,47 @@
 
 ## Unreleased
 
+## 0.4.35 - 2026-07-28
+
+A task que nascia reprovada — auditoria GuardLine.BR.
+
+### Fixed
+
+- **bug-045** — `detect_loop` casava substring **sem fronteira de palavra** e
+  qualquer hit incidental sequestrava os criterios da task. Medido na
+  GuardLine: "erro" casou dentro de **"errors"** (ingles), "mvp" casou em *"O
+  MVP **ja existe**"* e *"**se** gap for bug, corrigir"* (clausula condicional)
+  ligou o loop de bug numa task de publicacao Postman — 4 tasks julgadas por
+  criterios de template errado ("Defeito reproduzido com evidencia" numa task
+  de colecao de API). Agora: palavra inteira (radical marcado com `*`),
+  clausulas condicionais (`se/caso/if ...`) nao contam, e 1 hit isolado num
+  prompt longo (>240 chars) nao impoe loop — em prompt curto a palavra-chave e
+  o assunto e segue valendo
+- **bug-046** — criterios escritos pelo usuario como **"Criterios: a; b; c"**
+  (prosa ou bullets) eram ignorados: so o formato `AC-001:` era reconhecido, e
+  o template do loop vencia os criterios reais do prompt. Na GuardLine, 3 das
+  4 tasks recentes declaravam criterios explicitos — todos descartados; a task
+  reprovava por ACs que ninguem pediu ate `same_issue_repeat_limit` →
+  INCOMPLETE (38 min queimados). `parse_criteria_section` agora reconhece a
+  secao (inline com `;` ate o fim da frase, ou bloco de bullets) e mantem a
+  precedencia: ACs do usuario > loop > heuristica
+- **bug-047** — `changed_files_since` era **cego a repos git aninhados**.
+  GuardLine.BR e uma pasta-mae com ~40 repos filhos (travelex-api/, onp-api/,
+  cada um com `.git`); `git status` na raiz nao desce no repo aninhado, entao
+  `changed=[]` em 100% dos agent runs — `workspace_changes` nunca passava,
+  40 min de trabalho real do codex viraram `AGENT-TIMEOUT-NO-OUTPUT` e o
+  corrector repetia as mesmas issues ate o usuario cancelar. O baseline agora
+  captura o porcelain de cada repo filho imediato e o diff reporta os paths
+  prefixados (`travelex-api/main.go`) — inclusive quando a raiz nem e repo git
+
+### Notes
+
+- O cancel-race *"Transicao invalida: CANCELLED -> TESTING"* visto na task
+  85ff56f1f7da (23/07) ja fora corrigido pelo hard-stop do bug-022 — a task
+  rodou em versao anterior; nenhuma mudanca adicional
+- Heartbeat persistido (bug-040, 0.4.29) confirmado em producao na GuardLine:
+  eventos `agent_progress` a cada 30s durante toda a execucao
+
 ## 0.4.34 - 2026-07-27
 
 O lembrete que falava uma vez e calava.
