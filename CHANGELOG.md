@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+## 0.4.37 - 2026-07-28
+
+Terceira rodada GuardLine.BR — ferramenta ausente não é teste falho.
+
+### Fixed
+
+- **bug-050** — o fix do bug-048 passou a descobrir `go test ./...` e
+  `make test` dentro dos repos filhos, mas ferramenta fora do PATH (ou
+  inexistente na máquina) voltava exit 127 (WinError 2) do CliExecutor e era
+  classificada como teste falho (`failure_kind: introduced`) → `TEST-FAIL`
+  bloqueante → task INCOMPLETE por ambiente, mesmo com o validador aprovando
+  1.0 e os 4 ACs satisfeitos (medido na task 3b56b92278e9: `make` não existe
+  na máquina, `go` fora do PATH do processo). O `TestRunner.run_all` agora faz
+  pre-flight `which()` do executável e reporta `skipped` +
+  `failure_kind: tool_missing` — o portão `tests_passed` não bloqueia e o
+  validador vê a causa honesta no prompt. Falha real de suite (exit != 0 com
+  ferramenta presente) segue bloqueante.
+
+### Notes
+
+- Testes: runtime 286 passed / 3 skipped (4 novos em
+  `test_0437_tool_missing.py`; `test_run_all_extra_dirs_roda_no_repo_filho`
+  passou a mockar `which` para seguir hermético em máquina sem `go`).
+
 ## 0.4.36 - 2026-07-28
 
 Segunda rodada GuardLine.BR — testes cegos e prompt corrompido.

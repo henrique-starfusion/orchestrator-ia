@@ -269,13 +269,18 @@ def test_descoberta_de_testes_desce_em_extra_dirs(tmp_path: Path) -> None:
     assert any(t.source == "go.mod" for t in found)
 
 
-def test_run_all_extra_dirs_roda_no_repo_filho(tmp_path: Path) -> None:
+def test_run_all_extra_dirs_roda_no_repo_filho(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from orchestrator_runtime.testing import discovery as disc_mod
     from orchestrator_runtime.testing.discovery import TestRunner
 
     root = tmp_path / "mono"
     child = root / "onp-api"
     child.mkdir(parents=True)
     (child / "go.mod").write_text("module onp\n", encoding="utf-8")
+
+    # bug-050: run_all agora faz pre-flight which(); o teste finge toolchain
+    # presente para seguir hermético em máquina sem `go` no PATH.
+    monkeypatch.setattr(disc_mod, "which", lambda name: f"/fake/{name}")
 
     executed: list[tuple[list[str], Path]] = []
 

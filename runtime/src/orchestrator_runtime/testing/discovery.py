@@ -128,6 +128,33 @@ class TestRunner:
             return results
         for spec, cwd in tests:
             started = time.monotonic()
+            # bug-050 — ferramenta ausente NÃO é teste falho. Sem pre-flight,
+            # `go`/`make` fora do PATH (ou inexistente na máquina) voltava 127
+            # do CliExecutor e virava failure_kind "introduced" + TEST-FAIL
+            # bloqueante: a task reprovava por ambiente, não por mérito, até o
+            # same_issue_repeat_limit — mesmo com o validador aprovando (1.0).
+            # Medido na task 3b56b92278e9 da GuardLine: make não existe na
+            # máquina e o go.mod/Makefile do repo filho (bug-048) passaram a
+            # descobrir comandos impossíveis de executar.
+            exe0 = spec.command[0] if spec.command else ""
+            if exe0 and which(exe0) is None:
+                results.append(
+                    {
+                        "command": " ".join(spec.command),
+                        "category": spec.category,
+                        "exit_code": None,
+                        "duration_s": 0.0,
+                        "stdout": "",
+                        "stderr": (
+                            f"ferramenta ausente no PATH: {exe0!r} — teste não "
+                            "executado (erro de ambiente, não falha de mérito)"
+                        ),
+                        "status": "skipped",
+                        "discovery_source": spec.source,
+                        "failure_kind": "tool_missing",
+                    }
+                )
+                continue
             try:
                 env = {"PYTHONPATH": str(cwd)}
                 result = self.executor.run(
