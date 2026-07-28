@@ -80,9 +80,36 @@ class TestRunner:
     def __init__(self, executor: CliExecutor) -> None:
         self.executor = executor
 
-    def run_all(self, project_path: Path) -> list[dict]:
+    def run_all(
+        self, project_path: Path, extra_dirs: list[str] | None = None
+    ) -> list[dict]:
+        """Descobre e roda testes na raiz e em ``extra_dirs`` (bug-048).
+
+        Em workspace pasta-mãe de repos aninhados (GuardLine.BR), a raiz não
+        tem marcador de stack nenhum — a descoberta devolvia "<none>" e o
+        validador reprovava tests_pass por falta de evidência, mesmo com o
+        trabalho feito num repo filho. ``extra_dirs`` são os repos filhos
+        tocados pelos changed_files da iteração.
+        """
         discovery = TestDiscovery()
-        tests = discovery.discover(project_path)
+        tests: list[tuple[DiscoveredTest, Path]] = [
+            (t, project_path) for t in discovery.discover(project_path)
+        ]
+        for sub in extra_dirs or []:
+            sub_path = project_path / sub
+            if not sub_path.is_dir():
+                continue
+            for t in discovery.discover(sub_path):
+                tests.append(
+                    (
+                        DiscoveredTest(
+                            command=t.command,
+                            category=t.category,
+                            source=f"{sub}/{t.source}",
+                        ),
+                        sub_path,
+                    )
+                )
         results = []
         if not tests:
             results.append(
@@ -99,13 +126,13 @@ class TestRunner:
                 }
             )
             return results
-        for spec in tests:
+        for spec, cwd in tests:
             started = time.monotonic()
             try:
-                env = {"PYTHONPATH": str(project_path)}
+                env = {"PYTHONPATH": str(cwd)}
                 result = self.executor.run(
                     spec.command,
-                    cwd=project_path,
+                    cwd=cwd,
                     timeout_s=600,
                     env=env,
                     allow_nested=True,

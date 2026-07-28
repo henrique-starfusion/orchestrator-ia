@@ -35,6 +35,7 @@ from orchestrator_runtime.execution.timeouts import (
 )
 from orchestrator_runtime.manager_model import build_manager
 from orchestrator_runtime.memory.database import dumps
+from orchestrator_runtime.textutil import repair_mojibake
 from orchestrator_runtime.planning.analyzer import Planner
 from orchestrator_runtime.routing.manager import RulesRouter
 from orchestrator_runtime.tasks.models import TaskConstraints, TaskRecord
@@ -44,6 +45,7 @@ from orchestrator_runtime.tasks.state_machine import (
     TaskState,
     can_resume,
 )
+from orchestrator_runtime.textutil import repair_mojibake
 
 TERMINAL_LIKE = TERMINAL_STATES
 from orchestrator_runtime.testing import TestRunner
@@ -143,6 +145,9 @@ class TaskService:
         validator: str | None = None,
         dry_run: bool = False,
     ) -> TaskRecord:
+        # bug-049 — prompt vindo de terminal CP1252 chega com mojibake UTF-8
+        # ("exigÃªncia"); repara na ingestão, antes de persistir/analisar.
+        prompt = repair_mojibake(prompt)
         self._cancel_stale_received()
         constraints = TaskConstraints(
             maximum_iterations=max_iterations
@@ -1022,7 +1027,21 @@ class TaskService:
             task = self._ensure_runnable(self.get(task.id))
             self.repo.transition(task, TaskState.TESTING, reason="deterministic tests")
             self.bus.emit(RuntimeEvent(task_id=task.id, type=EventType.TEST_STARTED))
-            test_results = self.tests.run_all(self.config.project_path)
+            # bug-048 — pasta-mãe de repos aninhados: descoberta na raiz não
+            # acha stack nenhuma; roda também nos repos filhos tocados.
+            nested_test_dirs = sorted(
+                {
+                    f.split("/", 1)[0]
+                    for f in changed_files
+                    if "/" in f
+                    and (
+                        self.config.project_path / f.split("/", 1)[0] / ".git"
+                    ).exists()
+                }
+            )
+            test_results = self.tests.run_all(
+                self.config.project_path, extra_dirs=nested_test_dirs
+            )
             last_test_results = test_results
             self._run_ctx["test_results"] = test_results
             for tr in test_results:

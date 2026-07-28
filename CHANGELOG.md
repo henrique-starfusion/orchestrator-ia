@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+## 0.4.36 - 2026-07-28
+
+Segunda rodada GuardLine.BR — testes cegos e prompt corrompido.
+
+### Fixed
+
+- **bug-048** — em workspace pasta-mae de repos aninhados, a descoberta de
+  testes so olhava a raiz — que nao tem marcador de stack nenhum — e devolvia
+  `<none>/skipped`. O validador reprovava `tests_pass` por falta de evidencia
+  em toda iteracao, mesmo com `go test` verde dentro do repo filho. Agora o
+  `TestRunner.run_all` recebe os repos filhos tocados pelos `changed_files` da
+  iteracao (derivados pelo fix do bug-047) e roda a descoberta/execucao dentro
+  deles, com `discovery_source` prefixado (`travelex-api/go.mod`)
+- **bug-049** — prompt criado via terminal com codepage CP1252 (caller
+  `cursor`) era persistido com mojibake UTF-8 ("exigÃªncia" em vez de
+  "exigência") — medido na task 117c69f1e4b2 da GuardLine; o texto corrompido
+  seguia para analyzer, executor e validator. `repair_mojibake` na ingestao
+  (`create_task`): assinatura `Ã/Â + U+00A0..U+00BF` dispara o round-trip
+  cp1252→utf-8, com contagem de marcadores decrescente como guarda — "NÃO"/
+  "SÃO" legitimos nao casam a assinatura e passam intactos; mojibake duplo e
+  desfeito em duas rodadas
+
+### Notes
+
+- Task 117c69f1e4b2 (12:03 UTC) nasceu 3 min antes da propagacao da 0.4.35 e
+  rodou num processo com modulos antigos — criterios de template e
+  `changed=[]` esperados. Processos MCP/CLI persistentes precisam de reload
+  apos update (o proprio runtime recusa `orchestrator_run` com
+  `mcp_modules_stale` quando detecta)
+
 ## 0.4.35 - 2026-07-28
 
 A task que nascia reprovada — auditoria GuardLine.BR.

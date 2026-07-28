@@ -250,3 +250,96 @@ def test_raiz_sem_git_e_sem_aninhados_segue_vazio(tmp_path: Path, monkeypatch: p
     baseline = capture_baseline(root)
     assert baseline.available is False
     assert changed_files_since(root, baseline) == []
+
+
+# ------------------------------------------------------------------ bug-048
+
+def test_descoberta_de_testes_desce_em_extra_dirs(tmp_path: Path) -> None:
+    from orchestrator_runtime.testing.discovery import TestDiscovery
+
+    root = tmp_path / "mono"
+    child = root / "travelex-api"
+    child.mkdir(parents=True)
+    (child / "go.mod").write_text("module travelex\n", encoding="utf-8")
+
+    # Raiz pasta-mãe: nenhum marcador de stack.
+    assert TestDiscovery().discover(root) == []
+    # Repo filho tem stack Go.
+    found = TestDiscovery().discover(child)
+    assert any(t.source == "go.mod" for t in found)
+
+
+def test_run_all_extra_dirs_roda_no_repo_filho(tmp_path: Path) -> None:
+    from orchestrator_runtime.testing.discovery import TestRunner
+
+    root = tmp_path / "mono"
+    child = root / "onp-api"
+    child.mkdir(parents=True)
+    (child / "go.mod").write_text("module onp\n", encoding="utf-8")
+
+    executed: list[tuple[list[str], Path]] = []
+
+    class FakeResult:
+        exit_code = 0
+        timed_out = False
+        stdout = "ok"
+        stderr = ""
+
+    class FakeExecutor:
+        def run(self, command, cwd=None, timeout_s=None, env=None, allow_nested=False):
+            executed.append((list(command), Path(cwd)))
+            return FakeResult()
+
+    results = TestRunner(FakeExecutor()).run_all(root, extra_dirs=["onp-api"])
+    assert executed, "teste do repo filho precisa rodar"
+    assert executed[0][1] == child, "cwd deve ser o repo filho"
+    assert any(r["discovery_source"] == "onp-api/go.mod" for r in results)
+    assert all(r["status"] == "passed" for r in results)
+
+
+def test_run_all_sem_nada_segue_reportando_none(tmp_path: Path) -> None:
+    from orchestrator_runtime.testing.discovery import TestRunner
+
+    root = tmp_path / "vazio"
+    root.mkdir()
+
+    class FakeExecutor:
+        def run(self, *a, **k):  # pragma: no cover - não deve ser chamado
+            raise AssertionError("nada a executar")
+
+    results = TestRunner(FakeExecutor()).run_all(root, extra_dirs=["nao-existe"])
+    assert len(results) == 1
+    assert results[0]["command"] == "<none>"
+    assert results[0]["status"] == "skipped"
+
+
+# ------------------------------------------------------------------ bug-049
+
+def test_repara_mojibake_utf8_lido_como_cp1252() -> None:
+    from orchestrator_runtime.textutil import repair_mojibake
+
+    original = "REVERTER exigência de X-Idempotency-Key na coleção"
+    mojibake = original.encode("utf-8").decode("cp1252")
+    assert "Ã" in mojibake  # sanidade: corrompeu mesmo
+    assert repair_mojibake(mojibake) == original
+
+
+def test_texto_legitimo_com_maiusculas_acentuadas_intacto() -> None:
+    from orchestrator_runtime.textutil import repair_mojibake
+
+    for text in (
+        "NÃO ALTERAR o commit; SÃO PAULO",
+        "texto limpo: exigência, coleção, validação",
+        "",
+    ):
+        assert repair_mojibake(text) == text
+
+
+def test_repara_mojibake_duplo() -> None:
+    from orchestrator_runtime.textutil import repair_mojibake
+
+    original = "documentação atualizada"
+    double = (
+        original.encode("utf-8").decode("cp1252").encode("utf-8").decode("cp1252")
+    )
+    assert repair_mojibake(double) == original

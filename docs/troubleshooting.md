@@ -530,7 +530,21 @@ raiz não desce em repo aninhado.
 
 A partir de 0.4.35 o baseline captura o porcelain de cada repo filho imediato e
 o diff reporta `filho/arquivo` — inclusive quando a raiz não é repo git. Só o
-primeiro nível de aninhamento é observado.
+primeiro nível de aninhamento é observado. Em 0.4.36 a descoberta de testes
+(bug-048) também passou a rodar nos repos filhos tocados — antes o `TESTING`
+reportava `<none>/skipped` na raiz e o validador reprovava `tests_pass` por
+falta de evidência.
+
+## Prompt gravado com "Ã" no lugar de acentos (bug-049, 0.4.36+)
+
+Sintoma: prompt aparece no DB/status como "exigÃªncia", "coleÃ§Ã£o".
+
+Causa: terminal Windows com codepage CP1252 — o texto UTF-8 do comando chega
+corrompido ao argv antes do orquestrador (observado com caller=cursor).
+
+A partir de 0.4.36 a ingestão repara automaticamente (round-trip cp1252→utf-8
+com guarda de assinatura; "NÃO"/"SÃO" legítimos passam intactos). Prevenção no
+cliente: `chcp 65001` ou `[Console]::OutputEncoding = [Text.Encoding]::UTF8`.
 
 ## Ver também
 
