@@ -339,6 +339,9 @@ try {
             # bug-033: remove hooks que disparam um processo por chamada de ferramenta
             Invoke-ChildScript -Name 'Repair-AgentHooks.ps1' -Arguments @{ ProjectPath = $projectRoot } | Out-Null
 
+            # bug-055: graphify hook install desfaz o fix anti-janela; reaplica a cada update
+            Invoke-ChildScript -Name 'Repair-GraphifyHooks.ps1' -Arguments @{ ProjectPath = $projectRoot } | Out-Null
+
             if (-not $SkipTools) {
                 $toolsArgs = @{ ProjectPath = $projectRoot }
                 if ($RefreshTools) { $toolsArgs.RefreshTools = $true }
@@ -668,6 +671,9 @@ try {
 
     # bug-033: remove hooks que disparam um processo por chamada de ferramenta
     Invoke-ChildScript -Name 'Repair-AgentHooks.ps1' -Arguments @{ ProjectPath = $projectRoot } | Out-Null
+
+    # bug-055: graphify hook install desfaz o fix anti-janela; reaplica a cada update
+    Invoke-ChildScript -Name 'Repair-GraphifyHooks.ps1' -Arguments @{ ProjectPath = $projectRoot } | Out-Null
 
     if (-not $SkipTools) {
         $toolsArgs = @{ ProjectPath = $projectRoot }

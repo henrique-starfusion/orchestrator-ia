@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+## 0.4.39 - 2026-07-28
+
+O commit que piscava janela — reparo do graphify vira etapa do update.
+
+### Fixed
+
+- **bug-055** — a cada `git commit`/`git checkout`, o hook do graphify
+  relancava o rebuild do grafo via `python.exe` (subsistema de CONSOLE do
+  Windows: todo processo aloca janela ao nascer) destacado e **sem supressao
+  de janela** — console piscando na tela a cada commit. O fix manual validado
+  no PrintBee (preferir `pythonw.exe` no interpretador pinado +
+  `CREATE_NO_WINDOW`/0x08000000 nas creationflags do Popen) vivia em
+  `.git/hooks`, que nao e versionado — `graphify hook install` sobrescrevia e
+  desfazia o reparo. Novo `Repair-GraphifyHooks.ps1` roda em **todo
+  install/update/propagate**: patch idempotente nos `post-commit`/
+  `post-checkout` do repo raiz **e dos repos git filhos imediatos** (layout
+  pasta-mae, GuardLine.BR), derivando o caminho do `pythonw.exe` do proprio
+  `_PINNED` gravado no hook (sem hardcode de usuario), com backup ao lado
+  (`*.bak-orchestrator-*`), preservando LF e tocando apenas arquivos com o
+  marcador do graphify
+
+### Notes
+
+- `Test-GraphifyHookRepair`: patch raiz + filho, fallback `python.exe`
+  preservado como `elif`, idempotencia (2a rodada no-op, sem novo backup),
+  hook sem graphify intocado, e re-aplicacao apos `graphify hook install`
+  sobrescrever. Validado ao vivo: PrintBee (fix manual) reporta "fix ja
+  aplicado" — a deteccao casa com o reparo feito a mao
+
 ## 0.4.38 - 2026-07-28
 
 Terceira rodada GuardLine.BR (parte 2) — a task que o validador aprovava e o

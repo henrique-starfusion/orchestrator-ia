@@ -546,6 +546,19 @@ A partir de 0.4.36 a ingestão repara automaticamente (round-trip cp1252→utf-8
 com guarda de assinatura; "NÃO"/"SÃO" legítimos passam intactos). Prevenção no
 cliente: `chcp 65001` ou `[Console]::OutputEncoding = [Text.Encoding]::UTF8`.
 
+## Janela de console pisca a cada commit (hook graphify) (bug-055, 0.4.39+)
+
+Sintoma: a cada `git commit`/`git checkout`, uma janela de terminal
+aparece/pisca — é o rebuild do grafo do graphify lançado via `python.exe`
+(subsistema de console) sem supressão de janela.
+
+A partir de 0.4.39, `orchestrator install/update/propagate` aplica reparo
+idempotente nos hooks `post-commit`/`post-checkout` (raiz + repos filhos):
+prefere `pythonw.exe` no interpretador pinado e adiciona `CREATE_NO_WINDOW`
+ao Popen destacado. `graphify hook install` desfaz o fix — basta rodar
+`orchestrator update` para reaplicar. Backups: `*.bak-orchestrator-*` ao lado
+do hook.
+
 ## Ver também
 
 - [`cli-reference.md`](cli-reference.md)
