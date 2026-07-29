@@ -576,6 +576,20 @@ A partir de 0.4.41 o CLI tenta também os caminhos absolutos
 `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe` (e `Sysnative`).
 Não é preciso mexer no PATH.
 
+## Fila presa atrás de task CANCELLED (bug-059, 0.4.42+)
+
+Sintoma: tasks novas ficam `QUEUED behind <id>` de uma task que já está
+CANCELLED; `workspace.write.lock` antigo no disco com PID do processo MCP.
+
+Causa (até 0.4.41): coroutine do pré-loop congelava num `git status` (PIPE +
+neto do git herdando handles), nunca soltava lock/`_running_tasks`, e o gate
+de fila apontava para a task terminal.
+
+A partir de 0.4.42 o git roda sem possibilidade de deadlock, task terminal
+nunca ocupa o workspace, cancel aborta o pré-loop e desfila a próxima. Se um
+processo MCP antigo ainda estiver congelado: recarregar o Cursor/MCP e, se o
+lock persistir, apagar `.orchestrator/runtime/locks/workspace.write.lock`.
+
 ## Ver também
 
 - [`cli-reference.md`](cli-reference.md)

@@ -304,6 +304,13 @@ class TaskService:
                 self._persist_episode(task, success=False)
         else:
             self.repo.save(task)
+        # bug-059: cancelar quem segurava (ou encabeçava) a fila precisa
+        # destravar quem está atrás — sem isto o dequeue só acontecia quando
+        # alguma outra run_task terminasse.
+        try:
+            self._maybe_start_next(task.project_path)
+        except Exception:  # noqa: BLE001
+            pass
         return task
 
     def _ensure_runnable(self, task: TaskRecord) -> TaskRecord:
@@ -356,7 +363,14 @@ class TaskService:
             if rid == exclude_id:
                 continue
             other = self.repo.get(rid)
-            if other and other.project_path == project_path:
+            # bug-059: coroutine zumbi (presa no pré-loop) mantém a task em
+            # _running_tasks mesmo depois de CANCELLED no DB — a fila inteira
+            # ficava QUEUED "behind <task cancelada>". Terminal nunca ocupa.
+            if (
+                other
+                and other.project_path == project_path
+                and other.status not in TERMINAL_STATES
+            ):
                 return rid
         return None
 
@@ -557,6 +571,10 @@ class TaskService:
         return task
 
     async def _execute_loop(self, task: TaskRecord) -> TaskRecord:
+        # bug-059: cancel chegando durante o pré-loop (baseline git etc.) tem
+        # que abortar AQUI — o objeto task recebido é snapshot e o check
+        # antigo de cancel_requested só rodava depois do primeiro transition.
+        task = self._ensure_runnable(self.get(task.id))
         self._loop_started_monotonic = time.monotonic()
         self._git_baseline = capture_baseline(self.config.project_path)
         self._run_ctx = {}

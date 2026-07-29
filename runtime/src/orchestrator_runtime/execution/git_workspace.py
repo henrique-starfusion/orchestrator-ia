@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -29,24 +31,64 @@ class GitBaseline:
 
 
 def _run_git(project_path: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    command = ["git", *args]
-    try:
-        return subprocess.run(
-            command,
-            cwd=str(project_path),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            check=False,
-            timeout=GIT_TIMEOUT_S,
-        )
-    except subprocess.TimeoutExpired:
+    """Roda git com timeout que NUNCA pendura (bug-059).
+
+    Dois vetores de coroutine congelada eliminados:
+    - ``core.fsmonitor=false``: git status pode subir o ``fsmonitor--daemon``,
+      que herda os handles de saída e sobrevive ao kill do pai.
+    - Captura em ARQUIVO, não PIPE: com PIPE, o ``communicate()`` pós-kill do
+      timeout bloqueia até o último herdeiro do pipe fechar (medido na
+      GuardLine: 1h congelado segurando o WriteLock, fila inteira presa atrás
+      de task já CANCELLED). Com arquivo, ``wait()`` retorna e o conteúdo é
+      lido — deadlock de EOF é impossível.
+    No timeout, a ÁRVORE morre (taskkill /T no Windows), não só o git.
+    """
+    command = [
+        "git",
+        "-c", "core.fsmonitor=false",
+        "-c", "core.useBuiltinFSMonitor=false",
+        *args,
+    ]
+    with tempfile.TemporaryFile(
+        mode="w+", encoding="utf-8", errors="replace"
+    ) as out, tempfile.TemporaryFile(
+        mode="w+", encoding="utf-8", errors="replace"
+    ) as err:
+        try:
+            proc = subprocess.Popen(
+                command,
+                cwd=str(project_path),
+                stdout=out,
+                stderr=err,
+                stdin=subprocess.DEVNULL,
+            )
+        except OSError as exc:
+            return subprocess.CompletedProcess(command, 127, "", str(exc))
+        try:
+            returncode = proc.wait(timeout=GIT_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                    capture_output=True,
+                    check=False,
+                )
+            else:
+                proc.kill()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+            return subprocess.CompletedProcess(
+                command,
+                returncode=124,
+                stdout="",
+                stderr=f"git timeout after {GIT_TIMEOUT_S}s",
+            )
+        out.seek(0)
+        err.seek(0)
         return subprocess.CompletedProcess(
-            command,
-            returncode=124,
-            stdout="",
-            stderr=f"git timeout after {GIT_TIMEOUT_S}s",
+            command, returncode, out.read(), err.read()
         )
 
 

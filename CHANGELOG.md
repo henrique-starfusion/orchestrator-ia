@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+## 0.4.42 - 2026-07-29
+
+A fila presa atrás de uma task cancelada.
+
+### Fixed
+
+- **bug-059** — "fila presa de novo → cancelei e rodei inline" (GuardLine,
+  6 tasks canceladas em 1 dia por fila). Cadeia medida no DB + lock:
+  (1) coroutine do pré-loop congelou num `git status` — `subprocess.run`
+  com PIPE pendura para SEMPRE no pós-kill do timeout quando um neto do git
+  (ex.: `fsmonitor--daemon`) herda os handles de saída; (2) a coroutine
+  congelada nunca chega ao `finally`, então a task cancelada fica em
+  `_running_tasks` segurando o `WriteLock` (lock de 21:16 UTC ainda vivo
+  1h depois, pid do MCP); (3) `_busy_task_id` apontava para essa task
+  terminal e toda task nova virava `QUEUED behind <CANCELLED>`, sem dequeue
+  nunca. Quatro correções:
+  - `_run_git` captura em ARQUIVO (nunca PIPE — deadlock de EOF impossível),
+    roda com `core.fsmonitor=false` (sem daemon-neto) e no timeout mata a
+    ÁRVORE (`taskkill /T`), não só o git
+  - `_busy_task_id` ignora task em estado terminal presente em
+    `_running_tasks` — zumbi cancelada não ocupa o workspace nem vira
+    "behind" de ninguém
+  - `_execute_loop` valida cancel/terminal ANTES do pré-loop (baseline git):
+    cancel no intervalo aborta na hora, solta lock e destrava a fila
+  - `cancel()` dispara `_maybe_start_next` — cancelar quem encabeçava a fila
+    desfila quem estava atrás imediatamente
+
+### Notes
+
+- Lock órfão da GuardLine removido na intervenção; reload do Cursor/MCP na
+  GuardLine ainda recomendado (o processo antigo pode manter a coroutine
+  congelada até reiniciar)
+
 ## 0.4.41 - 2026-07-29
 
 O agente que se achava filho — e o wrapper que nao achava o PowerShell.
