@@ -73,6 +73,18 @@ try {
         -Encoding ASCII
     Assert-Test -Condition ((Invoke-Guard -File $docFile) -eq 0) -Message 'guard bloqueou edicao de documentacao'
 
+    # bug-057: flag de filho e VALOR, nao presenca. '0' herdado nao silencia
+    # o guard; so valor real ('1') identifica o executor delegado.
+    $childFile = Join-Path $tempDir 'guard-child.json'
+    Set-Content -LiteralPath $childFile `
+        -Value '{"session_id":"test-childflag","tool_input":{"file_path":"C:/proj/src/other.py"}}' `
+        -Encoding ASCII
+    $env:ORCHESTRATOR_CHILD_AGENT = '0'
+    Assert-Test -Condition ((Invoke-Guard -File $childFile) -eq 2) -Message 'guard silenciou com ORCHESTRATOR_CHILD_AGENT=0 (presence-based, bug-057)'
+    $env:ORCHESTRATOR_CHILD_AGENT = '1'
+    Assert-Test -Condition ((Invoke-Guard -File $childFile) -eq 0) -Message 'guard bloqueou o proprio executor delegado (ORCHESTRATOR_CHILD_AGENT=1)'
+    Remove-Item Env:ORCHESTRATOR_CHILD_AGENT -ErrorAction SilentlyContinue
+
     Remove-Item Env:CLAUDE_PROJECT_DIR -ErrorAction SilentlyContinue
 
     Write-Host ('PASS: {0}' -f $TestName) -ForegroundColor Green

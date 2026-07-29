@@ -6,10 +6,12 @@ trabalho para qualquer tarefa não-trivial — o usuário não precisa pedir.
 
 ### Antes de tudo: você é filho ou principal?
 
-Se a variável de ambiente `ORCHESTRATOR_CHILD_AGENT` estiver definida, você **é**
-um agente delegado: faça o trabalho INLINE e **nunca** delegue de novo (nem
+Se a variável de ambiente `ORCHESTRATOR_CHILD_AGENT` tiver **valor não-vazio e
+diferente de `0`** (o runtime seta `1` nos filhos), você **é** um agente
+delegado: faça o trabalho INLINE e **nunca** delegue de novo (nem
 orquestrador, nem subagentes) — delegar aninhado trava a execução.
-Caso contrário, você é o agente principal e vale o resto deste bloco.
+Vazia ou `0` — mesmo presente no ambiente — NÃO conta: você é o agente
+principal e vale o resto deste bloco.
 
 ### Quando orquestrar (qualquer gatilho abaixo)
 

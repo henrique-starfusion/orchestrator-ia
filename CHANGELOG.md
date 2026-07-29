@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+## 0.4.41 - 2026-07-29
+
+O agente que se achava filho — e o wrapper que nao achava o PowerShell.
+
+### Fixed
+
+- **bug-057** — `ORCHESTRATOR_CHILD_AGENT` era tratado como **presenca**, nao
+  valor: a var chegava VAZIA (herdada de shell/wrapper) e o agente principal
+  se considerava delegado — recusava orquestrar e fazia tudo inline
+  (registrado no Do-Not-Repeat da GuardLine: *"is presence-based, even when
+  its value is blank... do the task inline and never call orchestrator
+  dispatch"*). Agora vazio/`0` NAO e filho em TODOS os pontos:
+  `is_child_agent()` no runtime (CliExecutor + guard do
+  `orchestrator_delegate` MCP), `orchestrator-guard.js`,
+  `Invoke-RoutedAgent.ps1`, e os textos dos 5 adapters + skill call-agent
+  dizem explicitamente que so valor nao-vazio ≠ `0` (runtime seta `1`)
+  identifica o filho
+- **bug-058** — `findPowerShell` so procurava `powershell.exe`/`pwsh.exe` no
+  PATH; shells de agente chegam com PATH sem System32 e o wrapper morria sem
+  PowerShell (GuardLine contornou na mao prependando
+  `C:\Windows\System32\WindowsPowerShell\v1.0` ao PATH). Fallback por caminho
+  absoluto (`%SystemRoot%\System32\...\powershell.exe` e `Sysnative` para
+  processo 32-bit) entra na lista de candidatos
+
+### Notes
+
+- Frota sem tasks presas: varredura 29/07 — 0 tasks nao-terminais nos 10
+  projetos. GuardLine 2bd9da5de2dd COMPLETED 1.0 confirma o pipeline pos
+  0.4.35–0.4.40. printbee 1d63d2a5cb28 INCOMPLETE por suite pre-existente
+  quebrada na raiz (pytest failed + npm test timeout) — pendencia conhecida:
+  baseline de testes pre-task para distinguir falha introduzida de
+  pre-existente
+
 ## 0.4.40 - 2026-07-28
 
 Auditoria de uso da frota — descoberta de testes cega a stack em subdiretórios.

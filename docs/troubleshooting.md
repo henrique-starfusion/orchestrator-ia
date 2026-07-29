@@ -559,6 +559,23 @@ ao Popen destacado. `graphify hook install` desfaz o fix — basta rodar
 `orchestrator update` para reaplicar. Backups: `*.bak-orchestrator-*` ao lado
 do hook.
 
+## Agente recusa orquestrar: "sou filho" com var vazia (bug-057, 0.4.41+)
+
+Sintoma: o agente principal diz que é delegado e faz tudo inline;
+`ORCHESTRATOR_CHILD_AGENT` aparece no ambiente **vazia** (herdada de shell).
+
+A partir de 0.4.41 a flag é por VALOR: vazio ou `0` não é filho — em runtime,
+guard, Invoke-RoutedAgent e nos textos dos adapters. Só o valor `1` (setado
+pelo runtime no processo delegado) identifica o filho.
+
+## "PowerShell nao encontrado" em shell de agente (bug-058, 0.4.41+)
+
+Sintoma: `orchestrator` falha porque o PATH do shell não tem System32.
+
+A partir de 0.4.41 o CLI tenta também os caminhos absolutos
+`%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe` (e `Sysnative`).
+Não é preciso mexer no PATH.
+
 ## Ver também
 
 - [`cli-reference.md`](cli-reference.md)

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Coroutine, TypeVar
 
 from orchestrator_runtime.agents.base import AgentRequest
-from orchestrator_runtime.agents.process import redact
+from orchestrator_runtime.agents.process import is_child_agent, redact
 from orchestrator_runtime.config import load_config, resolve_default_workspace
 from orchestrator_runtime.mcp.errors import McpError, McpSecurityError
 from orchestrator_runtime.mcp.schemas import (
@@ -334,7 +334,7 @@ class OrchestratorMcpTools:
             raise McpSecurityError("cursor nao pode ser worker")
         if len(data.objective) > MAX_PROMPT_CHARS:
             raise McpSecurityError("objective exceeds max size")
-        if os.environ.get("ORCHESTRATOR_CHILD_AGENT"):
+        if is_child_agent():
             raise McpSecurityError("recursao bloqueada (ORCHESTRATOR_CHILD_AGENT)")
 
         if data.read_only and data.role in WRITE_ROLES:

@@ -21,7 +21,9 @@ $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'Orchestrator.Common.ps1')
 
-if (-not [string]::IsNullOrWhiteSpace($env:ORCHESTRATOR_CHILD_AGENT)) {
+# bug-057: flag de filho e VALOR, nao presenca — vazia/'0' herdadas nao bloqueiam.
+$childFlag = ([string]$env:ORCHESTRATOR_CHILD_AGENT).Trim()
+if ($childFlag -and $childFlag -ne '0') {
     throw '[ERRO] ORCHESTRATOR_CHILD_AGENT presente: agente filho nao pode delegar (anti-recursao).'
 }
 

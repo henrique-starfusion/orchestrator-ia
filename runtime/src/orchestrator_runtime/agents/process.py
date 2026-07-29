@@ -43,6 +43,17 @@ def sanitize_env(env: dict[str, str] | None = None) -> dict[str, str]:
     return base
 
 
+def is_child_agent(env: dict[str, str] | None = None) -> bool:
+    """Flag de filho é VALOR, não presença (bug-057).
+
+    Shells herdam ``ORCHESTRATOR_CHILD_AGENT=`` vazia (``export VAR=`` num
+    wrapper) e o agente principal se achava delegado — recusava orquestrar e
+    fazia tudo inline. Vazia ou ``0`` = não é filho; o runtime seta ``1``.
+    """
+    src = os.environ if env is None else env
+    return (src.get("ORCHESTRATOR_CHILD_AGENT") or "").strip() not in ("", "0")
+
+
 def redact(text: str) -> str:
     # Evita gravar linhas que parecem secrets.
     lines = []
@@ -117,7 +128,7 @@ class CliExecutor:
     ) -> ProcessResult:
         if heartbeat_s is None:
             heartbeat_s = self.heartbeat_s
-        if not allow_nested and os.environ.get("ORCHESTRATOR_CHILD_AGENT"):
+        if not allow_nested and is_child_agent():
             raise RecursionBlockedError(
                 "ORCHESTRATOR_CHILD_AGENT presente: agente filho nao pode delegar."
             )

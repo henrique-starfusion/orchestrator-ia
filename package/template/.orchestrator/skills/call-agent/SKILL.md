@@ -9,7 +9,7 @@ Invoke another agent CLI with the correct model for the task, using declarative 
 
 ## Anti-recursion (check FIRST)
 
-If the environment variable `ORCHESTRATOR_CHILD_AGENT` is set, you ARE a delegated child: do NOT delegate further. Do the work yourself.
+If `ORCHESTRATOR_CHILD_AGENT` has a non-empty value other than `0` (the runtime sets `1`), you ARE a delegated child: do NOT delegate further. Do the work yourself. An empty inherited value does NOT make you a child.
 When spawning a child, set `ORCHESTRATOR_CHILD_AGENT=1` in its environment.
 
 ## Flow

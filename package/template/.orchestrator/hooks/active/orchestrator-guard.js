@@ -62,7 +62,10 @@ function readStdin() {
 }
 
 function main() {
-  if (process.env.ORCHESTRATOR_CHILD_AGENT) return 0;
+  // bug-057: flag de filho e VALOR, nao presenca — vazia/'0' herdadas de
+  // shells nao silenciam o guard nem fazem o agente principal virar "filho".
+  const childFlag = String(process.env.ORCHESTRATOR_CHILD_AGENT || '').trim();
+  if (childFlag && childFlag !== '0') return 0;
   if ((process.env.ORCHESTRATOR_GUARD || '').toLowerCase() === 'off') return 0;
 
   const root = process.env.CLAUDE_PROJECT_DIR || process.cwd();

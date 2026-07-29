@@ -270,8 +270,17 @@ function parseArgs(argv) {
 }
 
 function findPowerShell() {
+  // bug-058: shells de agente chegam com PATH sem System32 — "powershell.exe"
+  // nu não resolve e o wrapper morria sem alternativa. Caminhos absolutos de
+  // sistema entram como fallback (Sysnative cobre processo 32-bit em SO 64).
+  const sysRoot = process.env.SystemRoot || process.env.windir || 'C:\\Windows';
   const candidates = process.platform === 'win32'
-    ? ['powershell.exe', 'pwsh.exe']
+    ? [
+        'powershell.exe',
+        'pwsh.exe',
+        path.join(sysRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+        path.join(sysRoot, 'Sysnative', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+      ]
     : ['pwsh', 'powershell'];
 
   for (const name of candidates) {

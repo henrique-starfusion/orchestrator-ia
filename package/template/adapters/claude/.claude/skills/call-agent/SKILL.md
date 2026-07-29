@@ -12,4 +12,4 @@ Quick reference:
 2. Read `.orchestrator/agents/profiles/<client>.json` (invocation mechanics).
 3. Assemble and run, or shortcut: `orchestrator dispatch --task-class <class> --client <c> --prompt "..."`.
 
-Never delegate if `ORCHESTRATOR_CHILD_AGENT` is set.
+Never delegate if `ORCHESTRATOR_CHILD_AGENT` has a non-empty value other than `0` (an empty inherited value does not count).
