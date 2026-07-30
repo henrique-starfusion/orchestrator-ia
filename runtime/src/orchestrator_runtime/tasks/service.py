@@ -1897,6 +1897,16 @@ class TaskService:
         return (
             "Valide a tarefa e responda APENAS JSON com status/score/blocking_issues.\n"
             f"{child}\n"
+            # bug-067 — o juiz roda `git status` com as próprias ferramentas e
+            # via arquivos sujos da INFRA do orquestrador (update/propagação,
+            # adapters) como "alteração fora de escopo" — iter 1 da task
+            # c003522e25e2 (printbee) foi reprovada por isso. Não é trabalho
+            # do agente nem violação: ignorar explicitamente.
+            "Infra do orquestrador (NUNCA é escopo da task nem violação de "
+            "escopo, mesmo suja no `git status`): .orchestrator/, .wolf/, "
+            ".cursor/, .codex/, .claude/, .gemini/, .kimi/, AGENTS.md, "
+            "CLAUDE.md, CURSOR.md, GEMINI.md, KIMI.md. Ignore esses arquivos "
+            "ao julgar escopo e changed_files.\n"
             f"Prompt original: {task.prompt}\n"
             f"Critérios: {dumps([c.model_dump() for c in task.acceptance_criteria])}\n"
             f"Diff/arquivos: {changed_files}\n"

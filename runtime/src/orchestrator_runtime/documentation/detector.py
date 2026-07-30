@@ -82,6 +82,29 @@ class DocumentationUpdater:
 
 
 class DocumentationValidator:
+    @staticmethod
+    def _checkable_target(target: str) -> str | None:
+        """Normaliza alvo de link markdown para checagem em disco; None = não
+        verificável (não pode reprovar).
+
+        bug-066 — task c003522e25e2 (printbee) foi APROVADA com 1.0 pelo
+        validador e morreu no gate documental por causa de um link LEGÍTIMO
+        que a própria task escreveu: `/openapi/diagrams/<arquivo>.svg` é
+        caminho de URL do dev server (dir public do frontend) com placeholder
+        de nome, não link de arquivo. O checker tratava como path relativo,
+        resolvia para fora do projeto e retornava "failed".
+        """
+        from urllib.parse import unquote
+
+        t = target.split("#", 1)[0].split("?", 1)[0].strip()
+        if not t:
+            return None  # âncora pura (#secao) ou query pura
+        if t.startswith(("/", "~")):
+            return None  # rota de servidor/public ou home — não é filesystem
+        if "<" in t or ">" in t:
+            return None  # placeholder em prosa (<arquivo>.svg)
+        return unquote(t)
+
     def validate(self, project_path: Path, files: list[str]) -> str:
         for rel in files:
             path = project_path / rel
@@ -93,8 +116,11 @@ class DocumentationValidator:
                 text = path.read_text(encoding="utf-8", errors="ignore")
                 # broken local markdown links check (best-effort)
                 for match in re.findall(r"\[([^\]]+)\]\(([^)]+)\)", text):
-                    target = match[1]
-                    if target.startswith(("http://", "https://", "#", "mailto:")):
+                    raw = match[1]
+                    if raw.startswith(("http://", "https://", "#", "mailto:")):
+                        continue
+                    target = self._checkable_target(raw)
+                    if target is None:
                         continue
                     linked = (path.parent / target).resolve()
                     try:

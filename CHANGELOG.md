@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+## 0.4.45 - 2026-07-30
+
+Aprovado 1.0 pelo juiz, executado pelo gate documental — por um link válido.
+
+### Fixed
+
+- **bug-066** — a task c003522e25e2 (printbee) passou no determinístico e no
+  juiz LLM com **1.0** e morreu em CONSOLIDATING: "validação documental não
+  passou". Causa: o link checker do `DocumentationValidator` tratava
+  `/openapi/diagrams/<arquivo>.svg` — caminho de URL do dev server (dir
+  public do frontend) com placeholder, escrito PELA própria task — como
+  path de filesystem; resolvia para fora do projeto e retornava "failed".
+  O checker agora ignora alvos não-verificáveis em disco (rota
+  site-absolute `/...`, placeholder `<...>`, âncora pura) e normaliza
+  fragmento `#secao`, query `?...` e `%20` antes do `exists()`. Links
+  relativos quebrados e escapes para fora do projeto continuam reprovando
+- **bug-067** — o juiz LLM roda `git status` com as próprias ferramentas e
+  via os arquivos de INFRA do orquestrador (`.orchestrator/`, `.cursor/`,
+  `.wolf/`, `AGENTS.md`..., sujos por update/propagação/adapters) como
+  "alteração fora de escopo" — VAL-002 reprovou a iter 1 da mesma task
+  mesmo com o changed_files do executor limpo. O prompt do validador agora
+  lista explicitamente a infra do orquestrador como NUNCA-escopo
+
+### Notes
+
+- Varredura da frota (últimas 40h): 6 tasks — printbee 3 COMPLETED 1.0
+  (feature, ajuste visual) + GuardLine.BR 1 COMPLETED 1.0; a única morte
+  injusta era o par bug-066/067. A INCOMPLETE 8193684389b1 (/loop-bug UI)
+  parou por same_issue_repeat_limit com a mesma issue legítima 2x —
+  comportamento correto: bug de browser que nem executor nem validador
+  conseguem evidenciar via CLI
+
 ## 0.4.44 - 2026-07-30
 
 A suite quebrada que condenava a task — antes de ela começar.
