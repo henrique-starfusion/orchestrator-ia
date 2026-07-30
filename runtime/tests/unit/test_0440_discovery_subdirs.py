@@ -38,6 +38,9 @@ def test_run_all_cai_no_fallback_de_subdirs(tmp_path: Path, monkeypatch: pytest.
     frontend = tmp_path / "src" / "frontend"
     frontend.mkdir(parents=True)
     (frontend / "package.json").write_text("{}\n", encoding="utf-8")
+    # bug-063: sem node_modules o npm test vira skipped/deps_missing — o alvo
+    # deste teste e o fallback de subdirs (bug-056), entao deps instaladas.
+    (frontend / "node_modules").mkdir()
     monkeypatch.setattr(disc_mod, "which", lambda name: f"/fake/{name}")
 
     executed: list[tuple[list[str], Path]] = []

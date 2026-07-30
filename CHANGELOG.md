@@ -2,6 +2,55 @@
 
 ## Unreleased
 
+## 0.4.43 - 2026-07-29
+
+A task que nascia morta no spawn — e os testes que cobravam ambiente como
+mérito. Dissecado na primeira task real do corehub pós-0.4.40
+(`b6c4e9ba0a15`, LGPD backend .NET): INCOMPLETE score 0.25 com executor E
+corrector zerados e 20 min queimados em teste que nunca terminaria.
+
+### Fixed
+
+- **bug-061** — cmd.exe processa `.CMD`/`.BAT` com teto próprio de **8191
+  chars** por linha, muito abaixo dos 32767 do CreateProcess que o
+  `ARGV_LIMIT` (30000) assumia. Prompt de 9.635 chars para `codex.CMD`
+  morria no spawn com "Linha de comando muito longa." (exit 1, 29 bytes)
+  ANTES de o agente iniciar — reproduzido na máquina: 8.100 passa, 8.200
+  falha. Era a causa oculta do padrão da frota "codex executor: 30 failed /
+  17 ok". O teto agora é calculado pelo executável resolvido
+  (`_effective_argv_limit`) sobre a linha COM quoting (`list2cmdline`);
+  CLI sem suporte a stdin e linha acima do teto falha pré-spawn com
+  `[argv-overflow]` (exit 126) em vez do erro críptico do cmd.exe
+- **bug-062** — .NET 10 preview (10.0.400) recusa `dotnet test` sem argumento
+  mesmo com UM `.sln` na pasta quando há `.csproj` em subdirs (MSB1011,
+  reproduzido no corehub). Discovery emite o alvo explícito
+  (`.sln` > `.slnx` > `.csproj`) — e passa a reconhecer o formato `.slnx`
+  também no marcador de subdirs
+- **bug-063** — efeito colateral do bug-056: a discovery mais ampla passou a
+  achar testes não-executáveis. `npm test` sem `node_modules` ("'stencil'
+  não é reconhecido", cobrado como mérito com `failure_kind=introduced`)
+  agora vira `skipped/deps_missing` — mesmo tratamento "ambiente ≠ mérito"
+  do bug-050. E `ng test` sem `--watch=false` (Karma em modo watch) travou
+  601s até timeout, 2x por task; o runner anexa `-- --watch=false`,
+  convertendo hang em falha rápida e honesta
+- **bug-064** — double-submit (2 `create_task` em 16s via MCP) gerava tasks
+  gêmeas e uma travava RECEIVED sem dono. `create_task` ficou idempotente
+  (mesmo prompt + mesmo dry_run em 120s devolve a existente, com evento de
+  auditoria) e o sweep de RECEIVED velhas também roda no `status()`/
+  `list_tasks()` — antes só rodava ao criar task nova. Bônus: o roundtrip
+  SQLite perdia o tzinfo do `created_at`, o `except` engolia o TypeError e
+  **a varredura nunca cancelava nada lido do DB** — corrigido assumindo UTC
+  em timestamp naïve
+
+### Notes
+
+- Teste do bug-041 (`test_cli_sem_stdin_nao_perde_o_texto`) atualizado para o
+  novo contrato: sem stdin + overflow = falha pré-spawn `[argv-overflow]`,
+  não spawn condenado
+- corehub continua com pendência de PROJETO (não do orquestrador): restore
+  NuGet quebrado (`Value cannot be null. (Parameter 'path1')`) e tsconfig de
+  specs do frontend sem inputs (TS18003)
+
 ## 0.4.42 - 2026-07-29
 
 A fila presa atrás de uma task cancelada.

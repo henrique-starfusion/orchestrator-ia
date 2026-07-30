@@ -119,7 +119,14 @@ class TaskService:
                 continue
             try:
                 ts = task.created_at.replace("Z", "+00:00")
-                age_s = (now - datetime.fromisoformat(ts)).total_seconds()
+                dt = datetime.fromisoformat(ts)
+                # Roundtrip pelo SQLite perde o tzinfo ("...+00:00" vira
+                # string naïve); subtrair de `now` (aware) levantava TypeError
+                # e o except engolia — a varredura nunca cancelava NADA lido
+                # do DB. Assumir UTC quando naïve.
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                age_s = (now - dt).total_seconds()
             except Exception:
                 continue
             if age_s > cutoff_s:
@@ -131,6 +138,33 @@ class TaskService:
                 )
                 cancelled += 1
         return cancelled
+
+    # bug-064 — janela de idempotencia do create_task: double-submit (MCP/CLI
+    # chamando create 2x seguidas; medido: 16s de intervalo no corehub) gerava
+    # tasks gêmeas e uma travava RECEIVED sem dono.
+    _DEDUP_WINDOW_S = 120
+
+    def _find_recent_duplicate(self, prompt: str, *, dry_run: bool) -> TaskRecord | None:
+        """Task nao-terminal recente com o MESMO prompt e mesmo dry_run."""
+        now = datetime.now(timezone.utc)
+        for task in self.repo.list_tasks(limit=50):
+            if task.status in TERMINAL_STATES:
+                continue
+            if task.prompt != prompt:
+                continue
+            if bool(getattr(task.constraints, "dry_run", False)) != dry_run:
+                continue
+            try:
+                ts = task.created_at.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(ts)
+                if dt.tzinfo is None:  # roundtrip SQLite perde o tz; assumir UTC
+                    dt = dt.replace(tzinfo=timezone.utc)
+                age_s = (now - dt).total_seconds()
+            except Exception:  # noqa: BLE001
+                continue
+            if 0 <= age_s <= self._DEDUP_WINDOW_S:
+                return task
+        return None
 
     def create_task(
         self,
@@ -148,6 +182,20 @@ class TaskService:
         # ("exigÃªncia"); repara na ingestão, antes de persistir/analisar.
         prompt = repair_mojibake(prompt)
         self._cancel_stale_received()
+        # bug-064 — idempotencia: mesmo prompt + mesmo dry_run em janela curta
+        # com task nao-terminal devolve a existente (auditada com evento dedup)
+        # em vez de criar duplicata que pode travar RECEIVED sem dono.
+        existing = self._find_recent_duplicate(prompt, dry_run=dry_run)
+        if existing is not None:
+            event = RuntimeEvent(
+                task_id=existing.id,
+                type=EventType.TASK_CREATED,
+                agent="runtime",
+                data={"dedup": True, "prompt": prompt[:200]},
+            )
+            self.bus.emit(event)
+            self.repo.add_event(event)
+            return existing
         constraints = TaskConstraints(
             maximum_iterations=max_iterations
             or self.config.limits.maximum_iterations,
@@ -251,6 +299,9 @@ class TaskService:
         return task
 
     def list_tasks(self, limit: int = 50) -> list[TaskRecord]:
+        # bug-064 — zumbis RECEIVED so eram varridos no create_task; quem
+        # observa por MCP (list/status) agora tambem dispara a limpeza.
+        self._cancel_stale_received()
         return self.repo.list_tasks(limit=limit)
 
     def cancel(self, task_id: str, reason: str = "cancel requested") -> TaskRecord:
@@ -326,6 +377,9 @@ class TaskService:
         return fresh
 
     def status(self, task_id: str) -> dict[str, Any]:
+        # bug-064 — zumbis RECEIVED so eram varridos no create_task; o poll de
+        # status (MCP) tambem dispara a limpeza, senao task orfã fica eterna.
+        self._cancel_stale_received()
         task = self.get(task_id)
         out: dict[str, Any] = {
             "id": task.id,

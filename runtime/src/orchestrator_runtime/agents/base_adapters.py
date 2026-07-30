@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -24,10 +25,36 @@ from orchestrator_runtime.errors import AgentUnavailableError
 # um prompt desse tamanho vai por stdin nos dois — um caminho so.
 ARGV_LIMIT = 30000
 
+# cmd.exe processa .CMD/.BAT com teto proprio de 8191 chars por linha — muito
+# abaixo dos 32767 do CreateProcess. bug-061 (corehub, 0.4.40): prompt de 9635
+# chars para codex.CMD morria no spawn com "Linha de comando muito longa."
+# (exit 1, 29 bytes de stderr) ANTES de o agente iniciar; executor E corrector
+# zerados e a task INCOMPLETE sem trabalho. Reproduzido: 8100 passa, 8200 falha.
+CMD_ARGV_LIMIT = 8000
+
 
 def _argv_len(argv: list[str]) -> int:
     # +1 por argumento: o separador que o Windows conta ao montar a linha.
     return sum(len(a) + 1 for a in argv)
+
+
+def _effective_argv_limit(argv: list[str]) -> int:
+    """Teto real da linha de comando conforme o executavel resolvido."""
+    exe0 = str(argv[0]).lower() if argv else ""
+    if exe0.endswith((".cmd", ".bat")):
+        return CMD_ARGV_LIMIT
+    return ARGV_LIMIT
+
+
+def _cmdline_len(argv: list[str]) -> int:
+    """Tamanho da linha apos quoting — e ela que CreateProcess/cmd.exe contam,
+    nao a soma crua dos argumentos (prompt com aspas/espacos incha no escape)."""
+    if os.name == "nt":
+        try:
+            return len(subprocess.list2cmdline([str(a) for a in argv]))
+        except Exception:  # noqa: BLE001
+            pass
+    return _argv_len(argv)
 
 
 class ProfileCliAdapter(AgentAdapter):
@@ -138,14 +165,40 @@ class ProfileCliAdapter(AgentAdapter):
         prompt_via = str((invoke.get("prompt_via") or "arg")).lower()
         # Nem todo CLI le o prompt do stdin. `kimi -p <prompt>` EXIGE o valor:
         # remover o texto deixaria um `-p` vazio e o CLI recusaria o comando.
-        # Nesse caso e melhor estourar no argv com erro explicito (WinError 206
-        # ja se explica) do que montar um comando invalido.
+        # Nesse caso o pre-flight abaixo falha com diagnostico proprio em vez
+        # de entregar o erro criptico do cmd.exe/CreateProcess.
         stdin_ok = invoke.get("prompt_stdin", True) is not False
-        if stdin_ok and (prompt_via == "stdin" or _argv_len(command) > ARGV_LIMIT):
+        limit = _effective_argv_limit(command)
+        if stdin_ok and (prompt_via == "stdin" or _cmdline_len(command) > limit):
             command = self.build_command(request, prompt_in_argv=False)
             if status.path and command:
                 command = [status.path, *command[1:]]
             stdin_text = request.prompt
+        # bug-061 — sem stdin e linha acima do teto do executavel: falhar com
+        # explicacao clara. O caminho antigo entregava o erro cru do cmd.exe
+        # ("Linha de comando muito longa.", exit 1) e a task seguia para
+        # validacao como se o agente tivesse trabalhado.
+        if stdin_text is None and _cmdline_len(command) > limit:
+            now = datetime.now(timezone.utc).isoformat()
+            return AgentResult(
+                session_id=session.id,
+                agent_id=self.id,
+                role=request.role,
+                status="failed",
+                exit_code=126,
+                stderr=(
+                    f"[argv-overflow] linha de comando com {_cmdline_len(command)} "
+                    f"chars excede o teto de {limit} do executavel {command[0]!r} "
+                    "(.CMD/.BAT passam pelo cmd.exe, teto 8191). Este CLI nao "
+                    "aceita prompt por stdin (invoke.prompt_stdin=false); "
+                    "encurte o prompt ou ajuste o profile."
+                ),
+                model=request.model,
+                command=command,
+                cwd=str(request.cwd),
+                started_at=started,
+                finished_at=now,
+            )
         result = self.executor.run(
             command,
             cwd=Path(request.cwd),

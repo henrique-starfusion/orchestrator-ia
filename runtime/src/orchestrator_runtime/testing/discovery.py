@@ -16,6 +16,32 @@ class DiscoveredTest:
     source: str
 
 
+def _dotnet_target(project_path: Path) -> str | None:
+    """Arquivo de solucao/projeto explicito para `dotnet test` (bug-062).
+
+    Preferencia: .sln (formato classico) > .slnx (novo no .NET 10) > .csproj.
+    Nome ordenado para resultado deterministico quando ha mais de um.
+    """
+    for pat in ("*.sln", "*.slnx", "*.csproj"):
+        matches = sorted(p.name for p in project_path.glob(pat))
+        if matches:
+            return matches[0]
+    return None
+
+
+def _npm_test_script(cwd: Path) -> str | None:
+    """Script `test` do package.json — para detectar harness em modo watch."""
+    import json
+
+    try:
+        data = json.loads((cwd / "package.json").read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+    scripts = data.get("scripts") or {}
+    test = scripts.get("test")
+    return str(test) if test else None
+
+
 class TestDiscovery:
     @staticmethod
     def _is_python_project(project_path: Path) -> bool:
@@ -57,9 +83,14 @@ class TestDiscovery:
             # o portão bloqueava toda iteração por ambiente (TestLive_OAuthMTLS_DES
             # na task ff270e3ff814, GuardLine). Testes unitários rodam normal.
             found.append(DiscoveredTest(["go", "test", "-short", "./..."], "unit", "go.mod"))
-        if list(project_path.glob("*.sln")) or list(project_path.glob("*.csproj")):
+        dotnet_target = _dotnet_target(project_path)
+        if dotnet_target:
+            # bug-062 — .NET 10 preview recusa `dotnet test` sem argumento
+            # mesmo com UM .sln na pasta quando ha .csproj em subdirs
+            # (MSB1011, reproduzido no corehub com SDK 10.0.400-preview).
+            # Alvo explicito resolve na hora — e cobre o formato novo .slnx.
             found.append(
-                DiscoveredTest(["dotnet", "test"], "unit", "dotnet")
+                DiscoveredTest(["dotnet", "test", dotnet_target], "unit", "dotnet")
             )
         if (project_path / "pom.xml").is_file():
             found.append(DiscoveredTest(["mvn", "test"], "unit", "pom.xml"))
@@ -99,7 +130,7 @@ class TestDiscovery:
         def _has_marker(d: Path) -> bool:
             if any((d / m).is_file() for m in self._SUBDIR_MARKERS):
                 return True
-            if list(d.glob("*.sln")) or list(d.glob("*.csproj")):
+            if list(d.glob("*.sln")) or list(d.glob("*.slnx")) or list(d.glob("*.csproj")):
                 return True
             tests_dir = d / "tests"
             return tests_dir.is_dir() and any(tests_dir.rglob("*.py"))
@@ -231,10 +262,41 @@ class TestRunner:
                     }
                 )
                 continue
+            # bug-063 — `npm test` sem node_modules: dependencias nunca
+            # instaladas neste checkout; o script morre em <1s ("'stencil'
+            # nao e reconhecido") e era cobrado como merito (failure_kind
+            # "introduced") ate derrubar a task. Ambiente, nao merito.
+            if exe0 == "npm" and not (cwd / "node_modules").is_dir():
+                results.append(
+                    {
+                        "command": " ".join(spec.command),
+                        "category": spec.category,
+                        "exit_code": None,
+                        "duration_s": 0.0,
+                        "stdout": "",
+                        "stderr": (
+                            f"node_modules ausente em {cwd} — rode `npm install`; "
+                            "teste nao executado (erro de ambiente, nao falha de merito)"
+                        ),
+                        "status": "skipped",
+                        "discovery_source": spec.source,
+                        "failure_kind": "deps_missing",
+                    }
+                )
+                continue
             try:
                 env = {"PYTHONPATH": str(cwd)}
+                command = list(spec.command)
+                # bug-063 — `ng test` sem --watch=false entra em modo watch
+                # (Karma) e nunca sai: build quebrado (TS18003) segurou o
+                # processo 601s ate o timeout, 2x por task = 20min queimados
+                # no corehub. O flag converte em falha rapida e honesta.
+                if exe0 == "npm":
+                    script = _npm_test_script(cwd)
+                    if script and "ng test" in script and "--watch" not in script:
+                        command = [*command, "--", "--watch=false"]
                 result = self.executor.run(
-                    spec.command,
+                    command,
                     cwd=cwd,
                     timeout_s=600,
                     env=env,
@@ -246,7 +308,7 @@ class TestRunner:
                     failure_kind = "introduced"
                 results.append(
                     {
-                        "command": " ".join(spec.command),
+                        "command": " ".join(command),
                         "category": spec.category,
                         "exit_code": result.exit_code,
                         "duration_s": time.monotonic() - started,

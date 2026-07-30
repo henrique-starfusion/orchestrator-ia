@@ -98,10 +98,10 @@ async def test_prompt_via_stdin_no_profile_e_respeitado(project: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_cli_sem_stdin_nao_perde_o_texto(project: Path) -> None:
-    """`kimi -p <prompt>` exige o valor: `-p` vazio seria comando invalido.
-
-    Melhor estourar no argv com WinError 206 — que desde a 0.4.30 se explica —
-    do que montar um comando que o CLI recusa.
+    """0.4.43 (bug-061): sem stdin e linha acima do teto, o adapter falha ANTES
+    do spawn com [argv-overflow] — em vez de entregar o prompt a um
+    CreateProcess condenado (WinError 206) ou ao erro criptico do cmd.exe.
+    O prompt permanece visivel no comando registrado para auditoria.
     """
     kimi = {
         "id": "kimi",
@@ -113,11 +113,15 @@ async def test_cli_sem_stdin_nao_perde_o_texto(project: Path) -> None:
     huge = "x" * (ARGV_LIMIT + 5_000)
     request = AgentRequest(role="executor", prompt=huge, cwd=str(project))
 
-    await adapter.continue_session(AgentSession(agent_id="kimi", role="executor"), request)
+    result = await adapter.continue_session(
+        AgentSession(agent_id="kimi", role="executor"), request
+    )
 
-    call = spy.calls[0]
-    assert call["stdin_text"] is None
-    assert huge in call["command"], "prompt nao pode sumir do argv quando stdin nao serve"
+    assert result.status == "failed"
+    assert result.exit_code == 126
+    assert "[argv-overflow]" in result.stderr
+    assert huge in result.command, "prompt fica registrado no comando para auditoria"
+    assert spy.calls == [], "nao spawna processo condenado a morrer no cmd.exe"
 
 
 def test_flag_de_prompt_sobrevive_sem_o_texto(project: Path) -> None:
