@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+## 0.4.44 - 2026-07-30
+
+A suite quebrada que condenava a task — antes de ela começar.
+
+### Fixed
+
+- **bug-065** — baseline de testes pré-executor. Suite já quebrada na entrada
+  (corehub: restore NuGet falho no CLI — `Value cannot be null (path1)` em
+  qualquer SDK; printbee: suite da raiz quebrada, INCOMPLETE 1d63d2a5cb28,
+  pendência assumida na 0.4.41) era classificada `failure_kind="introduced"`
+  e a task estava condenada a INCOMPLETE por mérito alheio. Agora:
+  - o runtime captura uma **baseline** (`run_all`) ANTES de o executor tocar
+    a árvore, persistida em `test_runs` com `discovery_source=baseline:*`
+  - falha na iteração com a mesma assinatura (comando + exit code) da
+    baseline vira `"preexisting"` — o determinístico já a honrava como
+    não-bloqueante, mas o **segundo gate** (`TEST-FAIL`, "testes falhos
+    sempre forçam correção") ainda contava pré-existente como falha:
+    `tests_passed` e a descrição do issue agora ignoram `preexisting`
+  - prompt do corretor separa "corrija até passarem" (introduced) de
+    "pré-existentes — NÃO é exigido corrigir"; prompt do validador carrega
+    `failure_kind` com a regra explícita
+  - falha da baseline que PASSA após o trabalho conta como passed (melhoria
+    real, não isenção)
+  - e2e: suite pré-quebrada + entrega real → COMPLETED 0.95 iter 1 (antes:
+    INCOMPLETE 0.4 com TEST-FAIL)
+
 ## 0.4.43 - 2026-07-29
 
 A task que nascia morta no spawn — e os testes que cobravam ambiente como

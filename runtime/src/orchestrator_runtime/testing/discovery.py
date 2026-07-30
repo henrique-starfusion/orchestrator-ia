@@ -170,7 +170,10 @@ class TestRunner:
         self.executor = executor
 
     def run_all(
-        self, project_path: Path, extra_dirs: list[str] | None = None
+        self,
+        project_path: Path,
+        extra_dirs: list[str] | None = None,
+        baseline: list[dict] | None = None,
     ) -> list[dict]:
         """Descobre e roda testes na raiz e em ``extra_dirs`` (bug-048).
 
@@ -179,6 +182,11 @@ class TestRunner:
         validador reprovava tests_pass por falta de evidência, mesmo com o
         trabalho feito num repo filho. ``extra_dirs`` são os repos filhos
         tocados pelos changed_files da iteração.
+
+        ``baseline`` (bug-065): resultado de um run_all capturado ANTES de o
+        executor tocar a árvore. Falha com a mesma assinatura (comando + exit
+        code) da baseline é "preexisting" — quebra pré-existente, não
+        introduzida pelo agente; o det honra como não-bloqueante.
         """
         discovery = TestDiscovery()
         tests: list[tuple[DiscoveredTest, Path]] = [
@@ -306,6 +314,19 @@ class TestRunner:
                 failure_kind = None
                 if status == "failed":
                     failure_kind = "introduced"
+                    # bug-065 — mesma assinatura (comando + exit code) já
+                    # falhava na baseline pré-executor: quebra pré-existente,
+                    # não mérito da iteração. deterministic.py já trata
+                    # "preexisting" como não-bloqueante.
+                    if baseline:
+                        sig = (" ".join(command), result.exit_code)
+                        for b in baseline:
+                            if (
+                                (b.get("command"), b.get("exit_code")) == sig
+                                and b.get("status") not in {"passed", "skipped"}
+                            ):
+                                failure_kind = "preexisting"
+                                break
                 results.append(
                     {
                         "command": " ".join(command),

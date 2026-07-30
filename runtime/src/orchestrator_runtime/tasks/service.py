@@ -835,6 +835,40 @@ class TaskService:
                 raise RuntimeError(f"Estado inesperado antes de executar: {task.status}")
 
             role = "corrector" if task.iteration > 1 else "executor"
+            # bug-065 — baseline de testes ANTES de o executor tocar a árvore.
+            # Suite já quebrada na entrada (corehub: restore NuGet falho no
+            # CLI; printbee: suite da raiz quebrada — INCOMPLETE 1d63d2a5cb28)
+            # era cobrada como "introduced" e a task estava condenada por
+            # mérito alheio. Assinatura igual na iteração vira "preexisting".
+            if task.iteration == 1 and "test_baseline" not in self._run_ctx:
+                try:
+                    baseline = self.tests.run_all(self.config.project_path)
+                    self._run_ctx["test_baseline"] = baseline
+                    for br in baseline:
+                        self.repo.add_test_run(
+                            task_id=task.id,
+                            **{
+                                **br,
+                                "discovery_source": f"baseline:{br.get('discovery_source')}",
+                            },
+                        )
+                    self.bus.emit(
+                        RuntimeEvent(
+                            task_id=task.id,
+                            type=EventType.TEST_COMPLETED,
+                            data={
+                                "phase": "baseline",
+                                "results": [
+                                    {"command": t["command"], "status": t["status"]}
+                                    for t in baseline
+                                ],
+                            },
+                        )
+                    )
+                except Exception as base_exc:  # noqa: BLE001
+                    # Infra no baseline: segue sem ele (comportamento estrito
+                    # de antes da 0.4.44) em vez de derrubar a task.
+                    self._run_ctx["test_baseline_error"] = str(base_exc)
             exec_prompt = self._build_executor_prompt(
                 task,
                 last_validation,
@@ -1111,7 +1145,9 @@ class TaskService:
                 }
             )
             test_results = self.tests.run_all(
-                self.config.project_path, extra_dirs=nested_test_dirs
+                self.config.project_path,
+                extra_dirs=nested_test_dirs,
+                baseline=self._run_ctx.get("test_baseline"),
             )
             last_test_results = test_results
             self._run_ctx["test_results"] = test_results
@@ -1124,8 +1160,14 @@ class TaskService:
                     data={"results": [{"command": t["command"], "status": t["status"]} for t in test_results]},
                 )
             )
+            # bug-065 — falha "preexisting" (mesma assinatura da baseline
+            # pré-executor) NÃO derruba o gate de testes: é quebra que já
+            # existia, não mérito da iteração. Sem isto, o TEST-FAIL abaixo
+            # condenava a task mesmo com o det aprovando (e2e 0.4.44).
             tests_passed = all(
-                t["status"] in {"passed", "skipped"} for t in test_results
+                t["status"] in {"passed", "skipped"}
+                or t.get("failure_kind") == "preexisting"
+                for t in test_results
             )
 
             # VALIDATING
@@ -1229,6 +1271,7 @@ class TaskService:
                     t
                     for t in test_results
                     if t.get("status") not in {"passed", "skipped"}
+                    and t.get("failure_kind") != "preexisting"
                 ]
                 last_validation["status"] = "rejected"
                 issues = list(last_validation.get("blocking_issues") or [])
@@ -1653,9 +1696,23 @@ class TaskService:
                 for t in test_results
                 if t.get("status") not in {"passed", "skipped"}
             ]
-            if failed:
+            introduced = [t for t in failed if t.get("failure_kind") != "preexisting"]
+            preexisting = [t for t in failed if t.get("failure_kind") == "preexisting"]
+            if introduced:
                 parts.append("Testes que falharam (corrija até passarem):")
-                for t in failed:
+                for t in introduced:
+                    parts.append(
+                        f"- cmd={t.get('command')} status={t.get('status')} "
+                        f"exit={t.get('exit_code')}"
+                    )
+            if preexisting:
+                # bug-065 — já falhavam na baseline: informar para não
+                # assustar, mas NÃO exigir correção (fora do escopo da task).
+                parts.append(
+                    "Falhas pré-existentes da suíte (já falhavam antes da "
+                    "task; NÃO é exigido corrigir):"
+                )
+                for t in preexisting:
                     parts.append(
                         f"- cmd={t.get('command')} status={t.get('status')} "
                         f"exit={t.get('exit_code')}"
@@ -1843,7 +1900,13 @@ class TaskService:
             f"Prompt original: {task.prompt}\n"
             f"Critérios: {dumps([c.model_dump() for c in task.acceptance_criteria])}\n"
             f"Diff/arquivos: {changed_files}\n"
-            f"Testes: {dumps([{k: t.get(k) for k in ('command','status','exit_code')} for t in tests])}\n"
+            # bug-065 — failure_kind no payload: o juiz precisa distinguir
+            # falha introduzida de pré-existente (baseline) para não reprovar
+            # mérito alheio.
+            f"Testes: {dumps([{k: t.get(k) for k in ('command','status','exit_code','failure_kind')} for t in tests])}\n"
+            "Regra: failure_kind=preexisting significa que o teste JÁ "
+            "falhava antes da task (baseline pré-executor); não reprove a "
+            "task por ele. Falhas introduced sim são mérito da iteração.\n"
             f"Validação determinística: {dumps(det)}\n"
             f"{self._stack_hint()}\n"
             f"{skills_section}"
