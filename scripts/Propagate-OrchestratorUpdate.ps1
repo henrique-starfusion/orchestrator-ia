@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     Propaga update do pacote @starfusion/orchestrator para projetos registrados.
@@ -166,6 +166,21 @@ foreach ($target in $targets) {
     $row.to = $newVer
     $row.status = 'OK'
     $row.detail = "$from -> $newVer"
+    # bug-068 — .orchestrator versionado no git do projeto: a propagacao
+    # escreve na working tree, mas checkout/restore do PROJETO reverte para a
+    # versao commitada (printbee regrediu 0.4.44 -> 0.4.42 assim; commit
+    # 849379b0b congelou a 0.4.42 no repo). Todas as guardas anti-downgrade
+    # (install/update/propagate) protegem o CLI, nao o git alheio: avisar.
+    $gitTracked = $false
+    try {
+        git -C $target ls-files --error-unmatch .orchestrator/VERSION 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) { $gitTracked = $true }
+    }
+    catch { $gitTracked = $false }
+    if ($gitTracked) {
+        $row.detail = "$from -> $newVer | AVISO: .orchestrator versionado no git do projeto; commitar ou o update pode regredir"
+        Write-Host ("[AVISO] {0} - .orchestrator rastreado pelo git do projeto; checkout/restore pode regredir a versao" -f $target)
+    }
     $results.Add($row) | Out-Null
     Register-OrchestratorProject -ProjectPath $target -Version $newVer | Out-Null
     Write-Host ("[OK] Propagado: {0} ({1})" -f $target, $row.detail)

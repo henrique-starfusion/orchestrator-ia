@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+## 0.4.46 - 2026-07-30
+
+A versão que regredia sozinha — e o bug impossível de provar.
+
+### Fixed
+
+- **bug-068** — printbee regrediu 0.4.44 → 0.4.42 entre propagações e
+  ninguém viu. Causa raiz: o `.orchestrator/` do printbee é **versionado no
+  git do próprio projeto** (commit 849379b0b congelou a 0.4.42 no repo);
+  checkout/restore derruba a working tree para a versão commitada. As três
+  guardas anti-downgrade do CLI (install exit 6, update exit 6, propagate
+  SKIP) protegem o orquestrador, não o git alheio. A propagação agora
+  detecta `.orchestrator/VERSION` rastreado pelo git do projeto e emite
+  `[AVISO]` + nota no relatório: commitar ou o update pode regredir
+- **bug-069** — task 8193684389b1 (printbee, "/loop-bug BUG CONFIRMADO no
+  navegador"): defeito de renderização; nem executor nem validador CLI
+  abrem browser, e o critério "Defeito reproduzido com evidência registrada"
+  foi lido como reprodução visual — rejeitado 2x idêntico até o
+  repeat-limit. Template do loop-bug agora escopa a evidência de UI: teste
+  que falha, DOM/snapshot do HTML gerado ou análise estática — screenshot
+  de navegador explicitamente NÃO exigido de agentes CLI
+
+### Notes
+
+- Observação do ciclo: frota quieta, zero tasks RECEIVED/QUEUED vivas em
+  todos os 12 projetos — watchdog do bug-064 confirmado em campo
+
 ## 0.4.45 - 2026-07-30
 
 Aprovado 1.0 pelo juiz, executado pelo gate documental — por um link válido.

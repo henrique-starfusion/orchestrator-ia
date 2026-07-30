@@ -75,14 +75,27 @@ LOOPS: dict[str, LoopSpec] = {
         ),
         task_type="implementation",
         stages=(
-            "Reproduzir o defeito e registrar a evidência (comando + saída).",
+            # bug-069 — task 8193684389b1 (printbee): bug de renderização no
+            # navegador; nem executor nem validador CLI abrem browser, e o
+            # validador reprovou 2x por falta de "evidência" impossível.
+            # Escopo explícito do que conta como evidência para bug de UI.
+            "Reproduzir o defeito e registrar a evidência (comando + saída). "
+            "Bug de UI/renderização: evidência = teste que falha, DOM/snapshot "
+            "do HTML gerado ou análise estática do código de render — agentes "
+            "CLI não abrem navegador.",
             "Diagnosticar a causa raiz; conferir todos os chamadores afetados.",
             "Escrever o teste que FALHA por causa do defeito.",
             "Corrigir no ponto comum a todos os chamadores, não no sintoma.",
             "Rodar o teste e a suíte; anexar a saída.",
         ),
         criteria=(
-            ("Defeito reproduzido com evidência registrada", _EVID),
+            (
+                "Defeito reproduzido com evidência registrada (comando+saída, "
+                "teste que falha ou log; bug de UI/renderização: DOM, snapshot "
+                "do HTML gerado ou análise estática — não exigir screenshot de "
+                "navegador de agentes CLI)",
+                _EVID,
+            ),
             ("Causa raiz identificada e corrigida no código", _WORK),
             ("Teste de regressão cobre o defeito e passa", _TEST),
         ),
