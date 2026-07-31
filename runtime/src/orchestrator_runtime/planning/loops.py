@@ -107,6 +107,109 @@ LOOPS: dict[str, LoopSpec] = {
             "defeito*",
         ),
     ),
+    "ui-probe": LoopSpec(
+        id="ui-probe",
+        title="sonda empírica e segura de UI",
+        goal=(
+            "Produzir prova empírica de UI: navegar e clicar nas superfícies "
+            "priorizadas para capturar o que quebra, em vez de auditar código."
+        ),
+        task_type="complex_analysis",
+        stages=(
+            "Preparar a sonda: usar o Playwright MCP se disponível; caso "
+            "contrário, executar npx playwright com cache "
+            "~/.cache/ms-playwright e manter qualquer script descartável fora "
+            "do repositório.",
+            "Definir e respeitar o boundary de segurança: exercer livremente "
+            "controles NÃO-mutantes (tabs, filtros, ordenação, paginação e "
+            "modais somente para abrir/cancelar); NUNCA clicar em Salvar, "
+            "Bloquear, Excluir, Aprovar ou submits em dado real. Em dúvida, "
+            "não clicar e listar o controle como 'não exercido'.",
+            "Localizar controles por ROLE com getByRole/getByLabel, nunca com "
+            "getByText exato.",
+            "Armar listeners ANTES do clique: response HTTP >=400, console "
+            "error, requestfailed e WebSocket.",
+            "Consolidar o roadmap em tabela superfície/controle | ação | "
+            "resultado | veredito | tag, com tags do vocabulário fixo, e "
+            "encerrar com o Top 3 must-fix.",
+        ),
+        criteria=(
+            (
+                "Relatório da sonda com tabela por superfície/controle e tags "
+                "do vocabulário fixo",
+                _EVID,
+            ),
+            (
+                "Capturas de listeners (HTTP 4xx/5xx, console, WebSocket) "
+                "anexadas ou descritas",
+                _EVID,
+            ),
+            (
+                "Screenshots ou trace salvos fora do repo, com caminho "
+                "registrado",
+                _EVID,
+            ),
+        ),
+        done_when=(
+            "todas as superfícies priorizadas foram sondadas e o roadmap tem "
+            "veredito por item"
+        ),
+        keywords=(
+            "sonda", "probe", "ui", "visual", "tela", "playwright", "demo",
+            "renderiza", "navegador", "browser",
+        ),
+    ),
+    "review": LoopSpec(
+        id="review",
+        title="revisão adversarial do código no HEAD",
+        goal=(
+            "Caçar o que está ERRADO no que acabou de ser entregue — não "
+            "verificar entregas; fazer leitura adversarial do código no HEAD."
+        ),
+        task_type="complex_analysis",
+        stages=(
+            "Fazer identity priming OBRIGATÓRIO com quatro papéis: SRE acordado "
+            "às 3h por um cenário de falha real; engenheiro de "
+            "segurança/privacidade; arquiteto perguntando 'se escalar 10x, o "
+            "que quebra primeiro'; engenheiro júnior perguntando 'o que isto "
+            "faz e por que está certo'.",
+            "Responder cinco temas fixos nesta ordem: correção/races/ordenação; "
+            "Edge cases que produzem dado errado ou perdido; Pontos cegos de "
+            "operação; Fragilidades e partes que parecem prontas mas não estão; "
+            "Melhorias mesmo onde está correto.",
+            "Aplicar 'do NOT pad findings': pergunta sem achado real recebe "
+            "'sem achados porque <razão>', nunca enchimento cosmético.",
+            "Registrar findings com file:line e reprodutor mínimo em prosa "
+            "para cada finding crítico.",
+            "Sintetizar o Top 5 ranqueado, 'parece pronto mas não está' e 'o "
+            "que eu mudaria se fosse meu'; fechar com tabela ordenada por "
+            "severidade — a tabela vai NO FIM, não no início.",
+        ),
+        criteria=(
+            ("Findings das 5 perguntas com evidência file:line", _EVID),
+            (
+                "Síntese com Top 5 ranqueado por severidade e tabela final "
+                "ordenada",
+                _WORK,
+            ),
+            (
+                "Reprodutores mínimos em prosa para os findings críticos",
+                _EVID,
+            ),
+            (
+                "Hashes sha256 dos artefatos-chave inspecionados registrados",
+                _EVID,
+            ),
+        ),
+        done_when=(
+            "as 5 perguntas foram respondidas com evidência e a tabela de "
+            "severidade está completa"
+        ),
+        keywords=(
+            "review", "revisão", "revisao", "adversarial", "deep dive",
+            "sanity", "auditoria profunda", "caçar bugs", "cacar bugs",
+        ),
+    ),
     "mvp": LoopSpec(
         id="mvp",
         title="ideia até MVP que roda",
@@ -222,6 +325,15 @@ _IMPL_INTENT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Correção explícita continua sendo bug mesmo quando o pedido também exige uma
+# revisão adversarial; a relação verbo+defeito evita promover menções soltas.
+_BUG_FIX_INTENT_RE = re.compile(
+    r"\b(?:corrig\w*|consert\w*|fix(?:e[ds]?|ing)?|repar\w*)\b"
+    r"[^.!?;\n]{0,100}"
+    r"\b(?:bugs?|erros?|falhas?|defeitos?)\b",
+    re.IGNORECASE,
+)
+
 
 # Override explícito no início do prompt: "/loop-bug ..." ou "/bug ...".
 _EXPLICIT_RE = re.compile(r"^\s*/(?:loop[-_])?([a-z0-9_-]{2,20})\b", re.IGNORECASE)
@@ -285,6 +397,15 @@ def detect_loop(prompt: str) -> str | None:
             scores.pop(soft, None)
         if not scores:
             return None
+
+    # Um review pode repetir várias keywords do próprio roteiro. Quando há
+    # intenção inequívoca de corrigir um defeito, o loop-bug ainda prevalece.
+    if (
+        "bug" in scores
+        and "review" in scores
+        and _BUG_FIX_INTENT_RE.search(scan)
+    ):
+        return "bug"
 
     # bug vence mvp: "corrigir o app" é defeito, não projeto novo.
     best = max(scores.values())

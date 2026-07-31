@@ -75,6 +75,8 @@ ALLOWED_TRANSITIONS: dict[TaskState, set[TaskState]] = {
         TaskState.INCOMPLETE,
     },
     TaskState.EXECUTING: {
+        # Premissa factual incorreta encerra com sucesso sem gates artificiais.
+        TaskState.COMPLETED,
         TaskState.TESTING,
         TaskState.CORRECTING,
         TaskState.CANCELLED,

@@ -56,6 +56,44 @@ from orchestrator_runtime.validation import (
 )
 
 
+
+def _collect_input_hashes(project_path, changed_files):
+    """Hashes de auditoria da validação (prompts.md Type 7, 0.4.52-C2):
+    sha256 por arquivo alterado (máx 20, pula ausentes e >2MB) +
+    rev-parse HEAD quando o projeto for repo git. Tolerante a falhas:
+    qualquer erro vira omissão da chave, nunca derruba a validação."""
+    import hashlib
+    import subprocess
+
+    out = {}
+    files = {}
+    for rel in (changed_files or [])[:20]:
+        try:
+            p = project_path / rel
+            if not p.is_file() or p.stat().st_size > 2 * 1024 * 1024:
+                continue
+            files[str(rel).replace(chr(92), "/")] = hashlib.sha256(
+                p.read_bytes()
+            ).hexdigest()
+        except OSError:
+            continue
+    if files:
+        out["files"] = files
+    try:
+        rev = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(project_path),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if rev.returncode == 0 and rev.stdout.strip():
+            out["head"] = rev.stdout.strip()
+    except Exception:
+        pass
+    return out
+
+
 class TaskService:
     # Teto do refino de plano (advisory) — o workflow nunca fica preso em
     # SELECTING_AGENTS mais que isso; o plano determinístico já existe.
@@ -937,6 +975,47 @@ class TaskService:
             if task.cancel_requested:
                 return self.cancel(task.id)
 
+            premise_mismatch = self._parse_premise_mismatch(exec_result.stdout)
+            if premise_mismatch:
+                # Outcome terminal honrado: não há mudança, teste ou documentação
+                # a exigir quando a própria premissa da tarefa está incorreta.
+                analysis_d = dict(task.analysis or {})
+                analysis_d["premise_mismatch"] = premise_mismatch
+                task.analysis = analysis_d
+                task.last_score = 1.0
+                self.repo.save(task)
+                self.repo.transition(
+                    task,
+                    TaskState.COMPLETED,
+                    reason="premise_mismatch",
+                    agent=plan_roles.executor,
+                )
+                self.bus.emit(
+                    RuntimeEvent(
+                        task_id=task.id,
+                        type=EventType.STATE_CHANGED,
+                        role=role,
+                        agent=plan_roles.executor,
+                        data={
+                            "to": TaskState.COMPLETED.value,
+                            "reason": "premise_mismatch",
+                            "summary": premise_mismatch[:200],
+                        },
+                    )
+                )
+                self.bus.emit(
+                    RuntimeEvent(
+                        task_id=task.id,
+                        type=EventType.TASK_COMPLETED,
+                        data={"reason": "premise_mismatch"},
+                    )
+                )
+                self._persist_episode(
+                    task, success=True, strategy=plan_roles.strategy
+                )
+                self._export_memory_markdown(task)
+                return task
+
             requires_input = (
                 None
                 if exec_result.changed_files
@@ -1007,7 +1086,18 @@ class TaskService:
                 and not (exec_result.stdout or "").strip()
                 and not exec_result.changed_files
             )
-            if spawn_failed or empty_output:
+            # bug-078 - CLI falhou (exit != 0) sem produzir NADA e a iteracao
+            # seguia para validacao: task C (0.4.52) teve executor E corrector
+            # codex morrendo exit 1 com changed=[] e o validador APROVOU 1.0
+            # confundindo com o diff de outra task no mesmo arquivo -
+            # fechamento falso com zero codigo entregue. failed + sem changed
+            # (mesmo apos fallback git) e infra, nunca merito a validar.
+            failed_no_output = (
+                not spawn_failed
+                and exec_result.status == "failed"
+                and not exec_result.changed_files
+            )
+            if spawn_failed or empty_output or failed_no_output:
                 if spawn_failed:
                     issue_id = "EXEC-SPAWN"
                     description = (
@@ -1016,6 +1106,18 @@ class TaskService:
                     )
                     summary = "executor spawn failed"
                     error_text = exec_result.stderr
+                elif failed_no_output:
+                    issue_id = "AGENT-FAILED-NO-OUTPUT"
+                    description = (
+                        f"{role}/{plan_roles.executor} falhou "
+                        f"(exit={exec_result.exit_code}) sem alterar arquivos: "
+                        f"{(exec_result.stderr or '')[:200]}"
+                    )
+                    summary = "agent failed without output"
+                    error_text = (
+                        f"AGENT-FAILED-NO-OUTPUT: {role}/{plan_roles.executor} "
+                        f"exit={exec_result.exit_code} sem mudancas"
+                    )
                 else:
                     issue_id = "AGENT-EMPTY-OUTPUT"
                     description = (
@@ -1312,6 +1414,11 @@ class TaskService:
                     float(last_validation.get("score") or 0.0), 0.2
                 )
 
+            # 0.4.52-C2 — hashes dos inputs da validação: re-auditoria
+            # futura reproduz o estado exato medido nesta rodada.
+            last_validation["input_hashes"] = _collect_input_hashes(
+                self.config.project_path, changed_files
+            )
             self.repo.add_validation_round(
                 task_id=task.id,
                 iteration=task.iteration,
@@ -1684,6 +1791,15 @@ class TaskService:
         # bug-077 — higiene git sempre ligada no executor/corrector: árvore
         # compartilhada não pode depender de disciplina do agente.
         parts.append(self._git_hygiene_block())
+        # 0.4.52-C1 - cap de 3 commits por iteracao (prompts.md Global Rule 17):
+        # escopo grande convida a drift e fadiga de revisao.
+        parts.append(
+            "Cap de commits: máximo 3 commits nesta iteração. Se a correção "
+            "natural pedir mais, pare nos 3 e descreva no relatório o plano de "
+            "sub-slices restantes (sequenciais, na MESMA branch - nunca branch "
+            "nova por sub-slice)."
+        )
+
         if continuation_note:
             parts.append(continuation_note)
         parts.extend(
@@ -1771,6 +1887,12 @@ class TaskService:
             "O orquestrador usa essa linha para mandar continuar automaticamente."
         )
         parts.append(
+            "Se a premissa da task for factualmente errada (já corrigido, já "
+            "existe, já entregue no HEAD), NÃO invente trabalho: pare e responda "
+            "com a linha `PREMISE_MISMATCH: <o que existe de verdade, com "
+            "evidência>` — é um resultado de primeira classe, não uma falha."
+        )
+        parts.append(
             "Somente se estiver bloqueado por decisão externa obrigatória, "
             'escreva uma única linha REQUIRES_INPUT: {"question": "...", '
             '"options": ["..."]} e encerre imediatamente sem alterar arquivos.'
@@ -1804,6 +1926,14 @@ class TaskService:
 
     _REQUIRES_INPUT_RE = re.compile(
         r"^\s*REQUIRES_INPUT\s*:\s*(.+)$", re.MULTILINE
+    )
+
+    # Aceita marcador puro ou envolvido por bullet/ênfase Markdown na própria linha.
+    _PREMISE_MISMATCH_RE = re.compile(
+        r"^[\t ]*(?:[-*>]\s*)*(?:[`*_~]+\s*)?"
+        r"PREMISE_MISMATCH(?:\s*[`*_~]+)?\s*:\s*"
+        r"(?:[`*_~]+\s*)?(.+?)\s*$",
+        re.MULTILINE | re.IGNORECASE,
     )
 
     # Contrato explícito de conclusão emitido pelo executor.
@@ -1900,6 +2030,17 @@ class TaskService:
             }
         return {"question": payload[:500], "options": []}
 
+    @classmethod
+    def _parse_premise_mismatch(cls, stdout: str | None) -> str | None:
+        """Extrai a explicação do outcome terminal PREMISE_MISMATCH."""
+        match = cls._PREMISE_MISMATCH_RE.search(stdout or "")
+        if not match:
+            return None
+        explanation = re.sub(
+            r"\s*[`*_~]+\s*$", "", match.group(1).strip()
+        ).strip()
+        return explanation[:500] or None
+
     def _build_validator_prompt(
         self,
         task: TaskRecord,
@@ -1935,6 +2076,9 @@ class TaskService:
             "Regra: failure_kind=preexisting significa que o teste JÁ "
             "falhava antes da task (baseline pré-executor); não reprove a "
             "task por ele. Falhas introduced sim são mérito da iteração.\n"
+            "Commits: se a iteração produziu mais de 3 commits novos do agente, "
+            "sinalize como non-blocking (indício de escopo estourado/drift); "
+            "não reprove só por isso.\n"
             f"Validação determinística: {dumps(det)}\n"
             f"{self._stack_hint()}\n"
             f"{skills_section}"

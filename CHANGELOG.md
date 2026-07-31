@@ -2,6 +2,53 @@
 
 ## Unreleased
 
+## 0.4.52 - 2026-07-31
+
+O orquestrador implementando a si mesmo — e a revisão que pegou a mentira.
+
+Rodada completa de dogfooding: as 5 melhorias portadas do `prompts.md` da
+GuardLine foram implementadas POR TASKS do próprio orquestrador no repo do
+pacote (3 tasks, executor codex, validador claude).
+
+### Added
+
+- **`/loop-ui-probe`** (task A) — sonda Playwright portada dos Types 10/11:
+  boundary mutante/não-mutante, locators por role, listeners (HTTP 4xx/5xx,
+  console, WebSocket) como entregável, roadmap com tags fixas. Responde à
+  falha que matou a task 8193684389b1 do printbee
+- **`/loop-review`** (task A) — revisão adversarial portada do Type 8:
+  identity priming (SRE-3h/segurança/arquiteto/júnior), 5 temas fixos,
+  "do NOT pad findings", tabela ranqueada por severidade NO FIM
+- **Outcome terminal `PREMISE_MISMATCH:`** (task B) — executor declara a
+  premissa factualmente errada (já corrigido/já existe/já entregue) e a
+  task encerra **COMPLETED sem gates** (sem teste, sem workspace_changes):
+  honestidade deixa de grindar iterações. Parser tolerante a markdown,
+  transição EXECUTING→COMPLETED na state machine, `analysis.premise_mismatch`
+- **Cap de 3 commits por iteração** (C1) — prompt do executor/corrector
+  (Rule 17: pare nos 3, sub-slices sequenciais na MESMA branch) + juiz
+  orientado a sinalizar >3 commits como non-blocking
+- **`input_hashes` nas validation_rounds** (C2) — sha256 por arquivo
+  alterado (máx 20, ≤2MB) + `git rev-parse HEAD` no payload: re-auditoria
+  futura reproduz o estado exato medido (Type 7)
+
+### Fixed
+
+- **bug-078** — falso fechamento: task C da própria rodada teve executor E
+  corrector codex falhando exit 1 com `changed=[]` e a iteração SEGUIA
+  para validação; o juiz aprovou 1.0 confundindo o diff de OUTRA task no
+  mesmo arquivo (o iter 1 havia rejeitado corretamente: "diffs são de
+  outras tasks"). A revisão humana da rodada pegou zero código entregue.
+  Agora `failed` + sem changed_files (mesmo após fallback git) é
+  infra-reject (`AGENT-FAILED-NO-OUTPUT`), nunca mérito a validar —
+  guard irmão do AGENT-EMPTY-OUTPUT
+
+### Notes
+
+- Dogfooding em números: 3 tasks, 3 COMPLETED, 2× iter 1 score 1.0 — e a
+  única falha da rodada foi detectada exatamente pelo tipo de revisão que
+  o `prompts.md` prega (verify-then-trust). codex segue instável editando
+  service.py (2 mortes exit 1); guard bug-078 cobre a consequência
+
 ## 0.4.51 - 2026-07-31
 
 O trust que pendurava o claude — e o fim do arrastão por disciplina.
