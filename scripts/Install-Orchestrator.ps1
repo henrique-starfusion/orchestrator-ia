@@ -446,6 +446,14 @@ try {
                 Write-Host '[AVISO] -ConfigureCursor* ignorado porque -SkipCursor esta ativo.'
             }
 
+            # bug-072 — claude/kimi code leem .mcp.json (convencao propria,
+            # nao .cursor); sem este registro os dois nunca tinham as tools
+            # orchestrator_* e trabalhavam direto nos arquivos.
+            Invoke-ChildScript -Name 'Configure-AgentMcp.ps1' -Arguments @{
+                ProjectPath = $projectRoot
+                PackageRoot = $packageRootResolved
+            } | Out-Null
+
             Invoke-ChildScript -Name 'Write-InstallationReport.ps1' -Arguments @{
                 ProjectPath = $projectRoot
                 Mode        = 'update'
@@ -852,6 +860,12 @@ try {
     elseif ($ConfigureCursor -or $ConfigureCursorMcp) {
         Write-Host '[AVISO] -ConfigureCursor* ignorado porque -SkipCursor esta ativo.'
     }
+
+    # bug-072 — claude/kimi code leem .mcp.json (ver nota no branch update).
+    Invoke-ChildScript -Name 'Configure-AgentMcp.ps1' -Arguments @{
+        ProjectPath = $projectRoot
+        PackageRoot = $packageRootResolved
+    } | Out-Null
 
     Invoke-ChildScript -Name 'Write-InstallationReport.ps1' -Arguments @{
         ProjectPath = $projectRoot

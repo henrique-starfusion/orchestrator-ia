@@ -357,4 +357,54 @@ class CliExecutor:
 def which(name: str) -> str | None:
     from shutil import which as _which
 
-    return _which(name)
+    found = _which(name)
+    if found:
+        return found
+    # bug-073 — CLIs globais fora do PATH do processo MCP: kimi-code instalou
+    # em `npm prefix -g` (npm-global do desktop) e o detect() marcava kimi
+    # indisponível para sempre — o roteador nunca escolhia kimi mesmo com o
+    # CLI instalado (reportado pelo dono em 2026-07-30). Fallback por
+    # locais bem conhecidos de bin global no Windows.
+    if os.name == "nt":
+        return _which_windows_fallback(name)
+    return None
+
+
+def _npm_global_bins_nt() -> list[Path]:
+    """Dirs conhecidos de bin global npm no Windows (cache por processo)."""
+    global _NPM_BINS_CACHE
+    if _NPM_BINS_CACHE is not None:
+        return _NPM_BINS_CACHE
+    cands: list[Path] = []
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        cands.append(Path(appdata) / "npm")
+    try:
+        import shutil
+
+        npm = shutil.which("npm.cmd") or shutil.which("npm")
+        if npm:
+            out = subprocess.run(
+                [npm, "prefix", "-g"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            if out.returncode == 0 and out.stdout.strip():
+                cands.append(Path(out.stdout.strip()))
+    except Exception:  # noqa: BLE001
+        pass
+    _NPM_BINS_CACHE = cands
+    return cands
+
+
+_NPM_BINS_CACHE: list[Path] | None = None
+
+
+def _which_windows_fallback(name: str) -> str | None:
+    for d in _npm_global_bins_nt():
+        for ext in (".cmd", ".exe", ".bat", ".ps1", ""):
+            p = d / f"{name}{ext}"
+            if p.is_file():
+                return str(p)
+    return None

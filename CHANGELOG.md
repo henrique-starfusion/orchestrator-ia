@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+## 0.4.49 - 2026-07-30
+
+Dois "por quês" do dono: os agentes que não chamavam — e o kimi invisível.
+
+### Fixed
+
+- **bug-072** — claude code e kimi code NUNCA chamavam o orquestrador: o
+  MCP `orchestrator-ia` só era registrado no Cursor (`.cursor/mcp.json`).
+  Os dois leem `.mcp.json` na raiz do projeto (mesma convenção `mcpServers`
+  — verificado no dist do @moonshot-ai/kimi-code 0.31; ausência confirmada
+  no `~/.claude.json` global e em todos os projetos). Novo
+  `Configure-AgentMcp.ps1` escreve/ mescla `.mcp.json` por projeto (entry
+  `orchestrator-ia` via stdio, projeto resolvido pelo cwd do spawn),
+  preserva servidores existentes e roda em todo install/update
+- **bug-073** — "orquestrador não usa o kimi k3 mesmo instalado": o CLI
+  `@moonshot-ai/kimi-code` 0.31 estava instalado num prefix npm fora do
+  PATH do processo MCP (`npm-global` do desktop); `which()` = shutil.which
+  puro → `detect()` marcava kimi indisponível para sempre e o roteador o
+  pulava em silêncio. `which()` agora faz fallback para bins globais npm
+  conhecidos (`%APPDATA%\npm` e `npm prefix -g`, com cache por processo).
+  Detectado ao vivo: `kimi.CMD` resolvido; profile `kimi -p` já estava
+  verificado (0.29.2) e o teto cmd.exe do bug-061 cobre o shim .CMD
+
+### Notes
+
+- Cenário completo das 3 perguntas do dono nesta sessão: (1) Cursor era o
+  único cliente com MCP registrado; (2) kimi CLI instalado mas fora do
+  PATH; (3) models.json já tinha client kimi com task_map — o bloqueio era
+  puramente detecção, nunca roteamento
+
 ## 0.4.48 - 2026-07-30
 
 A regra de permissão que o claude ignorava em toda run.
