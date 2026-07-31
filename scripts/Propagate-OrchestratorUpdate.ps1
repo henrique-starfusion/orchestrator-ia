@@ -110,6 +110,14 @@ foreach ($target in $targets) {
         $row.detail = 'already current'
         $results.Add($row) | Out-Null
         Write-Host ("[SKIP] {0} - ja em {1}" -f $target, $from)
+        # bug-075 — o SKIP por versao igual tambem pulava os REPAIRS
+        # idempotentes: o alias kimi-latest ficou congelado nos 12 projetos
+        # (merge do manifest preserva o valor do projeto) e so saiu com
+        # Repair-ModelsJson rodado na mao. Reparos de conteudo rodam mesmo
+        # sem bump de versao.
+        if (-not $DryRun.IsPresent) {
+            & (Join-Path $PSScriptRoot 'Repair-ModelsJson.ps1') -ProjectPath $target | Out-Null
+        }
         # ainda assim atualiza last_seen/version no registry
         Register-OrchestratorProject -ProjectPath $target -Version $from -DryRun:$DryRun | Out-Null
         continue

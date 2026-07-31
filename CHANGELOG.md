@@ -2,6 +2,48 @@
 
 ## Unreleased
 
+## 0.4.50 - 2026-07-30
+
+O kimi rodando — e o BOM que o derrubava no boot.
+
+### Fixed
+
+- **bug-074** — o `.mcp.json` do bug-072 era gravado por `Set-Content
+  -Encoding UTF8` (PS 5.1) **com BOM**, e o parser do kimi rejeita BOM no
+  primeiro byte: `kimi -p` morria no boot em qualquer projeto registrado
+  ("Invalid JSON in .mcp.json"). Descoberto no primeiro smoke test real.
+  Escrita agora via `WriteAllText` UTF8 sem BOM; idempotente — o update
+  regrava os 12 projetos já corrigidos. Cursor tolera BOM, kimi não
+- **kimi models** — `models.json` tinha o alias fictício `kimi-latest` em
+  todos os tiers: toda run com `-m kimi-latest` falharia. Mapeado para os
+  aliases REAIS do `~/.kimi-code/config.toml` (CLI 0.31):
+  fast=`kimi-code/kimi-for-coding-highspeed`, demais=`kimi-code/k3`
+  (flagship, 1M ctx; `default_model` da máquina já é k3). E mais: o
+  manifest aplica models.json com `mode=merge` que PRESERVA o valor do
+  projeto — o alias obsoleto ficou congelado nos 12 projetos. Novo
+  `Repair-ModelsJson.ps1` (roda em todo install/update) faz o patch
+  cirúrgico `kimi-latest` → aliases reais, idempotente, com backup
+
+- **bug-075** — a propagação SKIPava projetos já na versão corrente e com
+  isso pulava TODOS os reparos idempotentes: o `kimi-latest` ficou
+  congelado nos 12 projetos (merge do manifest preserva o valor do
+  projeto) e só saiu com o Repair rodado à mão. O branch
+  `already current` da propagação agora executa os reparos de conteúdo
+  (Repair-ModelsJson) mesmo sem bump — reparo passa a ser auto-curativo,
+  não refém de versão nova
+
+### Notes
+
+- **Smoke end-to-end do kimi PROVADO** (sandbox dentro do pacote, adapters
+  reais): `kimi -p` responde OK; task completa com `executor=kimi` —
+  executor E corrector kimi **completed exit 0** em duas rodadas (segunda
+  rodada em curso normal de validação quando o processo de smoke expirou)
+- Achado colateral: validador claude pendurou >15min SEM heartbeat no
+  sandbox recém-criado — consistente com trust dialog de workspace novo
+  ("Run Claude Code interactively here once and accept the trust dialog")
+  e com o backlog "planner claude timeout ~9% (stdout vazio)". Candidato a
+  bug-075: pré-aquecer trust do claude no install/update
+
 ## 0.4.49 - 2026-07-30
 
 Dois "por quês" do dono: os agentes que não chamavam — e o kimi invisível.

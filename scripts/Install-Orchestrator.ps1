@@ -454,6 +454,11 @@ try {
                 PackageRoot = $packageRootResolved
             } | Out-Null
 
+            # bug-074 — merge do manifest preserva kimi-latest obsoleto
+            Invoke-ChildScript -Name 'Repair-ModelsJson.ps1' -Arguments @{
+                ProjectPath = $projectRoot
+            } | Out-Null
+
             Invoke-ChildScript -Name 'Write-InstallationReport.ps1' -Arguments @{
                 ProjectPath = $projectRoot
                 Mode        = 'update'
@@ -865,6 +870,11 @@ try {
     Invoke-ChildScript -Name 'Configure-AgentMcp.ps1' -Arguments @{
         ProjectPath = $projectRoot
         PackageRoot = $packageRootResolved
+    } | Out-Null
+
+    # bug-074 — merge do manifest preserva kimi-latest obsoleto
+    Invoke-ChildScript -Name 'Repair-ModelsJson.ps1' -Arguments @{
+        ProjectPath = $projectRoot
     } | Out-Null
 
     Invoke-ChildScript -Name 'Write-InstallationReport.ps1' -Arguments @{

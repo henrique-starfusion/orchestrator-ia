@@ -300,10 +300,10 @@
     "kimi": {
       "cli": "kimi",
       "models": {
-        "fast": "kimi-latest",
-        "balanced": "kimi-latest",
-        "deep": "kimi-latest",
-        "max": "kimi-latest"
+        "fast": "kimi-code/kimi-for-coding-highspeed",
+        "balanced": "kimi-code/k3",
+        "deep": "kimi-code/k3",
+        "max": "kimi-code/k3"
       },
       "task_map": {
         "trivial": "fast",
@@ -311,7 +311,7 @@
         "implementation": "balanced",
         "complex_analysis": "max"
       },
-      "notes": "Usar modelo mais novo exposto pelo CLI Kimi; ajustar quando houver tiers oficiais.",
+      "notes": "Aliases REAIS do ~/.kimi-code/config.toml (CLI 0.31): k3 (1M ctx, flagship), k3-256k, kimi-for-coding(-highspeed). Sem -m vale default_model=kimi-code/k3. 'kimi-latest' NÃO existe como alias — toda run falharia (bug-074).",
       "model_flag": "-m"
     }
   },

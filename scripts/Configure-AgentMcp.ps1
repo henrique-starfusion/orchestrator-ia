@@ -98,7 +98,12 @@ if ($DryRun) {
     exit 0
 }
 
+# bug-074 — Set-Content -Encoding UTF8 do PS 5.1 grava BOM; o parser do
+# kimi rejeita ("Unexpected token" no PRIMEIRO byte) e o CLI morria no boot
+# em qualquer projeto com .mcp.json. Cursor tolera BOM, kimi nao. .NET
+# WriteAllText com UTF8Encoding($false) = sem BOM.
 $outObj = [ordered]@{ mcpServers = $servers }
-($outObj | ConvertTo-Json -Depth 10) | Set-Content -LiteralPath $mcpPath -Encoding UTF8
+$json = $outObj | ConvertTo-Json -Depth 10
+[System.IO.File]::WriteAllText($mcpPath, $json, [System.Text.UTF8Encoding]::new($false))
 Write-Host ("[OK] Agent MCP (claude/kimi): {0}" -f $mcpPath)
 exit 0
