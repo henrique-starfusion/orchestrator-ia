@@ -1634,6 +1634,21 @@ class TaskService:
             "Faça escopo/implementação/testes você mesmo, sequencialmente."
         )
 
+    @staticmethod
+    def _git_hygiene_block() -> str:
+        """bug-077 — printbee, 2026-07-30: SEIS quase-arrastões num dia,
+        evitados só por disciplina do agente. Árvore compartilhada com
+        trabalho não commitado de outros agentes: stage SEMPRE explícito."""
+        return (
+            "Higiene git (árvore compartilhada): este workspace pode ter "
+            "trabalho NÃO commitado de OUTROS agentes. Nunca `git add -A`, "
+            "`git add .`, `git commit -a/-am`, `git stash`, `git clean`, "
+            "`git reset --hard`, `git checkout/restore -- .`. Se a task pedir "
+            "commit: rode `git status`, faça stage SÓ dos arquivos que você "
+            "alterou (`git add <path> ...`) e commite explícito — o commit sai "
+            "só com o seu trecho e o trabalho alheio fica intacto na árvore."
+        )
+
     def _loop_block(self, task: TaskRecord) -> str:
         """Roteiro do loop escolhido — o que faz o agente seguir etapas."""
         from orchestrator_runtime.planning.loops import get_loop
@@ -1666,6 +1681,9 @@ class TaskService:
         loop_block = self._loop_block(task)
         if loop_block:
             parts.append(loop_block)
+        # bug-077 — higiene git sempre ligada no executor/corrector: árvore
+        # compartilhada não pode depender de disciplina do agente.
+        parts.append(self._git_hygiene_block())
         if continuation_note:
             parts.append(continuation_note)
         parts.extend(

@@ -459,6 +459,11 @@ try {
                 ProjectPath = $projectRoot
             } | Out-Null
 
+            # bug-076 — trust do claude pre-aquecido (evita hang em workspace novo)
+            Invoke-ChildScript -Name 'Repair-ClaudeTrust.ps1' -Arguments @{
+                ProjectPath = $projectRoot
+            } | Out-Null
+
             Invoke-ChildScript -Name 'Write-InstallationReport.ps1' -Arguments @{
                 ProjectPath = $projectRoot
                 Mode        = 'update'
@@ -874,6 +879,11 @@ try {
 
     # bug-074 — merge do manifest preserva kimi-latest obsoleto
     Invoke-ChildScript -Name 'Repair-ModelsJson.ps1' -Arguments @{
+        ProjectPath = $projectRoot
+    } | Out-Null
+
+    # bug-076 — trust do claude pre-aquecido (evita hang em workspace novo)
+    Invoke-ChildScript -Name 'Repair-ClaudeTrust.ps1' -Arguments @{
         ProjectPath = $projectRoot
     } | Out-Null
 

@@ -61,7 +61,75 @@ function readStdin() {
   }
 }
 
+// bug-077 — higiene git em árvore compartilhada (printbee, 2026-07-30):
+// SEIS quase-arrastões num dia, evitados só por disciplina do agente. Com
+// trabalho não commitado de outros agentes na árvore, `git add -A` arrasta e
+// `git clean/reset/checkout .` DESTRÓI trabalho alheio. Vale MESMO para o
+// executor (ORCHESTRATOR_CHILD_AGENT) — higiene não é nudge de orquestração.
+const GIT_VIOLATIONS = [
+  { re: /\bgit\s+add\s+([^;|&]*\s)?(-A\b|--all\b|-u\b|\.$|\.\s)/, label: 'git add em lote (-A/--all/-u/.)' },
+  { re: /\bgit\s+commit\b[^;|&]*\s(-a\b|-am\b|--all\b)/, label: 'git commit -a/-am (stage em lote embutido)' },
+  { re: /\bgit\s+stash\b/, label: 'git stash (pode enterrar trabalho alheio)' },
+  { re: /\bgit\s+clean\b/, label: 'git clean (DESTRÓI não-rastreados alheios)' },
+  { re: /\bgit\s+reset\s+--hard\b/, label: 'git reset --hard (DESTRÓI não-commitados alheios)' },
+  { re: /\bgit\s+(checkout|restore)\b[^;|&]*(--\s*\.$|\s\.$|\s\*)/, label: 'git checkout/restore em lote (DESTRÓI não-commitados alheios)' },
+];
+
+function gitHygieneCheck(payload, root) {
+  if ((process.env.ORCHESTRATOR_GUARD || '').toLowerCase() === 'off') return 0;
+  const command = String((payload.tool_input || {}).command || '');
+  if (!/\bgit\b/.test(command)) return 0;
+  const hit = GIT_VIOLATIONS.find((v) => v.re.test(command));
+  if (!hit) return 0;
+
+  // Bloqueia UMA vez por classe/sessão: força a decisão consciente; repetir passa.
+  const sessionId = String(payload.session_id || 'sem-sessao').replace(/[^A-Za-z0-9_-]/g, '');
+  const stampDir = path.join(root, '.orchestrator', 'runtime', 'guard');
+  const cls = hit.label.replace(/[^A-Za-z0-9]+/g, '-').slice(0, 32);
+  const stamp = path.join(stampDir, `${sessionId}.git-${cls}.notified`);
+  try {
+    if (fs.existsSync(stamp)) return 0;
+    fs.mkdirSync(stampDir, { recursive: true });
+    fs.writeFileSync(stamp, new Date().toISOString(), 'utf8');
+  } catch {
+    return 0;
+  }
+
+  process.stderr.write(
+    [
+      'HIGIENE GIT — ÁRVORE COMPARTILHADA.',
+      '',
+      `Comando: ${hit.label}`,
+      'Este workspace pode ter trabalho NÃO COMMITADO de outros agentes.',
+      'Comandos git em lote arrastam (add -A/commit -a) ou destroem',
+      '(clean/reset --hard/checkout .) trabalho que não é seu.',
+      '',
+      'Faça em vez disso:',
+      '  git status                      # veja o que é SEU nesta task',
+      '  git add <path1> <path2>         # stage explícito, só o seu',
+      '  git commit -m "..."             # commit sai só com o seu trecho',
+      '',
+      'Se o comando em lote for mesmo o pretendido, repita a operação — ela passa.',
+    ].join('\n')
+  );
+  return 2;
+}
+
 function main() {
+  const payload = (() => {
+    try {
+      return JSON.parse(readStdin() || '{}');
+    } catch {
+      return {};
+    }
+  })();
+
+  // bug-077 — Bash/git vem ANTES das isenções: higiene vale até para executor.
+  if (String(payload.tool_name || '') === 'Bash') {
+    const root0 = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+    return gitHygieneCheck(payload, root0);
+  }
+
   // bug-057: flag de filho e VALOR, nao presenca — vazia/'0' herdadas de
   // shells nao silenciam o guard nem fazem o agente principal virar "filho".
   const childFlag = String(process.env.ORCHESTRATOR_CHILD_AGENT || '').trim();
@@ -79,12 +147,6 @@ function main() {
     /* sem diretorio de lock: segue */
   }
 
-  let payload = {};
-  try {
-    payload = JSON.parse(readStdin() || '{}');
-  } catch {
-    return 0;
-  }
   const input = payload.tool_input || {};
   const target = String(input.file_path || input.path || '');
   if (!target) return 0;

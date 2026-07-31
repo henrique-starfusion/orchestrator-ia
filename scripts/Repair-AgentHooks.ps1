@@ -193,28 +193,52 @@ if (-not $settings.hooks.PSObject.Properties['PreToolUse'] -or $null -eq $settin
 }
 
 $already = $false
+$matcherOutdated = $false
 foreach ($group in @($settings.hooks.PreToolUse)) {
     if ($null -eq $group -or -not $group.PSObject.Properties['hooks']) { continue }
+    $hasGuard = $false
     foreach ($hook in @($group.hooks)) {
         if ($null -ne $hook -and $hook.PSObject.Properties['command'] `
                 -and ([string]$hook.command) -like '*orchestrator-guard.js*') {
-            $already = $true
+            $hasGuard = $true
+        }
+    }
+    if ($hasGuard) {
+        $already = $true
+        # bug-077 — o guard passou a interceptar Bash (higiene git); registros
+        # antigos com matcher so de escrita precisam ser atualizados in-place.
+        $matcher = [string]$group.matcher
+        if ($matcher -notlike '*Bash*') {
+            if (-not $DryRun) {
+                $group.matcher = 'Write|Edit|MultiEdit|Bash'
+            }
+            $matcherOutdated = $true
         }
     }
 }
 
-if ($already) {
+if ($already -and -not $matcherOutdated) {
     Write-Host '[OK] Guard do orquestrador ja registrado.'
     exit 0
 }
 
+if ($matcherOutdated) {
+    if ($DryRun) {
+        Write-Host '[DRY-RUN] matcher do guard seria atualizado para incluir Bash.'
+        exit 0
+    }
+    ($settings | ConvertTo-Json -Depth 12) | Set-Content -LiteralPath $settingsPath -Encoding UTF8
+    Write-Host '[OK] Matcher do guard atualizado: Write|Edit|MultiEdit|Bash.'
+    exit 0
+}
+
 if ($DryRun) {
-    Write-Host '[DRY-RUN] registraria orchestrator-guard em PreToolUse (Write|Edit|MultiEdit).'
+    Write-Host '[DRY-RUN] registraria orchestrator-guard em PreToolUse (Write|Edit|MultiEdit|Bash).'
     exit 0
 }
 
 $newGroup = [pscustomobject]@{
-    matcher = 'Write|Edit|MultiEdit'
+    matcher = 'Write|Edit|MultiEdit|Bash'
     hooks   = @([pscustomobject]@{ type = 'command'; command = $guardCommand; timeout = 5 })
 }
 $settings.hooks.PreToolUse = @(@($settings.hooks.PreToolUse) + $newGroup)

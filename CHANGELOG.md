@@ -2,6 +2,47 @@
 
 ## Unreleased
 
+## 0.4.51 - 2026-07-31
+
+O trust que pendurava o claude — e o fim do arrastão por disciplina.
+
+### Fixed
+
+- **bug-076** — claude CLI pendurava >15min sem heartbeat em workspace sem
+  trust aceito (validador do smoke kimi; backlog "planner timeout ~9% com
+  stdout vazio"). Novo `Repair-ClaudeTrust.ps1` (todo install/update)
+  pré-aquece `projects["<path>"].hasTrustDialogAccepted` no `~/.claude.json`
+  nos DOIS formatos de path que o claude grava. Cirurgia de TEXTO, não
+  round-trip JSON: o arquivo real tem chaves duplicadas por caixa que
+  quebram o ConvertFrom-Json do PS 5.1 e seriam perdidas. Testado:
+  idempotente, arquivo íntegro
+- **bug-077** — higiene git em árvore compartilhada. printbee, 30/07: SEIS
+  quase-arrastões num dia evitados só por disciplina do agente (patch
+  isolado de 1 arquivo/2 linhas em vez de `git add -A` sobre trabalho não
+  commitado de outro agente). Três camadas: (1) guard hook intercepta
+  **Bash** e bloqueia uma vez por classe `git add -A/--all/-u/.`,
+  `commit -a/-am`, `stash`, `clean`, `reset --hard`, `checkout/restore .` —
+  vale MESMO para o executor (verificado: perigoso exit 2, repetição passa,
+  `git add <path>` livre); (2) matcher do guard em todos os projetos vira
+  `Write|Edit|MultiEdit|Bash` (atualização in-place); (3) prompt do
+  executor/corrector traz sempre o bloco "Higiene git"
+
+### Added
+
+- **Skills de operação de agentes** (pedido do dono): refresh do
+  `call-agent` (kimi na tabela de comandos, quirks Windows: teto .CMD,
+  stdin vs `-p`, sandbox 740, aliases reais, trust) e nova skill
+  **`choose-model`** — decisão de agente/modelo por task_class: tiers,
+  task_map, o que cada agente faz bem (medido na frota), cadeia de
+  recuperação (rotação → quarentena → correction-loop → exaustão de cota)
+
+### Notes
+
+- Análise pedida — adzora: sessão claude de 29/07 com 3.246 linhas e
+  **219 Edits diretos vs 3 menções ao orquestrador**; tasks do orquestrador
+  paradas desde 22/07. É o padrão que bug-072 (.mcp.json) + guard + skills
+  atacam: agente trabalhando direto porque não tinha o orquestrador à mão
+
 ## 0.4.50 - 2026-07-30
 
 O kimi rodando — e o BOM que o derrubava no boot.
