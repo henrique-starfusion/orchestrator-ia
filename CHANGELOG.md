@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.4.48 - 2026-07-30
+
+A regra de permissão que o claude ignorava em toda run.
+
+### Fixed
+
+- **bug-071** — o `.claude/settings.json` global tinha `Write(**)` no allow,
+  regra que o claude atual IGNORA ("only Edit(path) rules are matched") —
+  60-90% das agent_runs da frota carregavam o aviso no stderr (medido:
+  GuardLine.BR 27/31, printbee 62/113, bootstrap-agents 13/46 das runs
+  completadas). O `Repair-AgentHooks.ps1` (rodado em todo install/update)
+  agora migra `Write(**)` → `Edit(**)` nos buckets allow/deny/ask das
+  settings do projeto E da global do usuário, com dedup quando ambas
+  coexistem, backup único (`.bak-bug071`) e idempotência
+
 ## 0.4.47 - 2026-07-30
 
 O agente com pulso e sem serviço — toda rotação caía nele.

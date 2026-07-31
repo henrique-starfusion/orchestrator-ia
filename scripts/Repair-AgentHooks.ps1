@@ -103,6 +103,61 @@ else {
 }
 
 # ---------------------------------------------------------------------------
+# 0.4.48 (bug-071) — migra regra de permissao Write(**) -> Edit(**).
+# O claude atual IGNORA Write(**) ("only Edit(path) rules are matched") e
+# toda run na maquina imprimia o aviso — 60-90% das runs da frota com o
+# warning no stderr (medido em GuardLine.BR, printbee, bootstrap-agents).
+# Cobre settings do projeto E a global (~/.claude/settings.json, onde a
+# regra invalida estava); backup uma vez (.bak-bug071); idempotente.
+# ---------------------------------------------------------------------------
+$permTargets = New-Object System.Collections.Generic.List[string]
+foreach ($leaf in @('settings.json', 'settings.local.json')) {
+    $candidate = Join-Path $projectRoot (Join-Path '.claude' $leaf)
+    if (Test-Path -LiteralPath $candidate) { $permTargets.Add($candidate) }
+}
+$globalClaudeSettings = Join-Path $HOME '.claude\settings.json'
+if (Test-Path -LiteralPath $globalClaudeSettings) { $permTargets.Add($globalClaudeSettings) }
+
+foreach ($permPath in $permTargets) {
+    try {
+        $settings = Get-Content -LiteralPath $permPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    }
+    catch { continue }
+    if ($null -eq $settings -or -not $settings.PSObject.Properties['permissions']) { continue }
+    if ($null -eq $settings.permissions) { continue }
+
+    $changed = $false
+    foreach ($bucket in @('allow', 'deny', 'ask')) {
+        if (-not $settings.permissions.PSObject.Properties[$bucket]) { continue }
+        $rules = @($settings.permissions.$bucket)
+        $newRules = New-Object System.Collections.Generic.List[object]
+        $seen = @{}
+        foreach ($rule in $rules) {
+            $value = [string]$rule
+            if ($value -eq 'Write(**)') { $value = 'Edit(**)'; $changed = $true }
+            # dedup preservando ordem: Write(**) e Edit(**) podiam coexistir
+            if (-not $seen.ContainsKey($value)) {
+                $seen[$value] = $true
+                $newRules.Add($value) | Out-Null
+            }
+        }
+        if ($changed) { $settings.permissions.$bucket = @($newRules.ToArray()) }
+    }
+    if (-not $changed) { continue }
+
+    if ($DryRun) {
+        Write-Host ("[DRY-RUN] {0}: Write(**) -> Edit(**)" -f $permPath)
+        continue
+    }
+    $backupPath = "$permPath.bak-bug071"
+    if (-not (Test-Path -LiteralPath $backupPath)) {
+        Copy-Item -LiteralPath $permPath -Destination $backupPath -Force
+    }
+    ($settings | ConvertTo-Json -Depth 12) | Set-Content -LiteralPath $permPath -Encoding UTF8
+    Write-Host ("[OK] {0}: Write(**) migrado para Edit(**)" -f $permPath)
+}
+
+# ---------------------------------------------------------------------------
 # 0.4.27 — instala o guard do orquestrador (PreToolUse em Write|Edit|MultiEdit).
 # Sem ponto de interceptacao, "orquestrar e o modo padrao" fica so no texto do
 # CLAUDE.md e o agente edita direto assim mesmo.
