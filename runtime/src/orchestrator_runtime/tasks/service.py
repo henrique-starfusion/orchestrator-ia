@@ -1955,6 +1955,52 @@ class TaskService:
         blob = ((result.stdout or "") + (result.stderr or "")).lower()
         return any(m in blob for m in cls._VALIDATOR_INFRA_MARKERS)
 
+    # bug-070 — circuit breaker: o binário existe (detect() passa) mas o
+    # SERVIÇO está morto (opencode: "Unexpected server error" em ~8s — 15
+    # falhas instantâneas registradas no printbee entre validator/executor).
+    # Toda rotação de fallback caía no mesmo agente morto e queimava a
+    # iteração. N falhas rápidas consecutivas dentro da janela => quarentena:
+    # os pontos de escolha de fallback pulam para o próximo candidato.
+    _QUARANTINE_RUNS = 3
+    _QUARANTINE_MAX_DURATION_S = 30.0
+    _QUARANTINE_WINDOW_S = 6 * 3600  # cooldown: falha velha não condena para sempre
+
+    @staticmethod
+    def _duration_between(start: Any, end: Any) -> float | None:
+        if not start or not end:
+            return None
+        try:
+            a = datetime.fromisoformat(str(start).replace("Z", "+00:00"))
+            b = datetime.fromisoformat(str(end).replace("Z", "+00:00"))
+            if a.tzinfo is None:
+                a = a.replace(tzinfo=timezone.utc)
+            if b.tzinfo is None:
+                b = b.replace(tzinfo=timezone.utc)
+            return (b - a).total_seconds()
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _agent_quarantined(self, agent_id: str) -> bool:
+        try:
+            runs = self.repo.list_recent_agent_runs(agent_id, self._QUARANTINE_RUNS)
+        except Exception:  # noqa: BLE001
+            return False
+        if len(runs) < self._QUARANTINE_RUNS:
+            return False
+        now = datetime.now(timezone.utc)
+        for r in runs:
+            if str(r.get("status")) != "failed":
+                return False
+            dur = self._duration_between(r.get("started_at"), r.get("finished_at"))
+            if dur is None or dur > self._QUARANTINE_MAX_DURATION_S:
+                return False
+            started = self._duration_between(
+                r.get("started_at"), now.isoformat()
+            )
+            if started is None or started > self._QUARANTINE_WINDOW_S:
+                return False  # fora da janela: cooldown encerrado
+        return True
+
     def _next_validator_fallback(
         self, task: TaskRecord, plan_roles: Any, current: str
     ) -> str | None:
@@ -1962,6 +2008,8 @@ class TaskService:
         for fb in fallbacks:
             if fb in {current, plan_roles.executor}:
                 continue
+            if self._agent_quarantined(fb):
+                continue  # bug-070 — serviço morto; próximo candidato
             adapter = self.registry.get(fb)
             if adapter and adapter.detect().available:
                 return fb
@@ -2024,7 +2072,11 @@ class TaskService:
         # Tentar fallback de executor na próxima iteração
         fallbacks = (task.plan or {}).get("fallbacks", {}).get("executor") or []
         for fb in fallbacks:
-            if fb != plan_roles.executor and self.registry.get(fb):
+            if (
+                fb != plan_roles.executor
+                and self.registry.get(fb)
+                and not self._agent_quarantined(fb)  # bug-070 — serviço morto
+            ):
                 plan_roles.executor = fb
                 break
         self.repo.transition(

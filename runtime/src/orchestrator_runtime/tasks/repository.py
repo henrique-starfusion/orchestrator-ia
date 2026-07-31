@@ -331,6 +331,27 @@ class TaskRepository:
             s.add(AgentRunRow(**kwargs))
             s.commit()
 
+    def list_recent_agent_runs(self, agent: str, limit: int = 5) -> list[dict[str, Any]]:
+        """Runs mais recentes de um agente (qualquer task) — circuit breaker
+        do bug-070: binário vivo + serviço morto (opencode ~8s server error)."""
+        with self.session() as s:
+            rows = s.scalars(
+                select(AgentRunRow)
+                .where(AgentRunRow.agent == agent)
+                .order_by(AgentRunRow.id.desc())
+                .limit(limit)
+            ).all()
+            return [
+                {
+                    "status": r.status,
+                    "exit_code": r.exit_code,
+                    "timed_out": r.timed_out,
+                    "started_at": r.started_at,
+                    "finished_at": r.finished_at,
+                }
+                for r in rows
+            ]
+
     def add_test_run(self, **kwargs: Any) -> None:
         with self.session() as s:
             s.add(TestRunRow(**kwargs))

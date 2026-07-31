@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+## 0.4.47 - 2026-07-30
+
+O agente com pulso e sem serviço — toda rotação caía nele.
+
+### Fixed
+
+- **bug-070** — circuit breaker de agente. opencode tinha o binário
+  instalado (`detect()` = disponível) mas o **servidor** morto: 15
+  agent_runs consecutivas falhando em ~8s com "Unexpected server error"
+  (printbee: agent_performance 3 runs / 0 sucessos; frota: 12 falhas de
+  validator). Toda rotação de fallback — validator E executor — escolhia o
+  mesmo agente morto e queimava a iteração. Agora: 3 falhas rápidas (<30s)
+  consecutivas dentro de uma janela de 6h (qualquer task, lido de
+  agent_runs) colocam o agente em **quarentena**; os dois pontos de escolha
+  de fallback (`_next_validator_fallback` e a rotação de executor pós-infra)
+  pulam para o próximo candidato. Cooldown de 6h: falha velha não condena
+  para sempre. Sucesso recente ou falha lenta (trabalho real) quebram a
+  quarentena
+
+### Notes
+
+- Medição pós-0.4.43 (bug-061): executor/corrector **8/8 completed** na
+  frota (claude 7, codex 1) vs era pré-fix: codex 25 ok / 43 failed / 4
+  timeout. Amostra pequena mas zero falhas de spawn desde o fix de stdin
+
 ## 0.4.46 - 2026-07-30
 
 A versão que regredia sozinha — e o bug impossível de provar.
