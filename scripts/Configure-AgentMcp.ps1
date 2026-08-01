@@ -106,4 +106,32 @@ $outObj = [ordered]@{ mcpServers = $servers }
 $json = $outObj | ConvertTo-Json -Depth 10
 [System.IO.File]::WriteAllText($mcpPath, $json, [System.Text.UTF8Encoding]::new($false))
 Write-Host ("[OK] Agent MCP (claude/kimi): {0}" -f $mcpPath)
+
+# ---------------------------------------------------------------------------
+# 0.4.53 — subagente "orquestrador" do Claude Code (.claude/agents/).
+# O claude auto-seleciona subagentes pela description: uma persona "operador
+# do runtime" com tools restritas guia QUALQUER tarefa não-trivial para o
+# runtime em vez de edição direta — camada que faltava entre o guard
+# (intercepta) e o .mcp.json (tools disponíveis). Arquivo managed: regravado
+# a cada install/update a partir do template do pacote.
+# ---------------------------------------------------------------------------
+$subagentSrc = $null
+if (-not [string]::IsNullOrWhiteSpace($PackageRoot)) {
+    $candidate = Join-Path $PackageRoot 'package\template\.orchestrator\agents\claude-subagents\orquestrador.md'
+    if (Test-Path -LiteralPath $candidate) {
+        $subagentSrc = (Resolve-Path -LiteralPath $candidate).Path
+    }
+}
+if ($null -ne $subagentSrc) {
+    $agentsDir = Join-Path $projectRoot '.claude\agents'
+    $subagentDst = Join-Path $agentsDir 'orquestrador.md'
+    if ($DryRun) {
+        Write-Host ("[DRY-RUN] subagente claude: {0}" -f $subagentDst)
+    }
+    else {
+        Ensure-Directory -Path $agentsDir | Out-Null
+        Copy-Item -LiteralPath $subagentSrc -Destination $subagentDst -Force
+        Write-Host ("[OK] Subagente claude instalado: {0}" -f $subagentDst)
+    }
+}
 exit 0

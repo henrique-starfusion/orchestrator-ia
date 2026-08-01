@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## 0.4.53 - 2026-07-31
+
+O subagente que não consegue editar — só orquestrar.
+
+### Added
+
+- **Subagente `orquestrador` para Claude Code** (`.claude/agents/orquestrador.md`,
+  propagado a todos os projetos no install/update). Ideia do dono com dois
+  ajustes: subagentes vivem em `.claude/agents/` (não no settings.json), e a
+  persona é **operador do runtime**, não "orquestrador roleplay" — o system
+  prompt proíbe implementar, spawnar Task/Agent e autovalidar. Três camadas
+  de valor:
+  - **auto-seleção**: a description cobre "qualquer tarefa não-trivial", e o
+    claude escolhe o subagente sozinho nesses casos — a regra "orquestrar é
+    o padrão" deixa de depender só de AGENTS.md ser lido
+  - **tools restritas**: Read/Grep/Glob/Bash(orchestrator CLI)/MCP
+    `orchestrator_*` — sem Write/Edit, o subagente fisicamente não edita
+    código direto (enforcement de harness, acima do guard de uma-bloqueada)
+  - **fluxo com paciência embutida**: run → status no intervalo → events →
+    result; nunca cancelar por impaciência; interpreta COMPLETED,
+    premise_mismatch, INCOMPLETE e falhas de infra com o próximo passo
+
 ## 0.4.52 - 2026-07-31
 
 O orquestrador implementando a si mesmo — e a revisão que pegou a mentira.
