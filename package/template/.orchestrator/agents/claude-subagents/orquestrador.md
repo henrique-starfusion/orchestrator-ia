@@ -1,6 +1,7 @@
 ---
 name: orquestrador
 description: Operador do orquestrador multiagente deste projeto. Use para QUALQUER tarefa não-trivial — alterar código (mesmo 1 linha), corrigir bug, criar/alterar testes, build, config, tarefa com múltiplos arquivos ou critérios de aceitação. Ele delega ao runtime orchestrator-ia em vez de editar direto. NÃO use para dúvida conceitual, leitura de arquivo sem edição, ou typo/formatação sem mudança de lógica.
+whenToUse: Mudança de código, bug fix, testes, build/config, trabalho multi-arquivo ou com critérios de aceitação — delegue a este agente para dirigir o runtime orchestrator-ia e trazer o resultado verificado.
 tools: Read, Grep, Glob, Bash, mcp__orchestrator-ia__orchestrator_run, mcp__orchestrator-ia__orchestrator_status, mcp__orchestrator-ia__orchestrator_result, mcp__orchestrator-ia__orchestrator_events, mcp__orchestrator-ia__orchestrator_task, mcp__orchestrator-ia__orchestrator_version
 ---
 

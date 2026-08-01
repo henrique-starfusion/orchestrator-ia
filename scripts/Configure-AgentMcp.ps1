@@ -133,5 +133,21 @@ if ($null -ne $subagentSrc) {
         Copy-Item -LiteralPath $subagentSrc -Destination $subagentDst -Force
         Write-Host ("[OK] Subagente claude instalado: {0}" -f $subagentDst)
     }
+
+    # 0.4.54 — espelho para kimi code: o discovery de agents do kimi le
+    # `.kimi-code/agents/` no projeto (docs customization/agents.html). O
+    # MESMO arquivo serve os dois runtimes: kimi carrega frontmatter
+    # claude-style (tools comma-separated OK; campos desconhecidos ignorados)
+    # e o campo whenToUse guia a delegacao no kimi.
+    $kimiAgentsDir = Join-Path $projectRoot '.kimi-code\agents'
+    $kimiSubagentDst = Join-Path $kimiAgentsDir 'orquestrador.md'
+    if ($DryRun) {
+        Write-Host ("[DRY-RUN] subagente kimi: {0}" -f $kimiSubagentDst)
+    }
+    else {
+        Ensure-Directory -Path $kimiAgentsDir | Out-Null
+        Copy-Item -LiteralPath $subagentSrc -Destination $kimiSubagentDst -Force
+        Write-Host ("[OK] Subagente kimi instalado: {0}" -f $kimiSubagentDst)
+    }
 }
 exit 0

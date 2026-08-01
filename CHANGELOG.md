@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 0.4.54 - 2026-07-31
+
+Um arquivo, dois runtimes: o orquestrador-agente também no kimi.
+
+### Added
+
+- **Espelho do subagente `orquestrador` para o kimi code** — o mesmo
+  Markdown agora é instalado também em `.kimi-code/agents/` de todos os
+  projetos (diretório de discovery do kimi, por docs oficiais). O frontmatter
+  ganhou `whenToUse` (dica de delegação do kimi; o claude ignora campo
+  desconhecido). Compatibilidade confirmada na documentação: kimi carrega
+  agent files claude-style (tools comma-separated, campos estrangeiros
+  ignorados). Smoke ao vivo: `kimi --agent-file orquestrador.md -p` respondeu
+  com a persona exata do operador ("NUNCA implemento, NUNCA spawno
+  subagentes, NUNCA valido por conta própria"). Sem `override`: nosso nome
+  não colide com built-ins e não tomamos o prompt de ninguém
+
 ## 0.4.53 - 2026-07-31
 
 O subagente que não consegue editar — só orquestrar.
