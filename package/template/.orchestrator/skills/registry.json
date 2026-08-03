@@ -60,6 +60,11 @@
    "id": "save-knowledge",
    "path": "save-knowledge/SKILL.md",
    "status": "active"
+  },
+  {
+   "id": "karpathy-guidelines",
+   "path": "karpathy-guidelines/SKILL.md",
+   "status": "active"
   }
  ],
  "external_dir": "external",

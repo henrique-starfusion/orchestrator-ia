@@ -317,6 +317,73 @@ LOOPS: dict[str, LoopSpec] = {
             "go-live", "release completa",
         ),
     ),
+    "research": LoopSpec(
+        id="research",
+        title="pesquisa na internet com relatório verificado",
+        goal=(
+            "Pesquisa web com entrega auditável — padrão Lead→Researchers→"
+            "Analyst→Writer do demo research-agent da Anthropic (SDK), adaptado "
+            "para UM executor sequencial de QUALQUER CLI (claude, codex, kimi, "
+            "gemini, opencode): decompor, pesquisar com a busca web do próprio "
+            "agente, extrair dados, redigir relatório com citações."
+        ),
+        task_type="docs",
+        stages=(
+            "DECOMPOR o tópico em 2-4 subtemas e gravar o plano em "
+            ".orchestrator/runtime/results/research/00-plano.md (subtemas, "
+            "perguntas-chave, o que conta como fonte boa).",
+            "PESQUISAR cada subtema com a ferramenta de busca web do SEU CLI "
+            "(WebSearch/web.run/google_search — a que existir). Se o CLI NÃO "
+            "tiver busca web disponível, declare a limitação no plano e siga "
+            "só com o acesso que tiver — nunca simule pesquisa. Gravar uma nota "
+            "por subtema em .orchestrator/runtime/results/research/notes/ com "
+            "URLs citadas por afirmação.",
+            "EXTRAIR dados quantitativos das notas (percentuais, rankings, "
+            "datas, valores) em .orchestrator/runtime/results/research/data/ e "
+            "gerar gráficos (python gerenciado + matplotlib) em .../charts/. "
+            "Sem dados quantitativos relevantes? Grave 'sem dados "
+            "quantitativos' — não invente números.",
+            "REDIGIR o relatório final em .orchestrator/runtime/results/"
+            "research/reports/ (PDF se reportlab disponível, senão Markdown): "
+            "seção por subtema, citações por afirmação, gráficos embutidos ou "
+            "referenciados.",
+            "REVISÃO DE HONESTIDADE: todo número do relatório rastreia para "
+            "uma nota com URL; lacunas marcadas explicitamente ('não "
+            "encontrado') em vez de preenchidas com conhecimento interno.",
+        ),
+        criteria=(
+            (
+                "Plano com 2-4 subtemas gravado em results/research/00-plano.md",
+                _EVID,
+            ),
+            (
+                "Uma nota por subtema em results/research/notes/ com URLs "
+                "citadas por afirmação",
+                _EVID,
+            ),
+            (
+                "Relatório final em results/research/reports/ com citações e "
+                "lacunas marcadas explicitamente",
+                _EVID,
+            ),
+            (
+                "Gráficos em results/research/charts/ OU registro explícito de "
+                "'sem dados quantitativos'",
+                _EVID,
+            ),
+        ),
+        done_when=(
+            "o relatório final tem toda afirmação rastreada para nota com URL "
+            "e nenhuma lacuna preenchida sem marcação"
+        ),
+        keywords=(
+            "pesquisa", "pesquisar", "pesquise", "research", "investigue",
+            "investigar", "levantamento", "tendencias", "tendências",
+            "analise de mercado", "análise de mercado", "fact check",
+            "fact-check", "verificar claim", "busque na internet",
+            "buscar na internet",
+        ),
+    ),
 }
 
 # Verbo de implementação vence "conteudo"/"landing" quando o pedido é de código.

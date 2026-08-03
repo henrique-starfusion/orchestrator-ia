@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+## 0.4.55 - 2026-08-03
+
+Pesquisa na internet para qualquer agente — e disciplina Karpathy no template.
+
+### Added
+
+- **`/loop-research`** — padrão Lead→Researchers→Analyst→Writer do demo
+  `research-agent` da Anthropic (Claude Agent SDK), adaptado para UM executor
+  sequencial de **qualquer CLI** (não só claude). O executor decompõe o
+  tópico em 2-4 subtemas, pesquisa com a busca web do SEU CLI
+  (WebSearch/web.run/google_search — com saída honesta "sem busca disponível"
+  em vez de simulação), grava notas com URLs em
+  `.orchestrator/runtime/results/research/notes/`, extrai dados/gráficos em
+  `data/` e `charts/`, e redige o relatório final em `reports/` com citações
+  por afirmação. Etapa obrigatória de REVISÃO DE HONESTIDADE: todo número
+  rastreia para nota com URL; lacunas marcadas ("não encontrado"), nunca
+  preenchidas com conhecimento interno
+- **Skill `karpathy-guidelines`** — os 4 princípios anti-pitfall de LLM do
+  andrej-karpathy-skills (MIT, com atribuição), adaptados agent-agnostic:
+  Pense antes de codar (pergunte em vez de assumir), Simplicidade primeiro
+  (50 linhas em vez de 200), Mudanças cirúrgicas (cada linha rastreia para o
+  pedido; código morto alheio só se menciona), Execução dirigida por objetivo
+  (critérios verificáveis + loop até passar). Registrada no template e
+  propagada a todos os projetos — menos reescritas, diffs menores, menos
+  suposições erradas em toda a frota
+
 ## 0.4.54 - 2026-07-31
 
 Um arquivo, dois runtimes: o orquestrador-agente também no kimi.
