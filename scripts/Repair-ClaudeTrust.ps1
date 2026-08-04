@@ -64,18 +64,44 @@ foreach ($form in $forms) {
         $end = if ($next.Success) { $next.Index } else { [Math]::Min($rest.Length, 3000) }
         $entryText = $rest.Substring(0, [Math]::Min($end, 3000))
 
-        if ($entryText -match '"hasTrustDialogAccepted"\s*:\s*true') { continue }
-
-        if ($entryText -match '"hasTrustDialogAccepted"\s*:\s*false') {
+        if ($entryText -match '"hasTrustDialogAccepted"\s*:\s*true') {
+            # já confiável — mas bug-079: enabledMcpjsonServers pode estar vazio
+        }
+        elseif ($entryText -match '"hasTrustDialogAccepted"\s*:\s*false') {
             $newEntry = [regex]::Replace($entryText, '"hasTrustDialogAccepted"\s*:\s*false', '"hasTrustDialogAccepted": true', 1)
             $raw = $raw.Substring(0, $start) + $newEntry + $rest.Substring($entryText.Length)
             $changed = $true
             continue
         }
+        else {
+            # Entrada existe sem a chave: insere logo apos a abertura do objeto da entrada
+            $raw = $raw.Substring(0, $start) + "`r`n      " + '"hasTrustDialogAccepted": true,' + $raw.Substring($start)
+            $changed = $true
+            continue
+        }
 
-        # Entrada existe sem a chave: insere logo apos a abertura do objeto da entrada
-        $raw = $raw.Substring(0, $start) + "`r`n      " + '"hasTrustDialogAccepted": true,' + $raw.Substring($start)
-        $changed = $true
+        # bug-079 — MCP do orquestrador REGISTRADO no .mcp.json mas nao
+        # HABILITADO: claude exige aprovação do usuário para servers de projeto;
+        # sem enabledMcpjsonServers a tool nunca aparece (sessão printbee de
+        # 56k linhas com 1.385 edits e ZERO chamadas orchestrator_*). Mesma
+        # família do trust: pré-aprova só o NOSSO server, demais seguem ask.
+        $mcpListRe = '"enabledMcpjsonServers"\s*:\s*\[(?<list>[^\]]*)\]'
+        $mm = [regex]::Match($entryText, $mcpListRe)
+        if ($mm.Success) {
+            $list = $mm.Groups['list'].Value
+            if ($list -notmatch 'orchestrator-ia') {
+                $trimmed = $list.Trim()
+                $newList = if ($trimmed.Length -eq 0) { '"orchestrator-ia"' } else { $trimmed + ', "orchestrator-ia"' }
+                $newEntry = $entryText.Replace($mm.Value, '"enabledMcpjsonServers": [' + $newList + ']')
+                $raw = $raw.Substring(0, $start) + $newEntry + $rest.Substring($entryText.Length)
+                $changed = $true
+            }
+        }
+        else {
+            # entrada sem a chave: insere após a abertura do objeto da entrada
+            $raw = $raw.Substring(0, $start) + "`r`n      " + '"enabledMcpjsonServers": ["orchestrator-ia"],' + $raw.Substring($start)
+            $changed = $true
+        }
     }
     else {
         # Entrada nova logo apos "projects": {

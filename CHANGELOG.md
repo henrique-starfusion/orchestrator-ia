@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+## 0.4.57 - 2026-08-04
+
+O guard que não impede, o MCP que aparece, e o spawn que herda tudo.
+
+### Fixed
+
+- **bug-080** — o guard estava BARRANDO trabalho legítimo no printbee
+  (reportado pelo dono: "não podemos impedir o agente de fazer edições e
+  correções"). Dois erros de desenho: (1) Write/Edit bloqueava com exit 2 em
+  vez de avisar; (2) `git reset --hard` cego bloqueava o fluxo canônico de
+  sync do prompts.md Type 6 (`git reset --hard origin/<base>`). Agora:
+  Write/Edit e git em lote (add -A/commit -a/stash) são **consultivos**
+  (systemMessage ao modelo, exit 0 — o trabalho sempre passa); bloqueio
+  de uma-vez só para destrutivo real sem volta (`git clean`,
+  `reset --hard` SEM alvo, `checkout/restore .`); `reset --hard <ref>`
+  explícito liberado. Verificado nos 5 cenários
+- **bug-079** — causa raiz de "o claude não chamou o orquestrador": o MCP
+  estava REGISTRADO no `.mcp.json` mas não HABILITADO — claude exige
+  aprovação para servers de projeto e o printbee tinha
+  `enabledMcpjsonServers: []` (sessão de 56k linhas com 1.385 Edits e ZERO
+  chamadas orchestrator_*). O Repair-ClaudeTrust agora também pré-habilita
+  `orchestrator-ia` em enabledMcpjsonServers por projeto (só o nosso
+  server; demais seguem ask-on-first-use). Verificado ao vivo
+- **bug-081** — o agente chamado pelo orquestrador não herdava as surfaces
+  do PRÓPRIO runtime de IA: rules descobria só `.cursor/.orchestrator`
+  (`.codex/rules` — citadas pelos agents codex do printbee — ficavam fora),
+  skills ignorava `.kimi-code`/`.gemini`, e as personas de agents
+  (.claude/.codex/.kimi-code/.opencode) nunca chegavam ao prompt. Agora:
+  rules cobre `.codex/.claude/.kimi-code/rules`; skills cobre
+  `.kimi-code/.gemini/skills` (projeto e home); e o prompt do executor lista
+  os agentes definidos no projeto como **guia de escopo** (personas — NÃO
+  delegação; delegação aninhada segue proibida)
+
 ## 0.4.56 - 2026-08-04
 
 O subagente orquestrador em TODOS os CLIs instalados.

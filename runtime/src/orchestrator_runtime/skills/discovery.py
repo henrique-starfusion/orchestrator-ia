@@ -57,6 +57,9 @@ def _skill_dirs(project_path: Path, *, include_user_global: bool) -> list[Path]:
         project_path / ".orchestrator" / "skills",
         project_path / ".claude" / "skills",
         project_path / ".codex" / "skills",
+        # bug-081 — skills dos outros runtimes instalados no projeto
+        project_path / ".kimi-code" / "skills",
+        project_path / ".gemini" / "skills",
         project_path / ".agents" / "skills",
     ]
     if not include_user_global:
@@ -66,6 +69,8 @@ def _skill_dirs(project_path: Path, *, include_user_global: bool) -> list[Path]:
         home / ".agents" / "skills",
         home / ".claude" / "skills",
         home / ".codex" / "skills",
+        home / ".kimi-code" / "skills",
+        home / ".gemini" / "skills",
         # Windows %USERPROFILE% is home on modern Python — no extra lookup needed
     ]
     return dirs

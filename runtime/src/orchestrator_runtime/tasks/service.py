@@ -1673,6 +1673,32 @@ class TaskService:
             + "\n".join(lines)
         )
 
+    def _agents_block(self) -> str:
+        """Personas de agente definidas no projeto (bug-081): o executor herda
+        as INSTRUÇÕES como guia de escopo/convenções do time — nunca a
+        delegação (delegação aninhada é proibida: faça você mesmo)."""
+        roots = (
+            (".claude/agents", "*.md"),
+            (".codex/agents", "*.toml"),
+            (".kimi-code/agents", "*.md"),
+            (".opencode/agent", "*.md"),
+        )
+        found: list[str] = []
+        for rel, pat in roots:
+            d = self.config.project_path / rel
+            if not d.is_dir():
+                continue
+            for f in sorted(d.glob(pat)):
+                found.append(f"- {rel}/{f.name}")
+        if not found:
+            return ""
+        return (
+            "Agentes definidos no projeto (personas; use as INSTRUÇÕES como "
+            "guia de escopo e convenções — NÃO delege: delegação aninhada é "
+            "proibida, faça você mesmo sequencialmente):\n"
+            + "\n".join(found[:12])
+        )
+
     def _rules_block(self, task: TaskRecord) -> str:
         """Regras do projeto aplicáveis ao pedido (0.4.27).
 
@@ -1793,6 +1819,11 @@ class TaskService:
         parts.append(self._git_hygiene_block())
         # 0.4.52-C1 - cap de 3 commits por iteracao (prompts.md Global Rule 17):
         # escopo grande convida a drift e fadiga de revisao.
+        # bug-081 — o executor também herda os agentes do projeto (personas
+        # como guia de escopo; delegação continua proibida).
+        agents_block = self._agents_block()
+        if agents_block:
+            parts.append(agents_block)
         parts.append(
             "Cap de commits: máximo 3 commits nesta iteração. Se a correção "
             "natural pedir mais, pare nos 3 e descreva no relatório o plano de "

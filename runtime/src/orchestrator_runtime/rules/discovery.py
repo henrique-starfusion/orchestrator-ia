@@ -22,9 +22,15 @@ _WORD_RE = re.compile(r"[a-zà-ú0-9_]{4,}", re.IGNORECASE)
 
 # Diretórios de regras, em ordem de precedência. `legacy-import` é cópia do
 # vendor e entra por último — a deduplicação por nome de arquivo evita repetir.
+# bug-081 — o executor herdava só .cursor/.orchestrator: as rules DO MODELO
+# (`.codex/rules` existem e são citadas pelos agents codex do printbee) nunca
+# chegavam ao agente chamado pelo orquestrador.
 _RULE_DIRS = (
     Path(".cursor") / "rules",
     Path(".orchestrator") / "rules",
+    Path(".codex") / "rules",
+    Path(".claude") / "rules",
+    Path(".kimi-code") / "rules",
 )
 
 _MAX_RULES = 6

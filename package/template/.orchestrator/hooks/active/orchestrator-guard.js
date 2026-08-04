@@ -66,23 +66,48 @@ function readStdin() {
 // trabalho não commitado de outros agentes na árvore, `git add -A` arrasta e
 // `git clean/reset/checkout .` DESTRÓI trabalho alheio. Vale MESMO para o
 // executor (ORCHESTRATOR_CHILD_AGENT) — higiene não é nudge de orquestração.
-const GIT_VIOLATIONS = [
+//
+// bug-080 (2026-08-04, printbee): o guard não pode IMPEDIR edição/correção —
+// o ideal é o orquestrador executar, sem travar o agente. Destrutivo em lote
+// (mata trabalho alheio sem volta) segue bloqueando UMA vez; tudo o mais vira
+// aviso consultivo (systemMessage, exit 0). `reset --hard <ref>` com alvo
+// explícito NÃO é violação: é o sync documentado do fluxo de merge (Type 6
+// do prompts.md) — o bloqueio cego a ele travava o fluxo canônico do printbee.
+const GIT_DESTRUCTIVE = [
+  { re: /\bgit\s+clean\b/, label: 'git clean (DESTRÓI não-rastreados alheios)' },
+  { re: /\bgit\s+reset\s+--hard\s*$/, label: 'git reset --hard sem alvo (DESTRÓI não-commitados da árvore)' },
+  { re: /\bgit\s+(checkout|restore)\b[^;|&]*(--\s*\.$|\s\.$|\s\*)/, label: 'git checkout/restore em lote (DESTRÓI não-commitados alheios)' },
+];
+const GIT_ADVISORY = [
   { re: /\bgit\s+add\s+([^;|&]*\s)?(-A\b|--all\b|-u\b|\.$|\.\s)/, label: 'git add em lote (-A/--all/-u/.)' },
   { re: /\bgit\s+commit\b[^;|&]*\s(-a\b|-am\b|--all\b)/, label: 'git commit -a/-am (stage em lote embutido)' },
   { re: /\bgit\s+stash\b/, label: 'git stash (pode enterrar trabalho alheio)' },
-  { re: /\bgit\s+clean\b/, label: 'git clean (DESTRÓI não-rastreados alheios)' },
-  { re: /\bgit\s+reset\s+--hard\b/, label: 'git reset --hard (DESTRÓI não-commitados alheios)' },
-  { re: /\bgit\s+(checkout|restore)\b[^;|&]*(--\s*\.$|\s\.$|\s\*)/, label: 'git checkout/restore em lote (DESTRÓI não-commitados alheios)' },
 ];
+
+function advise(message) {
+  // Consultivo: o modelo VE o aviso (systemMessage) e a operação passa.
+  process.stdout.write(JSON.stringify({ systemMessage: message }));
+  return 0;
+}
 
 function gitHygieneCheck(payload, root) {
   if ((process.env.ORCHESTRATOR_GUARD || '').toLowerCase() === 'off') return 0;
   const command = String((payload.tool_input || {}).command || '');
   if (!/\bgit\b/.test(command)) return 0;
-  const hit = GIT_VIOLATIONS.find((v) => v.re.test(command));
+
+  const advisoryHit = GIT_ADVISORY.find((v) => v.re.test(command));
+  if (advisoryHit) {
+    return advise(
+      `Higiene git (árvore compartilhada): ${advisoryHit.label} pode arrastar ` +
+      'trabalho não commitado de outros agentes. Prefira `git status` + ' +
+      '`git add <path>...` explícito; se o lote for mesmo o pretendido, siga em frente.'
+    );
+  }
+
+  const hit = GIT_DESTRUCTIVE.find((v) => v.re.test(command));
   if (!hit) return 0;
 
-  // Bloqueia UMA vez por classe/sessão: força a decisão consciente; repetir passa.
+  // Destrutivo: bloqueia UMA vez por classe/sessão; repetir consciente passa.
   const sessionId = String(payload.session_id || 'sem-sessao').replace(/[^A-Za-z0-9_-]/g, '');
   const stampDir = path.join(root, '.orchestrator', 'runtime', 'guard');
   const cls = hit.label.replace(/[^A-Za-z0-9]+/g, '-').slice(0, 32);
@@ -97,19 +122,18 @@ function gitHygieneCheck(payload, root) {
 
   process.stderr.write(
     [
-      'HIGIENE GIT — ÁRVORE COMPARTILHADA.',
+      'HIGIENE GIT — COMANDO DESTRUTIVO EM ÁRVORE COMPARTILHADA.',
       '',
       `Comando: ${hit.label}`,
-      'Este workspace pode ter trabalho NÃO COMMITADO de outros agentes.',
-      'Comandos git em lote arrastam (add -A/commit -a) ou destroem',
-      '(clean/reset --hard/checkout .) trabalho que não é seu.',
+      'Este workspace pode ter trabalho NÃO COMMITADO de outros agentes —',
+      'este comando apaga sem volta o que não é seu.',
       '',
       'Faça em vez disso:',
       '  git status                      # veja o que é SEU nesta task',
       '  git add <path1> <path2>         # stage explícito, só o seu',
       '  git commit -m "..."             # commit sai só com o seu trecho',
       '',
-      'Se o comando em lote for mesmo o pretendido, repita a operação — ela passa.',
+      'Se a destruição for mesmo pretendida, repita a operação — ela passa.',
     ].join('\n')
   );
   return 2;
@@ -205,27 +229,24 @@ function main() {
       ? `${edits} arquivos de codigo-fonte editados direto nesta sessao (este e o ${edits}o).`
       : 'Primeira edicao de codigo-fonte desta sessao.';
 
-  process.stderr.write(
+  // bug-080 (2026-08-04, printbee): consultivo, NUNCA bloqueante — o ideal é
+  // o orquestrador executar a tarefa, mas o agente não pode ser impedido de
+  // editar/corrigir. O aviso aparece ao modelo (systemMessage) na cadência
+  // do rearm; a edição sempre passa.
+  return advise(
     [
-      'ORQUESTRADOR NAO ACIONADO.',
-      '',
-      `Alvo: ${path.basename(target)}`,
-      placar,
-      'Neste projeto, alterar codigo-fonte e um gatilho de orquestracao — ver',
-      'CLAUDE.md / AGENTS.md, secao "Como usar o Orquestrador".',
-      '',
-      'Faca em vez disso:',
-      '  orchestrator run --prompt "<atividade com criterios de aceitacao>"',
-      '  (loops: --loop bug|mvp|landing|conteudo|saas, ou prefixo /loop-bug)',
-      'Via MCP: orchestrator_run -> orchestrator_status -> orchestrator_result.',
-      '',
-      'Se a edicao for mesmo trivial (typo, comentario, formatacao sem mudanca',
-      'de logica), repita a operacao — ela passa. O aviso volta daqui a',
-      `${rearmMin} min de edicao direta, para a excecao nao virar o padrao.`,
-      'Desligar de vez nesta sessao: ORCHESTRATOR_GUARD=off.',
-    ].join('\n')
+      'ORQUESTRADOR NAO ACIONADO (aviso consultivo — a edição passa normalmente).',
+      `Alvo: ${path.basename(target)}. ${placar}`,
+      'Neste projeto, alterar código-fonte é gatilho de orquestração — ver',
+      'CLAUDE.md / AGENTS.md, seção "Como usar o Orquestrador".',
+      'Prefira: orchestrator run --prompt "<atividade com critérios de aceitação>"',
+      '(loops: /loop-bug|mvp|landing|conteudo|saas|ui-probe|review|research),',
+      'ou via MCP: orchestrator_run -> orchestrator_status -> orchestrator_result.',
+      'Se a edição for mesmo o caminho certo (typo, ajuste pontual, correção',
+      'direta), siga em frente — nada está bloqueado. O lembrete volta daqui a',
+      `${rearmMin} min de edição direta. Desligar: ORCHESTRATOR_GUARD=off.`,
+    ].join(' ')
   );
-  return 2;
 }
 
 process.exit(main());
