@@ -150,4 +150,40 @@ if ($null -ne $subagentSrc) {
         Write-Host ("[OK] Subagente kimi instalado: {0}" -f $kimiSubagentDst)
     }
 }
+
+# ---------------------------------------------------------------------------
+# 0.4.56 — espelhos codex (TOML) e opencode (Markdown) do subagente.
+# Codex descobre agents em `.codex/agents/*.toml` (formato name+description+
+# developer_instructions, confirmado nos projetos); opencode le
+# `.opencode/agent/*.md` com frontmatter mode: subagent. Gemini fica de fora:
+# CLI nao instalado neste host.
+# ---------------------------------------------------------------------------
+$mirrors = @(
+    @{
+        Src    = 'package\template\.orchestrator\agents\codex-subagents\orquestrador.toml'
+        DstDir = '.codex\agents'
+        Dst    = 'orquestrador.toml'
+        Label  = 'codex'
+    },
+    @{
+        Src    = 'package\template\.orchestrator\agents\opencode-subagents\orquestrador.md'
+        DstDir = '.opencode\agent'
+        Dst    = 'orquestrador.md'
+        Label  = 'opencode'
+    }
+)
+foreach ($m in $mirrors) {
+    if ([string]::IsNullOrWhiteSpace($PackageRoot)) { continue }
+    $src = Join-Path $PackageRoot $m.Src
+    if (-not (Test-Path -LiteralPath $src)) { continue }
+    $dir = Join-Path $projectRoot $m.DstDir
+    $dst = Join-Path $dir $m.Dst
+    if ($DryRun) {
+        Write-Host ("[DRY-RUN] subagente {0}: {1}" -f $m.Label, $dst)
+        continue
+    }
+    Ensure-Directory -Path $dir | Out-Null
+    Copy-Item -LiteralPath $src -Destination $dst -Force
+    Write-Host ("[OK] Subagente {0} instalado: {1}" -f $m.Label, $dst)
+}
 exit 0

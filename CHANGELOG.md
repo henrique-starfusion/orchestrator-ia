@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## 0.4.56 - 2026-08-04
+
+O subagente orquestrador em TODOS os CLIs instalados.
+
+### Added
+
+- **Espelho codex** — `orquestrador.toml` em `.codex/agents/` de todos os
+  projetos (formato nativo confirmado: name + description +
+  developer_instructions, igual aos 15 agents existentes nos projetos).
+  Mesma persona operador-do-runtime, adaptada ao contexto codex (sem
+  spawn_agent, shell só para o CLI orchestrator)
+- **Espelho opencode** — `orquestrador.md` em `.opencode/agent/` com
+  frontmatter nativo (`mode: subagent`, tools com write/edit desligados)
+
+### Notes
+
+- Cobertura final por CLI neste host: claude (.claude/agents ✓ 0.4.53),
+  kimi (.kimi-code/agents ✓ 0.4.54), **codex (.codex/agents ✓)**,
+  **opencode (.opencode/agent ✓)**. Gemini fica fora: CLI não instalado
+  nesta máquina. Cursor segue como front controller via MCP (não é worker,
+  não tem mecanismo de subagente)
+
 ## 0.4.55 - 2026-08-03
 
 Pesquisa na internet para qualquer agente — e disciplina Karpathy no template.
