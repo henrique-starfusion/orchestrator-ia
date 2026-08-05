@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+## 0.4.58 - 2026-08-05
+
+O bug que escondia o orquestrador de todos os clientes MCP.
+
+### Fixed
+
+- **bug-082** — causa raiz da não-adoção do subagente (investigação pedida
+  pelo dono após 2 ciclos com zero invocações): o launcher `findPython()`
+  escolhia qualquer `python` do PATH, e clientes MCP (claude/kimi) que
+  spawnam o servidor com o ambiente DELES caíam num python sem as deps —
+  o servidor MCP **morria no boot** com `ModuleNotFoundError: typer`,
+  reproduzido com o spawn exato do `.mcp.json`. Resultado: ZERO tools
+  `orchestrator_*` disponíveis nas sessões (24 projetos com MCP
+  "habilitado" mas morto). O launcher agora prefere o **venv do runtime**
+  (`runtime/.venv`, que tem todas as deps) antes de qualquer python do PATH.
+  Handshake re-testado pós-fix: initialize OK, `serverInfo orchestrator-ia
+  1.28.1`, `tools/list` respondendo
+
+### Notes
+
+- Cadeia completa da adoção, agora destravada de ponta a ponta: MCP
+  registrado (0.4.49) → habilitado (0.4.57) → **vivo no boot (0.4.58)** →
+  subagente carregado (0.4.53) → invocação espontânea (a observar)
+
 ## 0.4.57 - 2026-08-04
 
 O guard que não impede, o MCP que aparece, e o spawn que herda tudo.

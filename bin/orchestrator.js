@@ -294,6 +294,19 @@ function findPowerShell() {
 }
 
 function findPython() {
+  // bug-082 — o MCP morria no boot ("No module named 'typer'") quando o
+  // `python` do PATH não era o venv do runtime: clientes MCP (claude/kimi)
+  // spawnavam o servidor com o ambiente deles, o launcher pegava qualquer
+  // python do PATH (sem deps) e o servidor morria instantaneamente — ZERO
+  // tools orchestrator_* disponíveis, causa raiz da não-adoção do subagente.
+  // O venv do runtime tem todas as deps: preferir ele antes de qualquer PATH.
+  const venvPy = process.platform === 'win32'
+    ? path.join(packageRoot, 'runtime', '.venv', 'Scripts', 'python.exe')
+    : path.join(packageRoot, 'runtime', '.venv', 'bin', 'python');
+  if (fs.existsSync(venvPy)) {
+    const probe = spawnSync(venvPy, ['--version'], { encoding: 'utf8', windowsHide: true });
+    if (probe.status === 0) return { cmd: venvPy, prefix: [] };
+  }
   // Prefer `python`/`python3` before Windows `py`: the launcher may default to a
   // free-threaded build (e.g. 3.14t) that breaks wheels like pydantic_core.
   const candidates = process.platform === 'win32'
