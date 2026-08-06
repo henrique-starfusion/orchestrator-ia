@@ -38,17 +38,27 @@ try {
         -Value '{"session_id":"test-rearm","tool_input":{"file_path":"C:/proj/src/app.py"}}' `
         -Encoding ASCII
 
+    # bug-080 (0.4.57): o guard de codigo-fonte virou CONSULTIVO — exit 0 sempre,
+    # aviso entregue como systemMessage no stdout. O sinal observavel passou a
+    # ser o TEXTO; assertar exit 2 aqui testava o guard antigo e dava vermelho
+    # num comportamento correto (foi o que aconteceu na suite de 0.4.59).
     function Invoke-Guard {
         param([string]$File = $payloadFile)
         # 2>nul DENTRO do cmd: redirecionar stderr de nativo pelo PowerShell 5.1
         # transforma cada linha em ErrorRecord e, com ErrorActionPreference=Stop,
         # o proprio aviso do guard derruba o teste.
-        cmd /c "node ""$guard"" < ""$File"" 2>nul" | Out-Null
-        return $LASTEXITCODE
+        $out = cmd /c "node ""$guard"" < ""$File"" 2>nul"
+        return [pscustomobject]@{ Code = $LASTEXITCODE; Out = ($out -join "`n") }
     }
 
-    Assert-Test -Condition ((Invoke-Guard) -eq 2) -Message 'guard nao bloqueou a 1a edicao de codigo-fonte'
-    Assert-Test -Condition ((Invoke-Guard) -eq 0) -Message 'guard bloqueou de novo dentro da janela (travaria a sessao)'
+    $first = Invoke-Guard
+    Assert-Test -Condition ($first.Code -eq 0) -Message (
+        'guard bloqueou a 1a edicao (bug-080: tem que ser consultivo, exit 0), veio {0}' -f $first.Code
+    )
+    Assert-Test -Condition ($first.Out -match 'ORQUESTRADOR NAO ACIONADO') -Message 'guard nao avisou na 1a edicao de codigo-fonte'
+
+    $second = Invoke-Guard
+    Assert-Test -Condition ([string]::IsNullOrWhiteSpace($second.Out)) -Message 'guard repetiu o aviso dentro da janela (viraria ruido a cada edicao)'
 
     # Envelhece o marcador alem da janela de rearme.
     $state = Get-Content -LiteralPath $stamp -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -59,7 +69,8 @@ try {
         $stamp, ($state | ConvertTo-Json -Compress), (New-Object System.Text.UTF8Encoding($false))
     )
 
-    Assert-Test -Condition ((Invoke-Guard) -eq 2) -Message 'guard nao rearmou apos a janela: volta a ser aviso unico'
+    $rearmed = Invoke-Guard
+    Assert-Test -Condition ($rearmed.Out -match 'ORQUESTRADOR NAO ACIONADO') -Message 'guard nao rearmou apos a janela: volta a ser aviso unico'
 
     $final = Get-Content -LiteralPath $stamp -Raw -Encoding UTF8 | ConvertFrom-Json
     Assert-Test -Condition ($final.edits -eq 3) -Message (
@@ -71,7 +82,9 @@ try {
     Set-Content -LiteralPath $docFile `
         -Value '{"session_id":"test-rearm2","tool_input":{"file_path":"C:/proj/README.md"}}' `
         -Encoding ASCII
-    Assert-Test -Condition ((Invoke-Guard -File $docFile) -eq 0) -Message 'guard bloqueou edicao de documentacao'
+    $doc = Invoke-Guard -File $docFile
+    Assert-Test -Condition ($doc.Code -eq 0) -Message 'guard bloqueou edicao de documentacao'
+    Assert-Test -Condition ([string]::IsNullOrWhiteSpace($doc.Out)) -Message 'guard avisou em edicao de documentacao (alvo isento)'
 
     # bug-057: flag de filho e VALOR, nao presenca. '0' herdado nao silencia
     # o guard; so valor real ('1') identifica o executor delegado.
@@ -80,9 +93,12 @@ try {
         -Value '{"session_id":"test-childflag","tool_input":{"file_path":"C:/proj/src/other.py"}}' `
         -Encoding ASCII
     $env:ORCHESTRATOR_CHILD_AGENT = '0'
-    Assert-Test -Condition ((Invoke-Guard -File $childFile) -eq 2) -Message 'guard silenciou com ORCHESTRATOR_CHILD_AGENT=0 (presence-based, bug-057)'
+    $flagZero = Invoke-Guard -File $childFile
+    Assert-Test -Condition ($flagZero.Out -match 'ORQUESTRADOR NAO ACIONADO') -Message 'guard silenciou com ORCHESTRATOR_CHILD_AGENT=0 (presence-based, bug-057)'
     $env:ORCHESTRATOR_CHILD_AGENT = '1'
-    Assert-Test -Condition ((Invoke-Guard -File $childFile) -eq 0) -Message 'guard bloqueou o proprio executor delegado (ORCHESTRATOR_CHILD_AGENT=1)'
+    $flagOne = Invoke-Guard -File $childFile
+    Assert-Test -Condition ($flagOne.Code -eq 0) -Message 'guard bloqueou o proprio executor delegado (ORCHESTRATOR_CHILD_AGENT=1)'
+    Assert-Test -Condition ([string]::IsNullOrWhiteSpace($flagOne.Out)) -Message 'guard avisou o executor delegado (ORCHESTRATOR_CHILD_AGENT=1)'
     Remove-Item Env:ORCHESTRATOR_CHILD_AGENT -ErrorAction SilentlyContinue
 
     Remove-Item Env:CLAUDE_PROJECT_DIR -ErrorAction SilentlyContinue

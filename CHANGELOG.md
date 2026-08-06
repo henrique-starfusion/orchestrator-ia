@@ -38,6 +38,13 @@ O orquestrador vira o agente PADRAO da sessao, nao so um agente disponivel.
 - `Test-DefaultAgent`: criacao, idempotencia, merge preservando conteudo do
   usuario, respeito a valor customizado, settings.json invalido sem derrubar
   o install, ausencia de BOM e `mode: all` no subagente opencode
+- **bug-084** — `Test-Hooks` ficou vermelho contra um guard CORRETO: as
+  assercoes cobravam `exit 2` (guard bloqueante), mas o **bug-080** (0.4.57)
+  tornou o guard de codigo-fonte consultivo — `exit 0` com o aviso em
+  `systemMessage` no stdout. O teste passa a assertar o TEXTO do aviso e o
+  silencio dentro da janela de rearme, que e o comportamento observavel
+  agora; ganhou tambem os casos de "nao avisa" (doc isenta e executor
+  delegado). Suite: 30/30
 
 ## 0.4.58 - 2026-08-05
 
