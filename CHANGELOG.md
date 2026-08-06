@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+## 0.4.59 - 2026-08-06
+
+O orquestrador vira o agente PADRAO da sessao, nao so um agente disponivel.
+
+### Added
+
+- **bug-083** — instalar o subagente `orquestrador` (0.4.53–0.4.56) so o
+  tornava DISPONIVEL: a thread principal seguia sendo o agente generico, que
+  decidia sozinho se delegava — e frequentemente nao delegava. Os dois CLIs
+  que expoem "rodar a sessao COMO um agente nomeado" passam a ser
+  configurados em todo install/update/propagate:
+  - **claude code**: `.claude/settings.json` → `"agent": "orquestrador"`.
+    A doc oficial descreve a chave como *"Run the main thread as a named
+    subagent... Applies that subagent's system prompt, tool restrictions, and
+    model"* — a thread principal herda as tools restritas (sem write/edit) e
+    o system prompt do operador do runtime
+  - **opencode**: `opencode.json` (raiz, precedencia maxima) →
+    `"default_agent": "orquestrador"`. A doc exige agente **primary**:
+    subagent puro cai no fallback `build` com warning, entao o template do
+    subagente opencode passou de `mode: subagent` para `mode: all` (serve
+    como primary E subagent)
+- Chave gerenciada com respeito ao usuario: gravada quando ausente ou ja
+  nossa; valor DIFERENTE definido pelo usuario e **preservado com aviso**.
+  Merge nao-destrutivo (hooks/permissions/enabledPlugins intactos) e UTF-8
+  sem BOM (mesmo motivo do bug-074)
+
+### Notes
+
+- Sem equivalente na doc oficial (verificado 08/2026): **gemini CLI** (so
+  `experimental.enableAgents` e `agents.overrides`), **codex** (`[agents]`
+  tem apenas `max_threads`/`max_depth`) e **kimi code** (`config.toml` e de
+  provider/modelo). Nesses tres o desvio segue pelo subagente instalado +
+  `AGENTS.md` gerado — que ja e o mecanismo atual
+- `Test-DefaultAgent`: criacao, idempotencia, merge preservando conteudo do
+  usuario, respeito a valor customizado, settings.json invalido sem derrubar
+  o install, ausencia de BOM e `mode: all` no subagente opencode
+
 ## 0.4.58 - 2026-08-05
 
 O bug que escondia o orquestrador de todos os clientes MCP.

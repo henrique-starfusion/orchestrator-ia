@@ -1,0 +1,18 @@
+{
+    "mcpServers":  {
+                       "orchestrator-ia":  {
+                                               "type":  "stdio",
+                                               "command":  "cmd",
+                                               "args":  [
+                                                            "/c",
+                                                            "C:\\Users\\henrique\\AppData\\Roaming\\kimi-desktop\\daimon-share\\daimon\\command-process-owner\\bin\\node.cmd",
+                                                            "D:\\StarFusion\\bootstrap-agents\\bin\\orchestrator.js",
+                                                            "mcp",
+                                                            "serve",
+                                                            "--transport",
+                                                            "stdio"
+                                                        ],
+                                               "enabled":  true
+                                           }
+                   }
+}

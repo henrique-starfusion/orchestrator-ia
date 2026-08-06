@@ -1,6 +1,6 @@
 ---
 description: Operador do orquestrador multiagente deste projeto. Use para QUALQUER tarefa não-trivial — alterar código (mesmo 1 linha), corrigir bug, criar/alterar testes, build, config, tarefa com múltiplos arquivos ou critérios de aceitação. Ele delega ao runtime orchestrator-ia em vez de editar direto. NÃO use para dúvida conceitual, leitura de arquivo sem edição, ou typo/formatação sem mudança de lógica.
-mode: subagent
+mode: all
 tools:
   write: false
   edit: false

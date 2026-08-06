@@ -38,10 +38,32 @@ Shortcut for steps 2-6: `orchestrator dispatch --task-class <class> --client <c>
 | Client | Assembled command |
 |---|---|
 | claude | `claude --model sonnet -p "Atualize o README do modulo X"` |
-| codex | `codex exec -m gpt-5.6-sol-medium "Corrija o teste Y"` |
+| codex | `codex exec -m gpt-5.6-sol "Corrija o teste Y"` |
 | gemini | `gemini -m gemini-3.1-pro -p "Analise o arquivo Z"` |
+| kimi | `kimi -m kimi-code/k3 -p "Implemente o helper W"` |
 | opencode | `opencode run --model default "Refatore W"` |
 | cursor | (no CLI) `Task model="claude-sonnet-5-thinking-high"` — slug from `orchestrator route --client cursor` |
+
+## Host quirks (Windows) — leia ANTES de montar o comando
+
+- **Shim `.CMD`/.BAT (codex, kimi, opencode via npm)**: a linha passa pelo
+  cmd.exe com teto de **~8.191 chars** — prompt maior morre no spawn
+  ("linha de comando muito longa"). O runtime desvia para stdin quando o
+  CLI aceita; `kimi -p` EXIGE valor, então prompt gigante falha com
+  `[argv-overflow]` explícito — encurte o contexto (skills/rules escopados).
+- **stdin vs flag**: `codex exec` e `claude -p` leem o prompt do stdin
+  quando o valor não vem no argv; `kimi -p` NÃO (precisa do valor).
+- **codex no Windows**: `--sandbox workspace-write` falha com erro 740
+  (requer elevação); o adapter troca para `danger-full-access`
+  automaticamente. Não reponha o flag na mão.
+- **Modelos reais mudam por host**: resolva com `orchestrator route` (que
+  lê `config/models.json` local) em vez de decorar nomes — aliases kimi
+  reais são `kimi-code/k3`, `kimi-code/k3-256k`,
+  `kimi-code/kimi-for-coding(-highspeed)`; `kimi-latest` NÃO existe.
+- **Trust (claude)**: workspace novo sem trust aceito PENDURA o CLI no
+  trust dialog (spawn não-interativo nunca responde). O install/update do
+  orquestrador pré-aquece `projects["<path>"].hasTrustDialogAccepted` no
+  `~/.claude.json`; se o hang aparecer num path novo, confira essa chave.
 
 ## Ownership split
 

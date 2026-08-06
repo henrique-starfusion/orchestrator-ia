@@ -590,6 +590,28 @@ nunca ocupa o workspace, cancel aborta o pré-loop e desfila a próxima. Se um
 processo MCP antigo ainda estiver congelado: recarregar o Cursor/MCP e, se o
 lock persistir, apagar `.orchestrator/runtime/locks/workspace.write.lock`.
 
+## Agente não delega mesmo com o subagente instalado (bug-083, 0.4.59+)
+
+Sintoma: `.claude/agents/orquestrador.md` existe, mas o Claude edita direto —
+a thread principal é o agente genérico e só delega se "achar" que deve.
+
+A partir de 0.4.59 o install/update grava o agente padrão da sessão:
+
+| CLI | Arquivo | Chave |
+|---|---|---|
+| claude code | `.claude/settings.json` | `"agent": "orquestrador"` |
+| opencode | `opencode.json` (raiz) | `"default_agent": "orquestrador"` |
+
+No claude, a chave faz a main thread rodar **como** o subagente (herda system
+prompt e tools restritas — sem write/edit). No opencode, `default_agent` exige
+agente *primary*: por isso o subagente usa `mode: all`.
+
+Se você definiu um `agent` próprio, o orquestrador **não sobrescreve** — emite
+aviso. Para orquestrar por padrão, troque o valor para `orquestrador`.
+
+Gemini CLI, codex e kimi code não têm chave equivalente (verificado na doc
+oficial em 08/2026); neles o desvio vem do subagente + `AGENTS.md`.
+
 ## Ver também
 
 - [`cli-reference.md`](cli-reference.md)

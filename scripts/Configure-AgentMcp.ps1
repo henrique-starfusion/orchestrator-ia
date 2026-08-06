@@ -186,4 +186,91 @@ foreach ($m in $mirrors) {
     Copy-Item -LiteralPath $src -Destination $dst -Force
     Write-Host ("[OK] Subagente {0} instalado: {1}" -f $m.Label, $dst)
 }
+
+# ---------------------------------------------------------------------------
+# 0.4.59 — AGENTE PADRAO DA SESSAO (bug-083).
+#
+# Instalar o subagente so o torna DISPONIVEL: a thread principal continua
+# sendo o agente generico, que decide sozinho se delega. Os dois CLIs que
+# expoem "rodar a sessao COMO um agente nomeado" passam a apontar para o
+# orquestrador — o desvio deixa de depender da boa vontade do modelo:
+#
+#   claude code : .claude/settings.json -> "agent": "orquestrador"
+#                 (docs: "Run the main thread as a named subagent... Applies
+#                 that subagent's system prompt, tool restrictions, and model")
+#   opencode    : opencode.json -> "default_agent": "orquestrador"
+#                 (docs: precisa ser agente PRIMARY; subagent puro cai no
+#                 fallback "build" com warning — por isso o template usa
+#                 `mode: all`, que serve como primary E subagent)
+#
+# Sem equivalente (verificado na doc oficial, 08/2026): gemini CLI (so
+# experimental.enableAgents / agents.overrides), codex ([agents] tem apenas
+# max_threads/max_depth) e kimi code (config.toml e de provider/modelo).
+# Nesses tres o desvio segue via subagente + AGENTS.md, ja instalados acima.
+#
+# Chave gerenciada com respeito ao usuario: grava quando ausente ou ja nossa;
+# valor DIFERENTE definido pelo usuario e preservado com aviso.
+# ---------------------------------------------------------------------------
+$agentName = 'orquestrador'
+
+function Set-DefaultAgentKey {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Key,
+        [Parameter(Mandatory = $true)][string]$Value,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [switch]$WhatIfDryRun
+    )
+
+    $data = $null
+    if (Test-Path -LiteralPath $Path) {
+        try {
+            $raw = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+            if (-not [string]::IsNullOrWhiteSpace($raw)) {
+                $data = $raw | ConvertFrom-Json
+            }
+        }
+        catch {
+            Write-Host ("[AVISO] {0} invalido; agente padrao {1} nao definido." -f $Label, $Value)
+            return
+        }
+    }
+    if ($null -eq $data) { $data = [pscustomobject]@{} }
+
+    $current = $null
+    if ($data.PSObject.Properties[$Key]) { $current = [string]$data.$Key }
+
+    if ($current -eq $Value) {
+        Write-Host ("[OK] {0}: agente padrao ja e '{1}'." -f $Label, $Value)
+        return
+    }
+    if (-not [string]::IsNullOrWhiteSpace($current)) {
+        Write-Host ("[AVISO] {0}: '{1}' = '{2}' definido pelo usuario; preservado. Para orquestrar por padrao, use '{3}'." -f `
+                $Label, $Key, $current, $Value)
+        return
+    }
+    if ($WhatIfDryRun) {
+        Write-Host ("[DRY-RUN] {0}: definiria {1} = '{2}'" -f $Label, $Key, $Value)
+        return
+    }
+
+    $data | Add-Member -NotePropertyName $Key -NotePropertyValue $Value -Force
+    Ensure-Directory -Path (Split-Path -Parent $Path) | Out-Null
+    # UTF8 sem BOM: mesmo motivo do bug-074 (parser de CLI rejeita BOM).
+    [System.IO.File]::WriteAllText(
+        $Path, ($data | ConvertTo-Json -Depth 20), [System.Text.UTF8Encoding]::new($false)
+    )
+    Write-Host ("[OK] {0}: sessao roda como '{1}' ({2})." -f $Label, $Value, $Key)
+}
+
+Set-DefaultAgentKey -Path (Join-Path $projectRoot '.claude\settings.json') `
+    -Key 'agent' -Value $agentName -Label 'claude code' -WhatIfDryRun:$DryRun
+
+# opencode le opencode.json na RAIZ do projeto (precedencia maxima entre os
+# arquivos de config padrao). So faz sentido quando o subagente existe.
+if (Test-Path -LiteralPath (Join-Path $projectRoot '.opencode\agent\orquestrador.md')) {
+    Set-DefaultAgentKey -Path (Join-Path $projectRoot 'opencode.json') `
+        -Key 'default_agent' -Value $agentName -Label 'opencode' -WhatIfDryRun:$DryRun
+}
+
 exit 0
