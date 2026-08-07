@@ -234,6 +234,27 @@ class TaskService:
             dt = dt.replace(tzinfo=timezone.utc)
         return (now - dt).total_seconds()
 
+    def _idle_seconds(self, task: TaskRecord, now: datetime) -> float | None:
+        """Há quanto tempo a task não dá SINAL DE VIDA.
+
+        bug-096 — não é `updated_at`: esse só muda em transição de estado, e um
+        executor legítimo passa 40 min em EXECUTING sem tocá-lo. O heartbeat de
+        30s é EVENTO. Usar só `updated_at` fez o reaper registrar "parada há
+        1643s" numa task do printbee (`25ea69c8324a`) que estava emitindo
+        heartbeat até 87s antes — a decisão até acertou (o processo dono tinha
+        morrido mesmo), mas pelo motivo errado e com a margem inteira apoiada no
+        arquivo de lock. Lock apagado à mão viraria execução saudável cancelada.
+
+        O sinal honesto é o mais RECENTE entre os dois.
+        """
+        ages = [self._age_seconds(task.updated_at, now)]
+        try:
+            ages.append(self._age_seconds(self.repo.last_event_at(task.id), now))
+        except Exception:  # noqa: BLE001
+            pass
+        valid = [a for a in ages if a is not None]
+        return min(valid) if valid else None
+
     def _cancel_stale_execution(self) -> int:
         """Cancela task NÃO-TERMINAL que nenhum processo vivo está tocando.
 
@@ -261,19 +282,23 @@ class TaskService:
                 continue
             if task.id in self._running_tasks:
                 continue  # este processo está rodando: viva por definição
-            age_s = self._age_seconds(task.updated_at, now)
-            if age_s is None or age_s < grace:
+            # bug-096 — silêncio de VERDADE (nem transição nem heartbeat), não
+            # apenas ausência de transição de estado.
+            idle_s = self._idle_seconds(task, now)
+            if idle_s is None or idle_s < grace:
                 continue  # jovem demais para julgar (ou timestamp ilegível)
+            total_s = self._age_seconds(task.created_at, now) or idle_s
             hard_limit = int(task.constraints.maximum_duration_seconds) + grace
-            if age_s > hard_limit:
+            if total_s > hard_limit:
                 reason = (
-                    f"auto-cancel: {task.status.value} parada há {int(age_s)}s "
+                    f"auto-cancel: {task.status.value} há {int(total_s)}s e sem "
+                    f"sinal de vida há {int(idle_s)}s "
                     f"(> maximum_duration_seconds + {grace}s)"
                 )
             elif not owner_alive:
                 reason = (
                     f"auto-cancel: {task.status.value} sem processo dono vivo "
-                    f"(parada há {int(age_s)}s)"
+                    f"e sem sinal de vida há {int(idle_s)}s"
                 )
             else:
                 continue

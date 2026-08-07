@@ -327,6 +327,21 @@ class TaskRepository:
                 for r in rows
             ]
 
+    def last_event_at(self, task_id: str) -> str | None:
+        """Timestamp do evento mais recente da task (sinal de vida barato).
+
+        bug-096 — `updated_at` só muda em transição de estado; o heartbeat de
+        30s é EVENTO. Sem olhar aqui, o reaper enxerga uma task trabalhando há
+        40 min como "parada".
+        """
+        with self.session() as s:
+            return s.scalars(
+                select(TaskEventRow.timestamp)
+                .where(TaskEventRow.task_id == task_id)
+                .order_by(TaskEventRow.id.desc())
+                .limit(1)
+            ).first()
+
     def add_agent_run(self, **kwargs: Any) -> None:
         with self.session() as s:
             s.add(AgentRunRow(**kwargs))

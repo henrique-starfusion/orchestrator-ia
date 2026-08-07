@@ -165,14 +165,37 @@ def test_run_capture_file_devolve_no_timeout() -> None:
 
 
 def _age_task(svc, task_id: str, *, seconds: int) -> None:
-    """Envelhece `updated_at` no DB (a API publica sempre grava 'agora')."""
-    from orchestrator_runtime.tasks.repository import TaskRow
+    """Envelhece `updated_at` E os eventos (a API publica sempre grava 'agora').
 
-    stamp = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=seconds)
+    bug-096 — envelhecer so `updated_at` nao reproduz a realidade: `create_task`
+    emite `task_created`, e o reaper agora olha o sinal de vida MAIS RECENTE
+    entre transicao e evento.
+    """
+    from orchestrator_runtime.tasks.repository import TaskEventRow, TaskRow
+
+    naive = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=seconds)
+    iso = (datetime.now(timezone.utc) - timedelta(seconds=seconds)).isoformat()
     with svc.repo.session() as s:
         row = s.get(TaskRow, task_id)
-        row.updated_at = stamp
+        row.updated_at = naive
+        for event in s.query(TaskEventRow).filter(TaskEventRow.task_id == task_id):
+            event.timestamp = iso
         s.commit()
+
+
+def _heartbeat_now(svc, task_id: str) -> None:
+    """Sinal de vida recente, como o heartbeat de 30s do agente."""
+    from orchestrator_runtime.events import EventType, RuntimeEvent
+
+    svc.repo.add_event(
+        RuntimeEvent(
+            task_id=task_id,
+            type=EventType.AGENT_PROGRESS,
+            role="executor",
+            agent="codex",
+            data={"elapsed_s": 1472, "summary": "executor/codex rodando ha 1472s"},
+        )
+    )
 
 
 def _force_state(svc, task_id: str, state: TaskState) -> None:
@@ -237,6 +260,37 @@ def test_status_e_list_disparam_o_reaper(project: Path) -> None:
     _age_task(svc, task.id, seconds=6 * 3600)
 
     assert svc.status(task.id)["status"] == TaskState.CANCELLED.value
+
+
+def test_heartbeat_recente_protege_task_que_trabalha(project: Path) -> None:
+    """bug-096 — `updated_at` NAO avanca durante trabalho de agente.
+
+    Caso real (printbee, task 25ea69c8324a): o reaper registrou "parada ha
+    1643s" numa task que emitia heartbeat a cada 30s. A decisao ate acertou (o
+    processo dono tinha morrido), mas o criterio estava apoiado so no arquivo de
+    lock — lock apagado a mao viraria execucao saudavel cancelada. Agora o
+    heartbeat sozinho segura o reaper.
+    """
+    svc = build_service(project, fake_agents=True)
+    task = svc.create_task("executor trabalhando ha 40 min")
+    _force_state(svc, task.id, TaskState.EXECUTING)
+    _age_task(svc, task.id, seconds=6 * 3600)  # sem transicao ha 6h...
+    _heartbeat_now(svc, task.id)  # ...mas falando agora
+
+    assert svc._cancel_stale_execution() == 0
+    assert svc.get(task.id).status == TaskState.EXECUTING
+
+
+def test_heartbeat_velho_nao_protege(project: Path) -> None:
+    """Heartbeat que parou é justamente a prova de que o dono morreu."""
+    svc = build_service(project, fake_agents=True)
+    task = svc.create_task("agente que parou de falar")
+    _force_state(svc, task.id, TaskState.EXECUTING)
+    _heartbeat_now(svc, task.id)
+    _age_task(svc, task.id, seconds=6 * 3600)  # envelhece task E eventos
+
+    assert svc._cancel_stale_execution() == 1
+    assert "sem sinal de vida" in (svc.get(task.id).error or "")
 
 
 def test_grace_zero_desliga_o_reaper(project: Path) -> None:
@@ -312,6 +366,44 @@ def test_corrector_da_guardline_nao_e_cli_quebrado() -> None:
 def test_morte_muda_e_rapida_classifica_install() -> None:
     """codex/opencode: exit=1, zero byte, poucos segundos."""
     assert classify_agent_failure(_result(stdout="", stderr="", duration_s=1.5)) == "install"
+
+
+# stderr REAL do codex quebrado em toda a frota em 2026-08-07.
+_CODEX_QUEBRADO = (
+    "file:///C:/Users/henrique/AppData/Roaming/npm/node_modules/@openai/codex/"
+    "bin/codex.js:105\n    throw new Error(\n          ^\n\n"
+    "Error: Missing optional dependency @openai/codex-win32-x64. "
+    "Reinstall Codex: npm install -g @openai/codex@latest\n"
+    "    at findCodexExecutable (...codex.js:105)\n"
+)
+
+
+def test_codex_sem_binario_do_windows_classifica_install() -> None:
+    """Assinatura real medida na frota — o remédio é o que a mensagem pede."""
+    assert classify_agent_failure(_result(stderr=_CODEX_QUEBRADO)) == "install"
+
+
+def test_saida_grande_nao_e_diagnostico(monkeypatch) -> None:
+    """bug-097 — agente que ecoa CÓDIGO não pode virar veredito de credencial.
+
+    Nas falhas de 2026-08-07 o stderr do codex trazia 20 KB do `tasks/service.py`
+    deste pacote, que contém "codex login" e "not logged in" porque é ONDE ELAS
+    SÃO DEFINIDAS. O classificador devolvia `auth`, o reparo de `install` que
+    resolveria não rodava, e o dono recebia um pedido de login inútil.
+    """
+    eco = (
+        "linha de codigo qualquer\n"
+        '_AUTH_HINTS = {"codex": "codex login"}\n'
+        '"not logged in", "unauthorized", "rate limit",\n'
+    ) * 400
+    assert len(eco) > 8192
+    assert classify_agent_failure(_result(stderr=eco, duration_s=200.0)) is None
+
+
+def test_marcador_de_auth_em_saida_pequena_continua_valendo() -> None:
+    """O caminho legítimo não pode ser perdido junto com o falso-positivo."""
+    curto = "You are not logged in. Run `codex login` to continue.\n"
+    assert classify_agent_failure(_result(stderr=curto)) == "auth"
 
 
 def test_auth_hint_conhecido_e_generico() -> None:

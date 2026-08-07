@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+## 0.4.65 - 2026-08-07
+
+### Fixed
+
+- **bug-096** — o reaper da 0.4.63 media o silêncio pelo campo errado.
+  `updated_at` só muda em **transição de estado**; um executor legítimo passa 40
+  min em `EXECUTING` sem tocá-lo, enquanto o heartbeat de 30s é **evento**.
+  Flagrado no printbee (task `25ea69c8324a`): o registro de cancelamento diz
+  *"parada há 1643s"* de uma task que emitia heartbeat até **87 s antes**. A
+  decisão até acertou — o processo dono havia mesmo morrido, e o reaper limpou
+  ~1,5 min depois, que é exatamente o que ele existe para fazer — mas o critério
+  ficou inteiramente apoiado no arquivo de lock. Consequência séria: apagar um
+  `workspace.write.lock` à mão (procedimento normal de desentupimento até
+  ontem) passaria a **cancelar execução saudável**. Agora o relógio é o sinal de
+  vida mais recente entre transição e evento (`TaskRepository.last_event_at`), e
+  o teto de duração é medido sobre a vida da task, não sobre `updated_at`.
+  Heartbeat recente segura o reaper sozinho, independente do lock
+- A mensagem de cancelamento passa a dizer **"sem sinal de vida há Ns"** — a
+  anterior afirmava que a task estava parada quando ela estava trabalhando, e
+  quem lesse o histórico chegaria à conclusão errada
+- **bug-097** — `classify_agent_failure` lia a saída do agente como diagnóstico
+  mesmo quando ela era **conteúdo**. Nas falhas de `codex` de 2026-08-07 o stderr
+  trazia 20 KB do `tasks/service.py` *deste pacote*, que contém as strings
+  `"codex login"`, `"not logged in"` e `"unauthorized"` porque é onde elas são
+  **definidas**. O classificador leu a documentação do próprio recurso e devolveu
+  `auth`. Consequência real e medida na frota: o problema verdadeiro era
+  `install` (`Missing optional dependency @openai/codex-win32-x64. Reinstall
+  Codex: npm install -g @openai/codex@latest`), o auto-reparo que teria
+  consertado **não rodou**, e o dono recebeu um pedido de login que não resolvia
+  nada. Agora marcador só vale em saída de até `EVIDENCE_CAP_BYTES` (8 KB): um
+  CLI que não consegue nascer imprime centenas de bytes e morre; quem imprime
+  milhares rodou. A assinatura exata do codex quebrado entrou em
+  `INSTALL_MARKERS`. Custo aceito: `rate limit` que só apareça depois de 8 KB de
+  trabalho real deixa de ser classificado — é indistinguível de um agente citando
+  a expressão, e classificar errado é pior que não classificar
+
 ## 0.4.64 - 2026-08-07
 
 ### Fixed
