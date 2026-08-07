@@ -2,6 +2,49 @@
 
 ## Unreleased
 
+## 0.4.60 - 2026-08-07
+
+Uma hora de orçamento, nada entregue: o agente mudo comia o tempo do agente
+que trabalhava.
+
+### Fixed
+
+- **bug-086** — GuardLine `e0457603df65`: executor `claude/opus` ficou **40
+  min com ZERO byte** em stdout E stderr e só morreu no timeout do papel
+  (2400s). O corrector que entrou depois estava produzindo de verdade (20KB de
+  stderr, arquivos sendo escritos) e foi morto 17 min depois pelo
+  `maximum_duration_seconds` da task. Uma hora gasta, INCOMPLETE, e o agente
+  sacrificado foi justamente o que trabalhava. Novo **watchdog de silêncio**
+  (`agent_no_output_timeout_s`, padrão 900s): mata o agente que passa a janela
+  inteira sem NENHUMA saída **e** sem tocar no workspace. As duas condições
+  importam — `claude -p` só imprime no fim, então silêncio sozinho não prova
+  travamento; silêncio com zero arquivo alterado prova. Sonda de progresso que
+  falhe (git lento/indisponível) **nunca** mata o agente: sem prova, sem kill
+- **bug-085** — trustsafe `c4b7a1d12d6b`: criada 23:02, primeiro agente só às
+  23:33 — 30 min parada com o workspace **livre** e nenhuma outra task na
+  frente. `_maybe_start_next` só olhava a fila `QUEUED`; task `RECEIVED` cujo
+  processo criador morreu antes de rodar o loop (cliente MCP recém-instalado
+  que ainda não recarregou, CLI interrompido no meio do create) ficava órfã até
+  o auto-cancel de 6h — que resolvia o zumbi e jogava o trabalho fora. Agora
+  qualquer processo vivo do orquestrador **adota** a órfã, inclusive no poll de
+  `status`/`list`. Janela `orphan_received_adopt_after_s` (padrão 120s) evita
+  roubar a task de quem acabou de criá-la
+- **bug-087** — três mortes diferentes saíam com o mesmo rótulo
+  `AGENT-TIMEOUT-NO-OUTPUT`, inclusive para um corrector com 20KB de stderr: o
+  log mandava procurar o defeito no lugar errado. Agora o rótulo vem da
+  evidência — `AGENT-NO-OUTPUT-HANG` (pendurado, morto pelo watchdog),
+  `TASK-BUDGET-EXHAUSTED` (cortado pelo teto da task, não pelo timeout do
+  papel), `AGENT-TIMEOUT-NO-CHANGES` (falou mas não entregou) e
+  `AGENT-TIMEOUT-NO-OUTPUT` (o caso real de silêncio). Os remédios são
+  opostos: trocar de agente, aumentar o teto da task, ou tratar como mérito
+### Notes
+
+- Testes: `test_0460_hang_and_orphan.py` (15 casos — watchdog mata mudo, não
+  encosta em quem fala, respeita progresso no workspace, sonda quebrada não
+  mata, desligado por padrão; rótulo por evidência nos 4 cenários; adoção de
+  órfã, janela que protege a task recém-criada, uma thread por órfã e não uma
+  por poll, workspace ocupado não adota). Runtime: 399 passed / 3 skipped
+
 ## 0.4.59 - 2026-08-06
 
 O orquestrador vira o agente PADRAO da sessao, nao so um agente disponivel.

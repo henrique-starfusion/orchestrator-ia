@@ -49,6 +49,15 @@ class RuntimeLimits(BaseModel):
     agent_infra_fail_fast_count: int = 3
     # 0.4.16 — auto-cancel tarefas RECEIVED antigas (zumbis de sessão anterior)
     stale_received_ttl_hours: int = 6
+    # bug-086 — mata o agente após este tanto de silêncio TOTAL (zero byte em
+    # stdout+stderr) E zero mudança no workspace. Não é o timeout do papel: é o
+    # teto do "pendurado sem dar sinal", que existia só para ser pago inteiro.
+    # 0 desliga.
+    agent_no_output_timeout_s: int = 900
+    # bug-085 — adota task RECEIVED órfã (criada por processo que morreu antes
+    # de rodar o loop) depois deste tempo. Curto demais rouba a task de quem
+    # acabou de criá-la e vai rodá-la em seguida.
+    orphan_received_adopt_after_s: int = 120
 
 
 class ManagerModelConfig(BaseModel):
@@ -253,6 +262,12 @@ def load_config(
         ),
         stale_received_ttl_hours=int(
             policies.get("stale_received_ttl_hours", 6)
+        ),
+        agent_no_output_timeout_s=int(
+            policies.get("agent_no_output_timeout_s", 900)
+        ),
+        orphan_received_adopt_after_s=int(
+            policies.get("orphan_received_adopt_after_s", 120)
         ),
         **_skill_selection_limits(policies),
         **_context_compaction_limits(policies),

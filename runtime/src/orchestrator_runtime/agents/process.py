@@ -32,6 +32,17 @@ INFRA_FAIL_MARKERS: tuple[str, ...] = (
 )
 
 
+# bug-086 — agente MUDO come o orcamento inteiro da task. GuardLine
+# e0457603df65 (2026-08-06): executor claude/opus ficou 40 min com ZERO bytes
+# em stdout E stderr e so morreu no timeout do papel (2400s); o corrector que
+# entrou depois estava trabalhando de verdade (20KB de stderr, arquivos sendo
+# escritos) e foi morto 17 min depois pelo maximum_duration_seconds da task.
+# Resultado: 1h gasta, INCOMPLETE, nada entregue — e o agente que produzia foi
+# justamente o sacrificado. O marcador vai no stderr (mesmo padrao do
+# INFRA-FAIL-FAST) para o service distinguir "pendurado" de "timeout normal".
+NO_OUTPUT_MARKER = "[NO-OUTPUT-WATCHDOG]"
+
+
 SECRET_PATTERNS = ("API_KEY", "TOKEN", "SECRET", "PASSWORD", "AUTHORIZATION")
 
 
@@ -114,6 +125,14 @@ class CliExecutor:
         # console do processo que chamou, entao quem observa por MCP/DB via a
         # task parada em EXECUTING por 10-30min e concluia que travou.
         self.on_heartbeat = None
+        # bug-086 — watchdog de silencio. Atributos (nao parametros de run())
+        # pelo mesmo motivo do on_heartbeat: os adapters chamam run() e nao
+        # precisam saber que isto existe. 0 desliga.
+        self.no_output_timeout_s = 0
+        # Sonda de progresso EXTERNO: `claude -p` so imprime no fim, entao
+        # silencio sozinho nao prova travamento — o que prova e silencio + zero
+        # mudanca no workspace. Callable[[], bool]: True = ha trabalho novo.
+        self.progress_probe = None
 
     def run(
         self,
@@ -155,6 +174,10 @@ class CliExecutor:
         # 0.4.15 fail-fast: contador total de marcadores de infra no stream.
         infra_fail_count = [0]
         infra_fast_exit = threading.Event()
+        # bug-086: instante do ultimo sinal de vida (byte lido ou progresso no
+        # workspace). Comeca no spawn — agente que nunca falou conta desde ja.
+        last_signal = [started]
+        no_output_exit = threading.Event()
 
         if self.echo:
             _live(f"[exec] {redact(' '.join(resolved_command))}")
@@ -252,6 +275,7 @@ class CliExecutor:
             assert stream is not None
             for line in stream:
                 chunks.append(line)
+                last_signal[0] = time.monotonic()
                 if self.echo:
                     _live(f"{prefix}{redact(line.rstrip(chr(10) + chr(13)))}")
                 # 0.4.15: fail-fast — detecta marcadores de infra do sandbox Windows
@@ -277,6 +301,33 @@ class CliExecutor:
                     except Exception:  # noqa: BLE001
                         pass  # progresso nunca derruba a execucao
 
+        def _no_output_watchdog() -> None:
+            limit = int(self.no_output_timeout_s or 0)
+            if limit <= 0:
+                return
+            # Acorda com frequencia bem maior que o limite para nao atrasar o
+            # kill por ate uma janela inteira.
+            tick = max(5, min(30, limit // 4 or 5))
+            while not stop_heartbeat.wait(tick):
+                if time.monotonic() - last_signal[0] < limit:
+                    continue
+                probe = self.progress_probe
+                if probe is not None:
+                    try:
+                        if probe():
+                            # Escreveu no workspace: esta vivo, so calado.
+                            last_signal[0] = time.monotonic()
+                            continue
+                    except Exception:  # noqa: BLE001
+                        # Sonda quebrada NUNCA mata agente: sem prova, sem kill.
+                        last_signal[0] = time.monotonic()
+                        continue
+                if proc.poll() is not None:
+                    return  # terminou sozinho na janela: nao ha o que matar
+                no_output_exit.set()
+                self._kill_tree(proc.pid)
+                return
+
         t_out = threading.Thread(
             target=_reader, args=(proc.stdout, stdout_chunks, "  > "), daemon=True
         )
@@ -284,9 +335,11 @@ class CliExecutor:
             target=_reader, args=(proc.stderr, stderr_chunks, "  ! "), daemon=True
         )
         t_hb = threading.Thread(target=_heartbeat, daemon=True)
+        t_wd = threading.Thread(target=_no_output_watchdog, daemon=True)
         t_out.start()
         t_err.start()
         t_hb.start()
+        t_wd.start()
 
         try:
             proc.wait(timeout=timeout_s)
@@ -309,6 +362,16 @@ class CliExecutor:
 
         duration = time.monotonic() - started
         stderr_text = redact("".join(stderr_chunks))
+        if no_output_exit.is_set():
+            # timed_out=True para o service tratar como agente morto pelo
+            # runtime; o marcador diz QUAL morte foi, porque "timeout" puro
+            # levava a rotular de NO-OUTPUT ate quem tinha 20KB de saida.
+            timed_out = True
+            stderr_text += (
+                f"\n{NO_OUTPUT_MARKER} agente morto apos "
+                f"{int(self.no_output_timeout_s)}s sem NENHUMA saida e sem "
+                f"tocar no workspace (duracao total {int(duration)}s)"
+            )
         if infra_fast_exit.is_set():
             # Append marker so _validator_infra_failure (service.py) triggers fallback.
             stderr_text += (

@@ -17,7 +17,7 @@ _log = logging.getLogger(__name__)
 
 from orchestrator_runtime.agents import AgentRegistry
 from orchestrator_runtime.agents.base import AgentRequest, AgentResult
-from orchestrator_runtime.agents.process import CliExecutor
+from orchestrator_runtime.agents.process import NO_OUTPUT_MARKER, CliExecutor
 from orchestrator_runtime.callers import caller_profile, detect_caller
 from orchestrator_runtime.config import RuntimeConfig, load_config
 from orchestrator_runtime.documentation import DocumentationUpdater
@@ -132,6 +132,10 @@ class TaskService:
         self.gate = CompletionGate(config.limits.minimum_validation_score)
         # task_ids com _execute_loop ativo neste processo (anti double-start MCP)
         self._running_tasks: set[str] = set()
+        # bug-085 — órfãs já adotadas por este processo: sem isto, cada poll de
+        # status dispararia uma nova thread para a mesma task na janela entre o
+        # start e a primeira transição de estado.
+        self._adopted: set[str] = set()
         self.docs = DocumentationUpdater()
         self.lock = WriteLock(
             config.orchestrator_root / "runtime" / "locks" / "workspace.write.lock"
@@ -340,7 +344,19 @@ class TaskService:
         # bug-064 — zumbis RECEIVED so eram varridos no create_task; quem
         # observa por MCP (list/status) agora tambem dispara a limpeza.
         self._cancel_stale_received()
+        # bug-085 — e adota a orfã: cancelar depois de 6h resolvia o zumbi mas
+        # nunca o trabalho; quem observa tem processo vivo, entao pode rodar.
+        self._adopt_orphan_received_safe()
         return self.repo.list_tasks(limit=limit)
+
+    def _adopt_orphan_received_safe(self, project_path: str | None = None) -> None:
+        """Adoção nunca derruba leitura: observar é read-only para o chamador."""
+        path = project_path or str(self.config.project_path)
+        try:
+            if self._busy_task_id(path) is None:
+                self._adopt_orphan_received(path)
+        except Exception:  # noqa: BLE001
+            pass
 
     def cancel(self, task_id: str, reason: str = "cancel requested") -> TaskRecord:
         task = self.get(task_id)
@@ -419,6 +435,9 @@ class TaskService:
         # status (MCP) tambem dispara a limpeza, senao task orfã fica eterna.
         self._cancel_stale_received()
         task = self.get(task_id)
+        # bug-085 — o poll de status é o evento mais frequente da frota; é ele
+        # que tira a órfã do limbo quando o processo criador não voltou.
+        self._adopt_orphan_received_safe(task.project_path)
         out: dict[str, Any] = {
             "id": task.id,
             "status": task.status.value,
@@ -520,6 +539,7 @@ class TaskService:
             return
         queued = self.repo.list_queued(project_path)
         if not queued:
+            self._adopt_orphan_received(project_path)
             return
         nxt = queued[0]
         nxt = self.get(nxt.id)
@@ -533,16 +553,78 @@ class TaskService:
             reason="dequeued — workspace free",
             agent="runtime",
         )
+        self._start_background(nxt.id, name="dequeue")
 
+    def _start_background(self, task_id: str, *, name: str) -> None:
         def _bg() -> None:
             try:
-                asyncio.run(self.run_task(nxt.id))
+                asyncio.run(self.run_task(task_id))
             except Exception as exc:  # noqa: BLE001
-                _log.exception("dequeue run_task %s failed: %s", nxt.id, exc)
+                _log.exception("%s run_task %s failed: %s", name, task_id, exc)
 
         threading.Thread(
-            target=_bg, daemon=True, name=f"orch-dequeue-{nxt.id[:8]}"
+            target=_bg, daemon=True, name=f"orch-{name}-{task_id[:8]}"
         ).start()
+
+    def _adopt_orphan_received(self, project_path: str) -> None:
+        """Assume task RECEIVED que ficou sem dono (bug-085).
+
+        ``_maybe_start_next`` só olhava a fila QUEUED. Task criada por um
+        processo que morreu antes de rodar o loop — cliente MCP recém-instalado
+        que ainda não recarregou, CLI interrompido no meio do create — ficava
+        em RECEIVED até o auto-cancel de 6h. Medido na trustsafe
+        (c4b7a1d12d6b): criada 23:02, primeiro agente só 23:33, e nenhuma outra
+        task ocupava o workspace — 30 min de fila parada sem motivo. Como
+        `status`/`list` também chamam isto, qualquer poll adota a órfã.
+
+        A janela ``orphan_received_adopt_after_s`` evita roubar a task de quem
+        acabou de criá-la e vai chamar ``run_task`` em seguida.
+        """
+        after_s = self.config.limits.orphan_received_adopt_after_s
+        if after_s <= 0:
+            return
+        now = datetime.now(timezone.utc)
+        candidates: list[tuple[float, TaskRecord]] = []
+        for task in self.repo.list_tasks(limit=100):
+            if task.status != TaskState.RECEIVED:
+                continue
+            if task.project_path != project_path:
+                continue
+            if task.id in self._running_tasks or task.id in self._adopted:
+                continue
+            if task.cancel_requested:
+                continue
+            try:
+                ts = task.created_at.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(ts)
+                if dt.tzinfo is None:  # roundtrip SQLite perde o tz
+                    dt = dt.replace(tzinfo=timezone.utc)
+                age_s = (now - dt).total_seconds()
+            except Exception:  # noqa: BLE001
+                continue
+            if age_s >= after_s:
+                candidates.append((age_s, task))
+        if not candidates:
+            return
+        # FIFO: a mais velha primeiro, como no dequeue.
+        oldest = max(candidates, key=lambda pair: pair[0])[1]
+        self._adopted.add(oldest.id)
+        self.bus.emit(
+            RuntimeEvent(
+                task_id=oldest.id,
+                type=EventType.STATE_CHANGED,
+                agent="runtime",
+                data={
+                    "to": TaskState.RECEIVED.value,
+                    "reason": "orphan_adopted",
+                    "summary": (
+                        "task RECEIVED sem dono adotada pelo runtime "
+                        "(processo criador não rodou o loop)"
+                    ),
+                },
+            )
+        )
+        self._start_background(oldest.id, name="adopt")
 
     def logs(self, task_id: str) -> list[dict[str, Any]]:
         self.get(task_id)
@@ -1211,19 +1293,22 @@ class TaskService:
                 # Padrão Codex/Windows (quoting/heredoc PowerShell): timeout sem
                 # escrever nada. "Continue do disco" é inútil sem arquivos —
                 # rejeita como infra e rotaciona o executor via fallback.
+                #
+                # bug-087 — três mortes diferentes vinham com o MESMO rótulo
+                # "AGENT-TIMEOUT-NO-OUTPUT". Na GuardLine e0457603df65 o
+                # corrector tinha 20KB de stderr e o registro dizia "timeout sem
+                # arquivos alterados": quem leu o log procurou o defeito no
+                # lugar errado. Rotular pela evidência.
+                issue_id, description, error_text = self._timeout_issue(
+                    role, plan_roles.executor, exec_result, task
+                )
                 terminal, last_validation = await self._reject_iteration_infra(
                     task,
                     plan_roles,
-                    issue_id="AGENT-TIMEOUT-NO-OUTPUT",
-                    description=(
-                        f"{role}/{plan_roles.executor} atingiu timeout "
-                        f"({exec_result.duration_s:.0f}s) sem alterar arquivos"
-                    ),
-                    summary="executor timeout without output",
-                    error_text=(
-                        f"AGENT-TIMEOUT-NO-OUTPUT: {role}/{plan_roles.executor} "
-                        "timeout sem arquivos alterados"
-                    ),
+                    issue_id=issue_id,
+                    description=description,
+                    summary="executor timeout without changed files",
+                    error_text=error_text,
                     issue_counts=issue_counts,
                 )
                 if terminal is not None:
@@ -2116,6 +2201,55 @@ class TaskService:
             f"{tooling_section}"
         )
 
+    # bug-087 — quem morreu por quê. As três causas têm remédios opostos:
+    # pendurado => trocar de agente; orçamento => aumentar o teto da task;
+    # timeout com saída => o agente falou mas não entregou (mérito, não infra).
+    _BUDGET_FLOOR_S = 30
+
+    def _timeout_issue(
+        self,
+        role: str,
+        agent_id: str,
+        result: AgentResult,
+        task: TaskRecord,
+    ) -> tuple[str, str, str]:
+        produced = bool((result.stdout or "").strip() or (result.stderr or "").strip())
+        hung = NO_OUTPUT_MARKER in (result.stderr or "")
+        budget_over = self._remaining_duration_s(task) <= self._BUDGET_FLOOR_S
+        secs = f"{result.duration_s:.0f}s"
+        if hung:
+            return (
+                "AGENT-NO-OUTPUT-HANG",
+                f"{role}/{agent_id} pendurado: {secs} sem NENHUMA saída e sem "
+                "tocar no workspace; morto pelo watchdog antes de consumir o "
+                "orçamento da task",
+                f"AGENT-NO-OUTPUT-HANG: {role}/{agent_id} pendurado sem saída",
+            )
+        if budget_over:
+            return (
+                "TASK-BUDGET-EXHAUSTED",
+                f"{role}/{agent_id} cortado em {secs} pelo "
+                f"maximum_duration_seconds da task "
+                f"({task.constraints.maximum_duration_seconds}s), não pelo "
+                f"timeout do papel"
+                + (" — havia saída em andamento" if produced else ""),
+                f"TASK-BUDGET-EXHAUSTED: {role}/{agent_id} morto pelo teto da task",
+            )
+        if produced:
+            return (
+                "AGENT-TIMEOUT-NO-CHANGES",
+                f"{role}/{agent_id} atingiu timeout ({secs}) com saída mas sem "
+                "alterar arquivo nenhum",
+                f"AGENT-TIMEOUT-NO-CHANGES: {role}/{agent_id} timeout com saída "
+                "e sem mudanças",
+            )
+        return (
+            "AGENT-TIMEOUT-NO-OUTPUT",
+            f"{role}/{agent_id} atingiu timeout ({secs}) sem alterar arquivos",
+            f"AGENT-TIMEOUT-NO-OUTPUT: {role}/{agent_id} timeout sem arquivos "
+            "alterados",
+        )
+
     def _remaining_duration_s(self, task: TaskRecord) -> int:
         started = self._loop_started_monotonic
         if started is None:
@@ -2340,6 +2474,27 @@ class TaskService:
 
         try:
             self.executor.on_heartbeat = _emit_heartbeat
+        except Exception:  # noqa: BLE001
+            pass
+
+        # bug-086 — watchdog de silencio. A sonda existe porque `claude -p` so
+        # imprime no fim: silencio sozinho nao prova nada, silencio COM zero
+        # arquivo tocado prova. Sem isso, 40 min de agente pendurado saiam do
+        # orcamento do agente seguinte, que morria trabalhando.
+        def _workspace_progress() -> bool:
+            try:
+                return bool(
+                    changed_files_since(self.config.project_path, self._git_baseline)
+                )
+            except Exception:  # noqa: BLE001
+                # Git indisponivel/lento: sem prova de morte, nao mata.
+                return True
+
+        try:
+            self.executor.no_output_timeout_s = (
+                self.config.limits.agent_no_output_timeout_s
+            )
+            self.executor.progress_probe = _workspace_progress
         except Exception:  # noqa: BLE001
             pass
 

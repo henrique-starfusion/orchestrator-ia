@@ -210,6 +210,9 @@ class TimeoutNoOutputExecutor(FakeAgentAdapter):
 
 
 def test_timeout_without_output_rotates_and_stops(project):
+    # bug-087: este fixture FALA ("reading skills...") e só não altera arquivo
+    # nenhum — o rótulo certo é NO-CHANGES. Chamar isto de "NO-OUTPUT" foi o que
+    # mandou quem lia o log da GuardLine procurar defeito no lugar errado.
     service = _service_with(project, TimeoutNoOutputExecutor)
     task = service.create_task(
         "Crie um modulo Python com funcao soma, testes e documentacao",
@@ -217,7 +220,7 @@ def test_timeout_without_output_rotates_and_stops(project):
     )
     done = asyncio.run(service.run_task(task.id))
     assert done.status == TaskState.INCOMPLETE
-    assert "AGENT-TIMEOUT-NO-OUTPUT" in (done.error or "")
+    assert "AGENT-TIMEOUT-NO-CHANGES" in (done.error or "")
     assert done.iteration <= service.config.limits.same_issue_repeat_limit
 
 

@@ -73,6 +73,11 @@ FEATURES: tuple[str, ...] = (
     "task_queued_event",
     # 0.4.25 — planner Claude: melhor modelo + fallback se cota esgotar
     "planner_model_quota_fallback",
+    # 0.4.60 — agente pendurado não come o orçamento; órfã RECEIVED é adotada;
+    # timeout rotulado pela evidência
+    "agent_no_output_watchdog",
+    "orphan_received_adoption",
+    "timeout_issue_by_evidence",
 )
 
 

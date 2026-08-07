@@ -61,6 +61,68 @@ orchestrator update --project D:/StarFusion/bootstrap-agents --no-propagate
 
 Override de testes: `ORCHESTRATOR_PROJECTS_REGISTRY`.
 
+## 0.4.60 — Task gasta 1h e termina INCOMPLETE sem entregar nada
+
+**Sintoma:** `task status` mostra INCOMPLETE com
+`AGENT-TIMEOUT-NO-OUTPUT` e o log tem um agente com `stdout=0B stderr=0B` por
+dezenas de minutos. O agente seguinte (corrector) morre pouco depois, mesmo
+tendo produzido saída.
+
+**Causa (bug-086):** não havia teto para "agente pendurado". O único limite era
+o timeout do papel (`executor`/`corrector` = 2400s), pago inteiro por um
+processo que nunca escreveu um byte. Como o teto da *task*
+(`maximum_duration_seconds`) é 3600s, o silêncio consumia o orçamento do agente
+seguinte — que era morto trabalhando. A configuração é incoerente por
+construção: 2400 + 2400 > 3600.
+
+**Comportamento (0.4.60):** watchdog mata o agente que passa
+`agent_no_output_timeout_s` (padrão 900s) **sem nenhuma saída E sem tocar no
+workspace**. As duas condições importam: `claude -p` só imprime no fim, então
+silêncio sozinho não prova travamento.
+
+```json
+{ "agent_no_output_timeout_s": 900 }
+```
+
+`0` desliga. Se o seu executor legitimamente fica >15 min mudo **e** sem
+escrever arquivo, aumente — não desligue.
+
+**Rótulos (bug-087):** o erro agora diz qual morte foi, e cada uma tem remédio
+diferente:
+
+| Rótulo | Significa | Remédio |
+|---|---|---|
+| `AGENT-NO-OUTPUT-HANG` | pendurado, morto pelo watchdog | trocar de agente/modelo |
+| `TASK-BUDGET-EXHAUSTED` | cortado pelo teto da task, não pelo papel | subir `maximum_duration_seconds` |
+| `AGENT-TIMEOUT-NO-CHANGES` | falou mas não alterou arquivo | mérito, não infra: revisar prompt |
+| `AGENT-TIMEOUT-NO-OUTPUT` | silêncio real dentro do timeout do papel | investigar o CLI |
+
+---
+
+## 0.4.60 — Task fica em RECEIVED com o workspace livre
+
+**Sintoma:** `task list` mostra uma task RECEIVED parada há dezenas de minutos.
+Não há lock, não há outra task rodando, e a fila não anda.
+
+**Causa (bug-085):** o dequeue só olhava a fila `QUEUED`. Task criada por um
+processo que morreu antes de rodar o loop — cliente MCP recém-instalado que
+ainda não recarregou, CLI interrompido no meio do `create` — ficava órfã até o
+auto-cancel de 6h, que resolvia o zumbi jogando o trabalho fora. Medido na
+trustsafe: criada 23:02, primeiro agente às 23:33.
+
+**Comportamento (0.4.60):** qualquer processo vivo do orquestrador adota a
+órfã, inclusive no poll de `status`/`list` — então
+`orchestrator task status <id>` destrava. Janela configurável:
+
+```json
+{ "orphan_received_adopt_after_s": 120 }
+```
+
+A janela existe para não roubar a task de quem acabou de criá-la e vai rodá-la
+em seguida. `0` desliga a adoção.
+
+---
+
 ## 0.4.19 — Duas tasks no mesmo projeto ao mesmo tempo
 
 **Sintoma (antes):** segunda `orchestrator_run` competia pelo WriteLock, ficava `RECEIVED` com `blocked_by_lock` ou parecia travada; chat cancelava.
