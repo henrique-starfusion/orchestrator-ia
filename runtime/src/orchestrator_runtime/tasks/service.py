@@ -470,7 +470,32 @@ class TaskService:
         if task.status == TaskState.QUEUED:
             out["queue_position"] = self._queue_position(task.id, task.project_path)
             out["blocked_by"] = self._blocked_by_from_error(task.error)
+        out.update(self._independence_note(task.id))
         return out
+
+    # bug-089 — score 1.0 com validator morto lia-se como "revisado e aprovado".
+    # Na task 143e8b2ca47b os DOIS validators (codex e opencode) sairam exit=1
+    # com zero byte; a política manda não transformar falha de infra em
+    # rejeição de mérito — correto — mas então o resultado tem que DIZER que
+    # ninguém revisou. Só reporta; não muda gate nem score.
+    def _independence_note(self, task_id: str) -> dict[str, Any]:
+        try:
+            last = self.repo.last_validation_round(task_id)
+        except Exception:  # noqa: BLE001
+            return {}
+        if not last:
+            return {}
+        payload = last.get("payload") or {}
+        if not payload.get("validator_infra_failure"):
+            return {"independent_validation": True}
+        return {
+            "independent_validation": False,
+            "validation_warning": (
+                "aprovado só pela validação determinística — nenhum validator "
+                "independente respondeu (falha de infra). O score NÃO reflete "
+                "revisão de mérito."
+            ),
+        }
 
     @staticmethod
     def _blocked_by_from_error(error: str | None) -> str | None:

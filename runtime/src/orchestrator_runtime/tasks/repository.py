@@ -400,6 +400,25 @@ class TaskRepository:
             s.add(TestRunRow(**kwargs))
             s.commit()
 
+    def last_validation_round(self, task_id: str) -> dict[str, Any] | None:
+        """Última rodada de validação (bug-089: quem observa precisa saber se
+        houve veredito independente ou só o determinístico)."""
+        with self.session() as s:
+            row = s.scalars(
+                select(ValidationRoundRow)
+                .where(ValidationRoundRow.task_id == task_id)
+                .order_by(ValidationRoundRow.id.desc())
+                .limit(1)
+            ).first()
+            if row is None:
+                return None
+            return {
+                "iteration": row.iteration,
+                "status": row.status,
+                "score": row.score,
+                "payload": loads(row.payload_json, {}) or {},
+            }
+
     def add_validation_round(self, **kwargs: Any) -> None:
         with self.session() as s:
             s.add(ValidationRoundRow(**kwargs))

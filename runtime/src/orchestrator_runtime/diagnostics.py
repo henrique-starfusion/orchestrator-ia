@@ -81,6 +81,10 @@ FEATURES: tuple[str, ...] = (
     # 0.4.61 — fan-out: subtarefa em worktree próprio, fusão por patch
     "parallel_subtask_worktrees",
     "subtask_patch_merge",
+    # 0.4.62 — redação por valor (não apaga a linha) e aviso de validação
+    # sem veredito independente
+    "value_scoped_secret_redaction",
+    "independent_validation_flag",
 )
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -65,16 +66,56 @@ def is_child_agent(env: dict[str, str] | None = None) -> bool:
     return (src.get("ORCHESTRATOR_CHILD_AGENT") or "").strip() not in ("", "0")
 
 
+# bug-088 — a redação apagava a LINHA INTEIRA sempre que ela citasse a palavra
+# "secret"/"token"/"password" e tivesse ':' ou '='. Isso destruiu a saída do
+# decompositor na primeira execução real do fan-out (task 143e8b2ca47b): o JSON
+# das subtarefas mencionava "NAO exponha secrets" e voltou como
+# {"subtasks":[ [REDACTED] [REDACTED] ]} — o parse achou zero subtarefas e o
+# runtime caiu no sequencial sem que ninguém percebesse. E não é só log:
+# `run()` devolve o texto redigido, então o próprio runtime PARSEIA o que
+# sobrou. Tarefa de documentação, de segurança ou de config fala dessas
+# palavras o tempo todo.
+#
+# Agora redige o VALOR, não a linha, e só quando a forma é de atribuição de
+# segredo: chave sem espaços contendo o marcador, separador, e valor colado
+# que pareça segredo (longo, ou com dígito/pontuação). Prosa sobrevive.
+_SECRET_ASSIGN_RE = re.compile(
+    r"""(?ix)
+    (?P<key>[\w.\-\[\]]*
+        (?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|PASSWD|AUTHORIZATION)
+        [\w.\-\[\]]*)
+    (?P<sep>["']?\s*[:=]\s*["']?)
+    (?P<value>[^\s"',;}\]]+)
+    """
+)
+_PLACEHOLDER_VALUES = {
+    "null", "none", "true", "false", "nome", "valor", "value",
+    "xxx", "...", "***", "redacted", "obrigatorio", "opcional",
+}
+
+
+def _looks_secret(value: str) -> bool:
+    """Só descarta placeholder — na dúvida, redige.
+
+    Tentei exigir forma de segredo (comprimento, dígito) e isso deixou passar
+    `API_KEY=supersecret`, que é segredo de verdade. Como agora some o VALOR e
+    não a linha, redigir demais custa uma palavra ilegível; redigir de menos
+    vaza credencial. O desempate é óbvio.
+    """
+    if value.lower() in _PLACEHOLDER_VALUES:
+        return False
+    return not (value.startswith("<") or value.startswith("${"))
+
+
 def redact(text: str) -> str:
-    # Evita gravar linhas que parecem secrets.
-    lines = []
-    for line in text.splitlines():
-        upper = line.upper()
-        if any(p in upper for p in SECRET_PATTERNS) and ("=" in line or ":" in line):
-            lines.append("[REDACTED]")
-        else:
-            lines.append(line)
-    return "\n".join(lines)
+    """Esconde valores de segredo preservando o resto da linha."""
+
+    def _sub(match: re.Match[str]) -> str:
+        if not _looks_secret(match.group("value")):
+            return match.group(0)
+        return f"{match.group('key')}{match.group('sep')}[REDACTED]"
+
+    return "\n".join(_SECRET_ASSIGN_RE.sub(_sub, line) for line in text.splitlines())
 
 
 def assert_within_project(path: Path, project: Path) -> Path:

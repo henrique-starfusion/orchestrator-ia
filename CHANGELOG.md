@@ -2,6 +2,49 @@
 
 ## Unreleased
 
+## 0.4.62 - 2026-08-07
+
+Dois defeitos que a primeira execução real do fan-out expôs.
+
+### Fixed
+
+- **bug-088** — a redação de segredos apagava a **linha inteira** sempre que
+  ela citasse "secret"/"token"/"password" e tivesse `:` ou `=`. Na primeira
+  execução real do fan-out (task `143e8b2ca47b`, documentação deste projeto) o
+  JSON do decompositor mencionava *"NAO exponha secrets"* e voltou como
+  `{"subtasks":[ [REDACTED] [REDACTED] ]}`: o parse achou zero subtarefas e o
+  runtime caiu no sequencial **sem ninguém perceber**. E não é só log —
+  `CliExecutor.run` devolve o texto redigido, então o runtime **parseia** o que
+  sobrou; tarefa de documentação, de segurança ou de config fala dessas
+  palavras o tempo todo. Agora some o **valor**, não a linha, e só quando a
+  forma é de atribuição (chave sem espaços contendo o marcador, separador,
+  valor colado). Prosa sobrevive; JSON continua parseável mesmo quando um valor
+  é redigido
+- Escolha deliberada no filtro: exigir "forma de segredo" (comprimento,
+  dígito) deixava passar `API_KEY=supersecret`, que é segredo de verdade. Como
+  agora some só o valor, redigir demais custa uma palavra ilegível e redigir de
+  menos vaza credencial — o desempate é óbvio. Placeholders (`<sua-chave>`,
+  `${VAR}`, `nome`, `obrigatorio`) seguem intactos
+- **bug-089** — na mesma task, os **dois** validators (codex e opencode)
+  saíram `exit=1` com zero byte e o resultado veio `COMPLETED score=1.0`. A
+  política de não transformar falha de infra em rejeição de mérito está certa;
+  o silêncio sobre ela, não — `1.0` lia-se como "revisado e aprovado".
+  `orchestrator_status` passa a trazer `independent_validation` e, quando
+  falso, `validation_warning` dizendo que o score não reflete revisão de
+  mérito. **Não muda gate nem score**: só para de esconder
+
+### Notes
+
+- Testes: `test_0462_redact.py` (12 — env dump, JSON com token, bearer, senha
+  curta, valor sem dígito, prosa intacta, o JSON exato do decompositor que
+  quebrou, placeholders, preservação do resto da linha) e
+  `test_0462_independence.py` (4). Runtime: 446 passed / 3 skipped
+- A missão de documentação do próprio orquestrador rodou e entregou os dez
+  documentos em `/docs` (task `143e8b2ca47b`, 22 min, nada fora de `/docs`
+  tocado) — mas **sequencialmente**, por causa do bug-088. O fan-out com
+  agentes reais segue sem prova de campo; com agentes fake está coberto por
+  `test_0461_fanout_service.py`
+
 ## 0.4.61 - 2026-08-07
 
 Fan-out: subtarefas em paralelo, cada uma no seu worktree, fundidas por patch.
