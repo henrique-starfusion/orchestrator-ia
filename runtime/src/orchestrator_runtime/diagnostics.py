@@ -78,6 +78,9 @@ FEATURES: tuple[str, ...] = (
     "agent_no_output_watchdog",
     "orphan_received_adoption",
     "timeout_issue_by_evidence",
+    # 0.4.61 — fan-out: subtarefa em worktree próprio, fusão por patch
+    "parallel_subtask_worktrees",
+    "subtask_patch_merge",
 )
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import os
@@ -27,8 +28,23 @@ from orchestrator_runtime.execution.git_workspace import (
     GitBaseline,
     capture_baseline,
     changed_files_since,
+    run_git,
+)
+from orchestrator_runtime.execution.fanout import (
+    SubtaskSpec,
+    decomposition_prompt,
+    parse_subtasks,
 )
 from orchestrator_runtime.execution.locks import WriteLock
+from orchestrator_runtime.execution.worktrees import (
+    WorktreeHandle,
+    apply_patch,
+    cleanup_task_worktrees,
+    collect_patch,
+    create_worktree,
+    patch_files,
+    worktrees_available,
+)
 from orchestrator_runtime.execution.timeouts import (
     MIN_AGENT_TIMEOUT_S,
     resolve_agent_timeout,
@@ -38,7 +54,11 @@ from orchestrator_runtime.memory.database import dumps
 from orchestrator_runtime.textutil import repair_mojibake
 from orchestrator_runtime.planning.analyzer import Planner
 from orchestrator_runtime.routing.manager import RulesRouter
-from orchestrator_runtime.tasks.models import TaskConstraints, TaskRecord
+from orchestrator_runtime.tasks.models import (
+    OrchestrationPlan,
+    TaskConstraints,
+    TaskRecord,
+)
 from orchestrator_runtime.tasks.repository import TaskRepository
 from orchestrator_runtime.tasks.state_machine import (
     TERMINAL_STATES,
@@ -998,9 +1018,22 @@ class TaskService:
                 continuation_note=continuation_note,
             )
             try:
-                exec_result = await self._run_agent(
-                    plan_roles.executor, role, exec_prompt, task
-                )
+                # 0.4.61 — fan-out só na PRIMEIRA passada: correção existe para
+                # fechar issue específica do validator, e dividir isso entre
+                # agentes cegos uns aos outros multiplica o conflito em vez do
+                # trabalho. Desligado por padrão
+                # (allow_parallel_workspace_writes).
+                exec_result = None
+                if role == "executor" and self._fanout_enabled():
+                    specs = await self._decompose(task, plan_roles)
+                    if specs:
+                        exec_result = await self._run_fanout(
+                            task, plan_roles, exec_prompt, specs
+                        )
+                if exec_result is None:
+                    exec_result = await self._run_agent(
+                        plan_roles.executor, role, exec_prompt, task
+                    )
             except Exception as exec_exc:  # noqa: BLE001
                 # Spawn/CLI falhou: não abortar o workflow — tratar como iteração
                 # rejeitada para entrar em CORRECTING / fallback na próxima volta.
@@ -2443,6 +2476,280 @@ class TaskService:
         if from_git:
             result.changed_files = list(from_git)
         return result
+
+    # ------------------------------------------------------------------
+    # 0.4.61 — fan-out: subtarefas paralelas, cada uma em seu worktree
+    # ------------------------------------------------------------------
+
+    def _fanout_enabled(self) -> bool:
+        limits = self.config.limits
+        return (
+            bool(limits.allow_parallel_workspace_writes)
+            and int(limits.max_parallel_subtasks) >= 2
+            and worktrees_available(self.config.project_path)
+        )
+
+    async def _decompose(
+        self, task: TaskRecord, plan_roles: OrchestrationPlan
+    ) -> list[SubtaskSpec]:
+        """Pede a divisão ao planner. Indivisível devolve [] — e isso é normal."""
+        max_subtasks = int(self.config.limits.max_parallel_subtasks)
+        try:
+            result = await self._run_agent(
+                plan_roles.planner,
+                "planner",
+                decomposition_prompt(task.prompt, max_subtasks=max_subtasks),
+                task,
+            )
+        except Exception as exc:  # noqa: BLE001
+            self.bus.emit(
+                RuntimeEvent(
+                    task_id=task.id,
+                    type=EventType.AGENT_COMPLETED,
+                    role="planner",
+                    agent=plan_roles.planner,
+                    data={
+                        "status": "decompose_failed",
+                        "summary": f"decomposição falhou; seguindo sequencial: {exc}",
+                    },
+                )
+            )
+            return []
+        return parse_subtasks(result.stdout or "", max_subtasks=max_subtasks)
+
+    def _subtask_executor(self, worktree: Path) -> CliExecutor:
+        """Executor próprio por subtarefa.
+
+        Compartilhar o executor principal quebraria duas coisas ao mesmo tempo:
+        o heartbeat (um callback só para N agentes) e — pior — o watchdog de
+        silêncio, cuja sonda olha a árvore PRINCIPAL. Como a subtarefa escreve
+        no worktree, a sonda global veria "nada mudou" e mataria agentes vivos.
+        """
+        executor = CliExecutor(
+            self.config.project_path,
+            echo=False,
+            infra_fail_fast_count=self.config.limits.agent_infra_fail_fast_count,
+            heartbeat_s=self.caller_profile.heartbeat_s,
+        )
+        executor.no_output_timeout_s = self.config.limits.agent_no_output_timeout_s
+        executor.progress_probe = lambda: bool(
+            (run_git(worktree, "status", "--porcelain").stdout or "").strip()
+        )
+        return executor
+
+    def _subtask_prompt(self, base_prompt: str, spec: SubtaskSpec) -> str:
+        scope = ", ".join(spec.scope) if spec.scope else "(não declarado)"
+        return (
+            f"{base_prompt}\n\n"
+            "=== SUBTAREFA PARALELA ===\n"
+            f"Você é UM de vários agentes rodando ao mesmo tempo. Sua parte:\n"
+            f"{spec.title}\n{spec.instruction}\n\n"
+            f"ESCOPO (só estes caminhos): {scope}\n"
+            "Você está numa ÁRVORE GIT ISOLADA (worktree próprio): o que você "
+            "escrever aqui será fundido na árvore real como patch. Por isso:\n"
+            "- Escreva SOMENTE dentro do seu escopo. Arquivo fora dele colide "
+            "com o patch de outro agente e o SEU trabalho é o que será "
+            "descartado na fusão.\n"
+            "- Não faça commit, não use `git stash`, não mexa em branch: a "
+            "fusão é do runtime.\n"
+            "- Não espere pelas outras subtarefas nem se refira a elas — elas "
+            "estão sendo feitas agora, em paralelo."
+        )
+
+    def _run_subtask_blocking(
+        self,
+        *,
+        agent_id: str,
+        prompt: str,
+        worktree: Path,
+        timeout_s: int,
+        model: str | None,
+        model_flag: str | None,
+    ) -> AgentResult:
+        """Roda a subtarefa numa thread própria.
+
+        `adapter.run` é async mas o CliExecutor por baixo é BLOQUEANTE: um
+        gather direto serializaria tudo e ainda travaria o event loop. Cada
+        subtarefa ganha thread + loop próprios.
+        """
+        adapter = self.registry.get(agent_id)
+        if adapter is None or not adapter.detect().available:
+            raise RuntimeError(f"Agente indisponível para subtarefa: {agent_id}")
+        # Cópia rasa do adapter com executor próprio: registry novo por
+        # subtarefa descartaria adapter customizado (fake/teste, quarentena) e
+        # recarregaria os profiles do disco N vezes. O que precisa ser isolado
+        # é o executor — perfil e capacidades são só leitura.
+        adapter = copy.copy(adapter)
+        if hasattr(adapter, "executor"):
+            adapter.executor = self._subtask_executor(worktree)
+        request = AgentRequest(
+            role="executor",
+            prompt=prompt,
+            model=model,
+            model_flag=model_flag,
+            cwd=str(worktree),
+            timeout_s=timeout_s,
+        )
+        return asyncio.run(adapter.run(request))
+
+    async def _run_fanout(
+        self,
+        task: TaskRecord,
+        plan_roles: OrchestrationPlan,
+        base_prompt: str,
+        specs: list[SubtaskSpec],
+    ) -> AgentResult:
+        """Executa as subtarefas em paralelo e funde os patches na árvore real."""
+        project = self.config.project_path
+        timeout_s = self._resolve_agent_timeout("executor", task)
+        candidates = self.router.resolve_model_candidates(
+            plan_roles.executor, task.task_type, role="executor"
+        )
+        model, model_flag = candidates[0] if candidates else (None, None)
+
+        handles: dict[str, WorktreeHandle] = {}
+        started = datetime.now(timezone.utc).isoformat()
+        self.bus.emit(
+            RuntimeEvent(
+                task_id=task.id,
+                type=EventType.AGENT_STARTED,
+                role="executor",
+                agent=plan_roles.executor,
+                data={
+                    "mode": "parallel_subtasks",
+                    "subtasks": [s.as_dict() for s in specs],
+                    "timeout_s": timeout_s,
+                    "summary": f"fan-out: {len(specs)} subtarefas em worktrees",
+                },
+            )
+        )
+        try:
+            for spec in specs:
+                handles[spec.id] = create_worktree(project, task.id, spec.id)
+
+            results = await asyncio.gather(
+                *[
+                    asyncio.to_thread(
+                        self._run_subtask_blocking,
+                        agent_id=plan_roles.executor,
+                        prompt=self._subtask_prompt(base_prompt, spec),
+                        worktree=handles[spec.id].path,
+                        timeout_s=timeout_s,
+                        model=model,
+                        model_flag=model_flag,
+                    )
+                    for spec in specs
+                ],
+                return_exceptions=True,
+            )
+
+            merged_files: list[str] = []
+            stdout_parts: list[str] = []
+            stderr_parts: list[str] = []
+            applied = 0
+            patch_dir = (
+                self.config.orchestrator_root / "runtime" / "patches" / task.id
+            )
+            for spec, result in zip(specs, results):
+                if isinstance(result, BaseException):
+                    self._record_subtask(
+                        task, spec, "failed", {"error": str(result)}
+                    )
+                    stderr_parts.append(f"[{spec.id}] falhou: {result}")
+                    continue
+                patch = collect_patch(handles[spec.id])
+                files = patch_files(patch)
+                if not patch.strip():
+                    self._record_subtask(
+                        task,
+                        spec,
+                        "empty",
+                        {"agent_status": result.status, "files": []},
+                    )
+                    stdout_parts.append(f"[{spec.id}] {spec.title}: sem alterações")
+                    stderr_parts.append((result.stderr or "")[-2000:])
+                    continue
+                ok, err = apply_patch(
+                    project, patch, patch_path=patch_dir / f"{spec.id}.patch"
+                )
+                self._record_subtask(
+                    task,
+                    spec,
+                    "merged" if ok else "conflict",
+                    {
+                        "agent_status": result.status,
+                        "files": files,
+                        "error": err,
+                        "patch": str(patch_dir / f"{spec.id}.patch"),
+                    },
+                )
+                if ok:
+                    applied += 1
+                    merged_files.extend(files)
+                    stdout_parts.append(
+                        f"[{spec.id}] {spec.title}: {len(files)} arquivo(s) fundido(s)"
+                    )
+                else:
+                    # Patch preservado no disco: o conflito é retrabalho da
+                    # próxima iteração, não trabalho perdido.
+                    stderr_parts.append(
+                        f"[{spec.id}] CONFLITO na fusão ({', '.join(files) or '?'}): {err}"
+                    )
+                stdout_parts.append((result.stdout or "")[-4000:])
+
+            status = "completed" if applied else "failed"
+            self.bus.emit(
+                RuntimeEvent(
+                    task_id=task.id,
+                    type=EventType.AGENT_COMPLETED,
+                    role="executor",
+                    agent=plan_roles.executor,
+                    data={
+                        "mode": "parallel_subtasks",
+                        "merged": applied,
+                        "total": len(specs),
+                        "changed_files": sorted(dict.fromkeys(merged_files))[:50],
+                        "summary": (
+                            f"fan-out: {applied}/{len(specs)} subtarefas fundidas"
+                        ),
+                    },
+                )
+            )
+            return AgentResult(
+                session_id=f"fanout-{task.id}",
+                agent_id=plan_roles.executor,
+                role="executor",
+                status=status,
+                exit_code=0 if applied else 1,
+                stdout="\n".join(p for p in stdout_parts if p),
+                stderr="\n".join(p for p in stderr_parts if p),
+                model=model,
+                cwd=str(project),
+                started_at=started,
+                finished_at=datetime.now(timezone.utc).isoformat(),
+                changed_files=sorted(dict.fromkeys(merged_files)),
+            )
+        finally:
+            # Worktree órfão trava `git worktree add` na próxima task e ocupa
+            # disco: limpeza sempre, mesmo com tudo dando errado.
+            try:
+                cleanup_task_worktrees(project, task.id)
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _record_subtask(
+        self, task: TaskRecord, spec: SubtaskSpec, status: str, payload: dict[str, Any]
+    ) -> None:
+        try:
+            self.repo.add_subtask(
+                task.id,
+                role="executor",
+                description=spec.title,
+                status=status,
+                payload={**spec.as_dict(), **payload},
+            )
+        except Exception:  # noqa: BLE001
+            pass  # registro nunca derruba a execução
 
     def _register_heartbeat(self, task: TaskRecord, *, role: str, agent_id: str) -> None:
         """Sinal de vida do CLI durante EXECUTING.

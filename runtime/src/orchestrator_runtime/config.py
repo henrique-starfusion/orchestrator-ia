@@ -33,7 +33,12 @@ class RuntimeLimits(BaseModel):
     require_deterministic_validation: bool = True
     require_documentation_review: bool = True
     allow_parallel_read_only_analysis: bool = True
+    # 0.4.61 — declarada desde sempre e NUNCA lida por ninguém: o runtime era
+    # estritamente sequencial. Agora liga o fan-out com worktree por subtarefa
+    # e fusão por patch. Continua desligada por padrão: escrita paralela só
+    # compensa em tarefa que se divide de verdade em escopos disjuntos.
     allow_parallel_workspace_writes: bool = False
+    max_parallel_subtasks: int = 4
     caveman_enabled: bool = True
     skill_selection_enabled: bool = True
     skill_selection_max_skills: int = 5
@@ -254,6 +259,7 @@ def load_config(
         allow_parallel_workspace_writes=bool(
             policies.get("allow_parallel_workspace_writes", False)
         ),
+        max_parallel_subtasks=int(policies.get("max_parallel_subtasks", 4)),
         caveman_enabled=bool(
             (policies.get("token_economy") or {}).get("caveman_enabled", True)
         ),

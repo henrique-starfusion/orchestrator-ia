@@ -30,7 +30,9 @@ class GitBaseline:
     nested: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
-def _run_git(project_path: Path, *args: str) -> subprocess.CompletedProcess[str]:
+def _run_git(
+    project_path: Path, *args: str, timeout_s: int | None = None
+) -> subprocess.CompletedProcess[str]:
     """Roda git com timeout que NUNCA pendura (bug-059).
 
     Dois vetores de coroutine congelada eliminados:
@@ -43,6 +45,9 @@ def _run_git(project_path: Path, *args: str) -> subprocess.CompletedProcess[str]
       lido — deadlock de EOF é impossível.
     No timeout, a ÁRVORE morre (taskkill /T no Windows), não só o git.
     """
+    # `git worktree add` faz checkout completo: em repo grande passa dos 30s do
+    # status. Timeout continua obrigatorio (nunca None no Popen.wait).
+    limit = int(timeout_s or GIT_TIMEOUT_S)
     command = [
         "git",
         "-c", "core.fsmonitor=false",
@@ -65,7 +70,7 @@ def _run_git(project_path: Path, *args: str) -> subprocess.CompletedProcess[str]
         except OSError as exc:
             return subprocess.CompletedProcess(command, 127, "", str(exc))
         try:
-            returncode = proc.wait(timeout=GIT_TIMEOUT_S)
+            returncode = proc.wait(timeout=limit)
         except subprocess.TimeoutExpired:
             if os.name == "nt":
                 subprocess.run(
@@ -83,13 +88,19 @@ def _run_git(project_path: Path, *args: str) -> subprocess.CompletedProcess[str]
                 command,
                 returncode=124,
                 stdout="",
-                stderr=f"git timeout after {GIT_TIMEOUT_S}s",
+                stderr=f"git timeout after {limit}s",
             )
         out.seek(0)
         err.seek(0)
         return subprocess.CompletedProcess(
             command, returncode, out.read(), err.read()
         )
+
+
+# Alias público: worktrees.py precisa do MESMO git à prova de deadlock (bug-059
+# — fsmonitor herdando handles, captura em arquivo em vez de PIPE). Duplicar
+# essa função seria duplicar o bug que ela conserta.
+run_git = _run_git
 
 
 def _parse_porcelain(stdout: str) -> dict[str, str]:

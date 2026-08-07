@@ -2,6 +2,59 @@
 
 ## Unreleased
 
+## 0.4.61 - 2026-08-07
+
+Fan-out: subtarefas em paralelo, cada uma no seu worktree, fundidas por patch.
+
+### Added
+
+- **Escrita paralela de verdade.** Até aqui o runtime era **estritamente
+  sequencial** — um executor por workspace, serializado pelo `WriteLock`. As
+  chaves `allow_parallel_read_only_analysis` e
+  `allow_parallel_workspace_writes` existiam na config desde o começo e
+  **nenhum código as lia**; a tabela `subtasks` existia e nunca recebeu uma
+  linha. Agora `allow_parallel_workspace_writes: true` liga o fan-out: o
+  planner divide a tarefa em subtarefas de escopo disjunto, cada uma roda num
+  `git worktree` próprio, e o runtime funde os patches na árvore real
+- `execution/worktrees.py` — criação/coleta/fusão/limpeza de worktree.
+  **Fusão é tudo-ou-nada**: `git apply --check` antes de escrever. `--3way`
+  resolveria mais casos, mas em conflito deixa marcadores no working tree — um
+  merge pela metade na árvore real, justamente onde pode haver trabalho de
+  outros agentes (bug-077). Patch que não passa vira subtarefa `conflict` com o
+  `.patch` preservado em `.orchestrator/runtime/patches/<task>/`
+- `execution/fanout.py` — decomposição e a regra de sobreposição. Escopos que
+  colidem (mesmo arquivo, pasta contendo arquivo, ou escopo **não declarado**)
+  são **fundidos** numa subtarefa só antes de gastar agente: fundir preserva o
+  trabalho declarado, descartar perderia requisito. Menos de duas subtarefas
+  úteis ⇒ caminho sequencial de sempre
+- `max_parallel_subtasks` (padrão 4) em `policies.json`
+- Tabela `subtasks` finalmente escrita: `merged` / `conflict` / `empty` /
+  `failed`, com escopo, arquivos e caminho do patch; eventos
+  `agent_started`/`agent_completed` ganham `mode=parallel_subtasks`
+
+### Notes
+
+- **Executor próprio por subtarefa** não é preciosismo: o watchdog de silêncio
+  (0.4.60) sonda o workspace para decidir se o agente está vivo, e uma sonda
+  apontada para a árvore principal veria "nada mudou" enquanto a subtarefa
+  escreve no worktree — mataria agentes vivos. Cada subtarefa também roda em
+  thread própria porque `adapter.run` é `async` mas o `CliExecutor` por baixo é
+  bloqueante: um `gather` direto serializaria tudo e travaria o event loop
+- **Só na primeira passada.** Correção existe para fechar issue específica do
+  validator; dividir isso entre agentes cegos uns aos outros multiplica o
+  conflito, não o trabalho
+- Requisitos: repo git com pelo menos um commit. Sem HEAD não há base para
+  worktree nem diff — o runtime segue sequencial em vez de falhar
+- Continua **desligado por padrão**: escrita paralela só compensa em tarefa que
+  se divide de verdade em escopos disjuntos
+- Testes: `test_0461_worktrees.py` (10 — isolamento, patch com arquivo novo,
+  fusão de disjuntas, conflito que **não** suja a árvore, limpeza, recriação),
+  `test_0461_fanout_split.py` (10 — JSON cercado de prosa, teto, indivisível,
+  fusão de escopo sobreposto, pasta×arquivo, escopo vazio, normalização de
+  separador), `test_0461_fanout_service.py` (9 — gate, exigência de git, fusão
+  na árvore real, limpeza de worktree, registro em `subtasks`, subtarefa que
+  falha sem derrubar as outras). Runtime: 428 passed / 3 skipped
+
 ## 0.4.60 - 2026-08-07
 
 Uma hora de orçamento, nada entregue: o agente mudo comia o tempo do agente

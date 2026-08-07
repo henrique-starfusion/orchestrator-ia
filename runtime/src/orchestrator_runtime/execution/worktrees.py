@@ -1,0 +1,214 @@
+"""Worktrees git por subtarefa: escrita paralela sem árvore compartilhada.
+
+Por que worktree e não "vários agentes na mesma pasta": bug-077 (printbee)
+registrou seis quase-arrastões num único dia com agentes escrevendo lado a
+lado — `git add -A` de um leva o trabalho não commitado do outro, e
+`checkout .` apaga sem volta. Dentro de um worktree privado esse perigo some:
+cada subtarefa tem árvore, índice e HEAD próprios, então `git add -A` ali é
+seguro por construção e a fusão volta como patch explícito.
+
+Fluxo:
+    create_worktree  -> `git worktree add --detach <path> <base>`
+    (agente roda com cwd=path)
+    collect_patch    -> `git add -A` + `git diff --cached --binary`
+    apply_patch      -> `git apply --check` e só então `git apply` na árvore real
+    remove_worktree  -> `git worktree remove --force` + prune
+
+A aplicação é tudo-ou-nada de propósito. `git apply --3way` resolveria mais
+casos, mas em conflito ele deixa marcadores no working tree — ou seja, sujaria
+a árvore real com um merge pela metade justamente no caminho em que já há
+trabalho de outros agentes. Patch que não passa no `--check` é reportado como
+conflito e a subtarefa volta para o corrector, com a árvore intacta.
+"""
+
+from __future__ import annotations
+
+import shutil
+from dataclasses import dataclass
+from pathlib import Path
+
+from orchestrator_runtime.execution.git_workspace import run_git
+
+# Checkout completo de HEAD: bem mais lento que um `status`.
+WORKTREE_TIMEOUT_S = 300
+
+
+@dataclass
+class WorktreeHandle:
+    subtask_id: str
+    path: Path
+    base_commit: str
+
+
+def _sanitize(name: str) -> str:
+    keep = [c if (c.isalnum() or c in "-_") else "-" for c in str(name)]
+    return "".join(keep)[:40] or "subtask"
+
+
+def git_head(project_path: Path) -> str | None:
+    """SHA do HEAD, ou None se não for repo git / repo sem commit nenhum."""
+    probe = run_git(project_path, "rev-parse", "--verify", "HEAD")
+    if probe.returncode != 0:
+        return None
+    head = (probe.stdout or "").strip()
+    return head or None
+
+
+def worktrees_available(project_path: Path) -> bool:
+    """Fan-out com escrita exige repo git com pelo menos um commit.
+
+    Sem commit base não há de onde criar worktree nem contra o que diffar —
+    o caminho paralelo simplesmente não se aplica e o runtime segue sequencial.
+    """
+    return git_head(project_path) is not None
+
+
+def ensure_ignored(directory: Path) -> None:
+    """Marca o diretório como ignorado pelo git do projeto.
+
+    Sem isto, projeto que VERSIONA `.orchestrator/` (printbee, adzora,
+    trustsafe hoje) veria a árvore inteira do worktree como arquivos novos —
+    e um `git add -A` de agente commitaria um clone do repo dentro do repo.
+    `.gitignore` com `*` no diretório resolve na origem.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    marker = directory / ".gitignore"
+    if not marker.exists():
+        marker.write_text("*\n", encoding="utf-8")
+
+
+def worktree_root(project_path: Path, task_id: str) -> Path:
+    base = project_path / ".orchestrator" / "runtime" / "worktrees"
+    ensure_ignored(base)
+    return base / _sanitize(task_id)
+
+
+def create_worktree(
+    project_path: Path, task_id: str, subtask_id: str, *, base: str | None = None
+) -> WorktreeHandle:
+    """Cria worktree detached em .orchestrator/runtime/worktrees/<task>/<sub>.
+
+    Fica DENTRO do projeto de propósito: o CliExecutor recusa cwd fora da raiz
+    (assert_within_project), então worktree em %TEMP% não seria executável.
+    """
+    base_commit = base or git_head(project_path)
+    if not base_commit:
+        raise RuntimeError("worktree exige repositório git com HEAD")
+    root = worktree_root(project_path, task_id)
+    root.mkdir(parents=True, exist_ok=True)
+    path = root / _sanitize(subtask_id)
+    if path.exists():
+        remove_worktree(project_path, path)
+    result = run_git(
+        project_path,
+        "worktree",
+        "add",
+        "--detach",
+        str(path),
+        base_commit,
+        timeout_s=WORKTREE_TIMEOUT_S,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"git worktree add falhou ({result.returncode}): "
+            f"{(result.stderr or '').strip()[:400]}"
+        )
+    return WorktreeHandle(subtask_id=subtask_id, path=path, base_commit=base_commit)
+
+
+def collect_patch(handle: WorktreeHandle) -> str:
+    """Diff da subtarefa contra o commit base, incluindo arquivos novos.
+
+    `git add -A` aqui é seguro: a árvore é privada da subtarefa. Arquivos
+    ignorados pelo .gitignore ficam de fora — artefato de build não deve
+    atravessar a fusão.
+    """
+    staged = run_git(handle.path, "add", "-A", timeout_s=WORKTREE_TIMEOUT_S)
+    if staged.returncode != 0:
+        return ""
+    diff = run_git(
+        handle.path,
+        "diff",
+        "--cached",
+        "--binary",
+        handle.base_commit,
+        timeout_s=WORKTREE_TIMEOUT_S,
+    )
+    if diff.returncode != 0:
+        return ""
+    return diff.stdout or ""
+
+
+def patch_files(patch: str) -> list[str]:
+    """Paths tocados pelo patch (para detectar sobreposição entre subtarefas)."""
+    out: list[str] = []
+    for line in patch.splitlines():
+        if not line.startswith("+++ "):
+            continue
+        path = line[4:].strip()
+        if path == "/dev/null":
+            continue
+        if path.startswith("b/"):
+            path = path[2:]
+        if path:
+            out.append(path)
+    return sorted(dict.fromkeys(out))
+
+
+def apply_patch(
+    project_path: Path, patch: str, *, patch_path: Path
+) -> tuple[bool, str]:
+    """Aplica o patch na árvore real. Tudo-ou-nada: `--check` antes de escrever."""
+    if not patch.strip():
+        return True, ""
+    ensure_ignored(patch_path.parent)
+    # newline="" + escrita binária: git é rígido com o patch; CRLF injetado
+    # pelo Windows quebra o "corrupt patch at line N".
+    patch_path.write_bytes(patch.encode("utf-8"))
+    check = run_git(
+        project_path,
+        "apply",
+        "--check",
+        "--whitespace=nowarn",
+        str(patch_path),
+        timeout_s=WORKTREE_TIMEOUT_S,
+    )
+    if check.returncode != 0:
+        return False, (check.stderr or check.stdout or "git apply --check falhou")[:600]
+    applied = run_git(
+        project_path,
+        "apply",
+        "--whitespace=nowarn",
+        str(patch_path),
+        timeout_s=WORKTREE_TIMEOUT_S,
+    )
+    if applied.returncode != 0:
+        return False, (applied.stderr or applied.stdout or "git apply falhou")[:600]
+    return True, ""
+
+
+def remove_worktree(project_path: Path, path: Path) -> None:
+    """Remove o worktree; limpeza nunca derruba a task."""
+    run_git(
+        project_path,
+        "worktree",
+        "remove",
+        "--force",
+        str(path),
+        timeout_s=WORKTREE_TIMEOUT_S,
+    )
+    if path.exists():
+        shutil.rmtree(path, ignore_errors=True)
+    run_git(project_path, "worktree", "prune")
+
+
+def cleanup_task_worktrees(project_path: Path, task_id: str) -> None:
+    root = worktree_root(project_path, task_id)
+    if not root.exists():
+        run_git(project_path, "worktree", "prune")
+        return
+    for child in sorted(root.iterdir()):
+        if child.is_dir():
+            remove_worktree(project_path, child)
+    shutil.rmtree(root, ignore_errors=True)
+    run_git(project_path, "worktree", "prune")

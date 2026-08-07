@@ -17,6 +17,7 @@ from orchestrator_runtime.memory.database import (
     MemoryRow,
     RoutingDecisionRow,
     StrategyPerformanceRow,
+    SubtaskRow,
     TaskEventRow,
     TaskIterationRow,
     TaskRow,
@@ -348,6 +349,48 @@ class TaskRepository:
                     "timed_out": r.timed_out,
                     "started_at": r.started_at,
                     "finished_at": r.finished_at,
+                }
+                for r in rows
+            ]
+
+    # 0.4.61 — a tabela `subtasks` existia desde o primeiro schema e NUNCA
+    # recebeu uma linha: sem fan-out não havia o que gravar. Com escrita
+    # paralela ela vira o registro de quem escreveu o quê, e por que um patch
+    # não entrou.
+    def add_subtask(
+        self,
+        task_id: str,
+        *,
+        role: str,
+        description: str,
+        status: str = "pending",
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        with self.session() as s:
+            s.add(
+                SubtaskRow(
+                    task_id=task_id,
+                    role=role,
+                    description=description,
+                    status=status,
+                    payload_json=dumps(payload or {}),
+                )
+            )
+            s.commit()
+
+    def list_subtasks(self, task_id: str) -> list[dict[str, Any]]:
+        with self.session() as s:
+            rows = s.scalars(
+                select(SubtaskRow)
+                .where(SubtaskRow.task_id == task_id)
+                .order_by(SubtaskRow.id)
+            ).all()
+            return [
+                {
+                    "role": r.role,
+                    "description": r.description,
+                    "status": r.status,
+                    "payload": loads(r.payload_json, {}),
                 }
                 for r in rows
             ]
