@@ -63,6 +63,17 @@ class RuntimeLimits(BaseModel):
     # de rodar o loop) depois deste tempo. Curto demais rouba a task de quem
     # acabou de criá-la e vai rodá-la em seguida.
     orphan_received_adopt_after_s: int = 120
+    # bug-090 — reaper de task NAO-TERMINAL. `stale_received_ttl_hours` so varre
+    # RECEIVED; task presa em EXECUTING/PLANNING ficava para sempre e
+    # `_busy_task_id` seguia devolvendo ela, entao toda task nova entrava em
+    # QUEUED atras de uma que nunca terminaria. Custou ~11h de fila no printbee.
+    # Margem SOBRE o maximum_duration_seconds da propria task. 0 desliga.
+    stale_execution_grace_s: int = 900
+    # 0.4.63 — CLI de agente quebrado (codex/opencode saindo exit=1 com zero
+    # byte) queimava rodada atras de rodada. Detecta, reinstala UMA vez por
+    # agente por processo e reexecuta. Falta de credencial NAO reinstala.
+    agent_auto_repair: bool = True
+    agent_repair_timeout_s: int = 300
 
 
 class ManagerModelConfig(BaseModel):
@@ -275,6 +286,11 @@ def load_config(
         orphan_received_adopt_after_s=int(
             policies.get("orphan_received_adopt_after_s", 120)
         ),
+        stale_execution_grace_s=int(
+            policies.get("stale_execution_grace_s", 900)
+        ),
+        agent_auto_repair=bool(policies.get("agent_auto_repair", True)),
+        agent_repair_timeout_s=int(policies.get("agent_repair_timeout_s", 300)),
         **_skill_selection_limits(policies),
         **_context_compaction_limits(policies),
     )

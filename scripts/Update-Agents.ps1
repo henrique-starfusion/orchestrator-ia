@@ -18,7 +18,12 @@ param(
     [switch]$UpdateAgents,
     # Nao baixar/rodar instalador oficial de agentes que nao se auto-atualizam
     # (kimi nativo no Windows). Com isto, esses agentes so reportam o comando.
-    [switch]$NoNativeInstaller
+    [switch]$NoNativeInstaller,
+    # 0.4.63 — reparo cirurgico de UM agente (agents/repair.py). Sem -Only nada
+    # muda. Com -Only, o filtro `status -eq 'available'` cai de proposito: o CLI
+    # esta quebrado justamente a ponto de a deteccao reprova-lo, e reinstalar e
+    # o remedio — exigir 'available' recusaria atender exatamente quem precisa.
+    [string]$Only
 )
 
 Set-StrictMode -Version Latest
@@ -148,10 +153,15 @@ function Invoke-AgentUpdateAttempt {
     }
 }
 
+$onlyName = ([string]$Only).Trim()
+
 foreach ($agent in @($detected.agents)) {
-    if ($agent.status -ne 'available') { continue }
     $name = [string]$agent.name
     if ([string]::IsNullOrWhiteSpace($name)) { continue }
+    if ($onlyName) {
+        if ($name -ne $onlyName) { continue }
+    }
+    elseif ($agent.status -ne 'available') { continue }
     if (Test-IsIdeAgent -Name $name) {
         $results += [pscustomobject]@{
             agent  = $name
@@ -164,7 +174,7 @@ foreach ($agent in @($detected.agents)) {
     }
 
     $cmd = Get-Command $name -ErrorAction SilentlyContinue
-    if (-not $cmd) {
+    if (-not $cmd -and -not $onlyName) {
         $results += [pscustomobject]@{
             agent = $name; status = 'skipped_missing'; method = $null; exit_code = $null
             notes = 'Get-Command nao encontrou executavel'
@@ -178,8 +188,9 @@ foreach ($agent in @($detected.agents)) {
     $updated = $false
     $manualHint = $null
 
-    # 1) Subcomando nativo
-    if ($nativeUpdate.ContainsKey($name)) {
+    # 1) Subcomando nativo (impossivel sem executavel — com -Only o CLI pode
+    # estar ausente, e o remedio e o gerenciador de pacotes mais abaixo)
+    if ($cmd -and $nativeUpdate.ContainsKey($name)) {
         $argsNative = $nativeUpdate[$name]
         $attempt = Invoke-AgentUpdateAttempt -Label ("native:{0}" -f $name) `
             -FilePath $cmd.Source -ArgumentList $argsNative -TimeoutSeconds 180

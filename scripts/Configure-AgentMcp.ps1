@@ -213,6 +213,14 @@ foreach ($m in $mirrors) {
 # ---------------------------------------------------------------------------
 $agentName = 'orquestrador'
 
+# bug-091 — o repositorio DO PROPRIO pacote nunca recebe a chave. O subagente
+# 'orquestrador' e read-only por design (Read/Grep/Glob/Bash + MCP, sem
+# Write/Edit): ele so sabe delegar ao runtime. Aplicada aqui, ela prendia toda
+# sessao de manutencao do orquestrador num operador incapaz de editar o runtime
+# do qual depende — e, quando o runtime esta quebrado, delegar trava. Detecta
+# pela presenca do pacote Python na raiz.
+$isOrchestratorRepo = Test-Path -LiteralPath (Join-Path $projectRoot 'runtime\src\orchestrator_runtime')
+
 function Set-DefaultAgentKey {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -263,14 +271,19 @@ function Set-DefaultAgentKey {
     Write-Host ("[OK] {0}: sessao roda como '{1}' ({2})." -f $Label, $Value, $Key)
 }
 
-Set-DefaultAgentKey -Path (Join-Path $projectRoot '.claude\settings.json') `
-    -Key 'agent' -Value $agentName -Label 'claude code' -WhatIfDryRun:$DryRun
+if ($isOrchestratorRepo) {
+    Write-Host "[SKIP] repositorio do proprio orquestrador: agente padrao nao definido (bug-091)."
+}
+else {
+    Set-DefaultAgentKey -Path (Join-Path $projectRoot '.claude\settings.json') `
+        -Key 'agent' -Value $agentName -Label 'claude code' -WhatIfDryRun:$DryRun
 
-# opencode le opencode.json na RAIZ do projeto (precedencia maxima entre os
-# arquivos de config padrao). So faz sentido quando o subagente existe.
-if (Test-Path -LiteralPath (Join-Path $projectRoot '.opencode\agent\orquestrador.md')) {
-    Set-DefaultAgentKey -Path (Join-Path $projectRoot 'opencode.json') `
-        -Key 'default_agent' -Value $agentName -Label 'opencode' -WhatIfDryRun:$DryRun
+    # opencode le opencode.json na RAIZ do projeto (precedencia maxima entre os
+    # arquivos de config padrao). So faz sentido quando o subagente existe.
+    if (Test-Path -LiteralPath (Join-Path $projectRoot '.opencode\agent\orquestrador.md')) {
+        Set-DefaultAgentKey -Path (Join-Path $projectRoot 'opencode.json') `
+            -Key 'default_agent' -Value $agentName -Label 'opencode' -WhatIfDryRun:$DryRun
+    }
 }
 
 exit 0

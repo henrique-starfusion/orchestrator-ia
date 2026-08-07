@@ -78,6 +78,28 @@ try {
     $out4 = Invoke-Configure
     Assert-Test ($LASTEXITCODE -eq 0) 'settings.json invalido nao quebra o script'
     Assert-Test ($out4 -match 'invalido') 'aviso emitido para settings.json invalido'
+
+    # --- bug-091: o repo do PROPRIO orquestrador nao recebe a chave ----------
+    # O subagente 'orquestrador' e read-only (sem Write/Edit) e so sabe delegar;
+    # aplicado aqui, ele prende a sessao de manutencao do runtime num operador
+    # incapaz de consertar o runtime do qual depende.
+    $selfRepo = Join-Path $env:TEMP ("defagent-self-{0}" -f ([guid]::NewGuid().ToString('N').Substring(0, 8)))
+    New-Item -ItemType Directory -Force -Path (Join-Path $selfRepo 'runtime\src\orchestrator_runtime') | Out-Null
+    $outSelf = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $script `
+        -ProjectPath $selfRepo -PackageRoot $repoRoot 2>&1 | Out-String
+    Write-Host $outSelf
+
+    $selfSettings = Join-Path $selfRepo '.claude\settings.json'
+    $selfAgent = $null
+    if (Test-Path -LiteralPath $selfSettings) {
+        $raw = Get-Content -LiteralPath $selfSettings -Raw -Encoding UTF8
+        if (-not [string]::IsNullOrWhiteSpace($raw)) { $selfAgent = ($raw | ConvertFrom-Json).agent }
+    }
+    Assert-Test ($null -eq $selfAgent) 'repo do orquestrador: "agent" NAO definido'
+    Assert-Test (-not (Test-Path -LiteralPath (Join-Path $selfRepo 'opencode.json'))) `
+        'repo do orquestrador: opencode.json NAO criado'
+    Assert-Test ($outSelf -match 'repositorio do proprio orquestrador') 'motivo do skip reportado'
+    Remove-Item -Recurse -Force $selfRepo -ErrorAction SilentlyContinue
 }
 finally {
     Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue

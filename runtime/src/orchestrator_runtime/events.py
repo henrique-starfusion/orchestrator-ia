@@ -20,6 +20,9 @@ class EventType(str, Enum):
     AGENT_COMPLETED = "agent_completed"
     # 0.4.28 — heartbeat do CLI: prova de vida durante EXECUTING
     AGENT_PROGRESS = "agent_progress"
+    # 0.4.63 — CLI do agente diagnosticado como quebrado (install) ou sem
+    # credencial (auth), e o que o runtime fez a respeito
+    AGENT_REPAIR = "agent_repair"
     TEST_STARTED = "test_started"
     TEST_COMPLETED = "test_completed"
     VALIDATION_STARTED = "validation_started"

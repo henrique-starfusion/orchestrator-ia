@@ -79,14 +79,27 @@ def is_child_agent(env: dict[str, str] | None = None) -> bool:
 # Agora redige o VALOR, não a linha, e só quando a forma é de atribuição de
 # segredo: chave sem espaços contendo o marcador, separador, e valor colado
 # que pareça segredo (longo, ou com dígito/pontuação). Prosa sobrevive.
+#
+# bug-092 — o prefixo/sufixo da chave é limitado a 64 chars DE PROPÓSITO. Com
+# `*` ilimitado o regex é QUADRÁTICO em linha longa sem segredo: em cada posição
+# inicial ele consome a linha inteira, falha a alternação e volta um char por
+# vez. Medido: 2,4 MB de saída de agente (linhas de 4 KB) = ~100 s de CPU a 100%
+# só redigindo — e `redact()` roda no fim de TODA execução e a cada linha quando
+# o echo está ligado. Nome de variável com 64 chars antes de "TOKEN" não existe.
 _SECRET_ASSIGN_RE = re.compile(
     r"""(?ix)
-    (?P<key>[\w.\-\[\]]*
+    (?P<key>[\w.\-\[\]]{0,64}
         (?:API[_-]?KEY|TOKEN|SECRET|PASSWORD|PASSWD|AUTHORIZATION)
-        [\w.\-\[\]]*)
+        [\w.\-\[\]]{0,64})
     (?P<sep>["']?\s*[:=]\s*["']?)
     (?P<value>[^\s"',;}\]]+)
     """
+)
+# Pré-filtro barato: varredura sem backtracking que diz se a linha SEQUER
+# menciona um marcador. A linha comum de log de agente não menciona, e pular o
+# regex caro nela é o que derruba o custo de ~2,8s para milissegundos por MB.
+_SECRET_HINT_RE = re.compile(
+    r"(?i)API[_-]?KEY|TOKEN|SECRET|PASSWORD|PASSWD|AUTHORIZATION"
 )
 _PLACEHOLDER_VALUES = {
     "null", "none", "true", "false", "nome", "valor", "value",
@@ -115,7 +128,10 @@ def redact(text: str) -> str:
             return match.group(0)
         return f"{match.group('key')}{match.group('sep')}[REDACTED]"
 
-    return "\n".join(_SECRET_ASSIGN_RE.sub(_sub, line) for line in text.splitlines())
+    return "\n".join(
+        _SECRET_ASSIGN_RE.sub(_sub, line) if _SECRET_HINT_RE.search(line) else line
+        for line in text.splitlines()
+    )
 
 
 def assert_within_project(path: Path, project: Path) -> Path:
@@ -299,16 +315,6 @@ class CliExecutor:
                 )
             raise
 
-        if stdin_text is not None and proc.stdin is not None:
-            # Escrever e FECHAR: o CLI so comeca a trabalhar ao ver EOF. Falha
-            # aqui (pipe quebrado) nao derruba a execucao — o agente ja morreu
-            # e o exit code conta a historia.
-            try:
-                proc.stdin.write(stdin_text)
-                proc.stdin.close()
-            except OSError:
-                pass
-
         self._active_pids.add(proc.pid)
         stop_heartbeat = threading.Event()
 
@@ -377,10 +383,32 @@ class CliExecutor:
         )
         t_hb = threading.Thread(target=_heartbeat, daemon=True)
         t_wd = threading.Thread(target=_no_output_watchdog, daemon=True)
+        # bug-090 — escrever stdin ANTES de ler stdout/stderr trava os dois
+        # lados: o pai enche o buffer de entrada (~64KB no Windows) e espera o
+        # filho consumir; o filho enche o de saida e espera alguem ler — e as
+        # leitoras ainda nao existem. Como proc.wait(timeout=...) so vem depois,
+        # NENHUM timeout se aplica: nem o do papel, nem o watchdog de silencio.
+        # Medido na task 2ffb76eb16df: parada entre skill_selector e planner por
+        # 40+ min sem o timeout de 900s disparar, segurando o lock do workspace.
+        def _write_stdin() -> None:
+            if stdin_text is None or proc.stdin is None:
+                return
+            try:
+                proc.stdin.write(stdin_text)
+            except (OSError, ValueError):
+                pass  # pipe quebrado: o exit code conta a historia
+            finally:
+                try:
+                    proc.stdin.close()  # o CLI so trabalha ao ver EOF
+                except (OSError, ValueError):
+                    pass
+
+        t_in = threading.Thread(target=_write_stdin, daemon=True)
         t_out.start()
         t_err.start()
         t_hb.start()
         t_wd.start()
+        t_in.start()   # por ultimo: as leitoras precisam ja estar drenando
 
         try:
             proc.wait(timeout=timeout_s)
@@ -396,6 +424,7 @@ class CliExecutor:
             stop_heartbeat.set()
             t_out.join(timeout=2)
             t_err.join(timeout=2)
+            t_in.join(timeout=2)
             if previous is None:
                 os.environ.pop("ORCHESTRATOR_CHILD_AGENT", None)
             else:
@@ -474,6 +503,53 @@ def which(name: str) -> str | None:
     return None
 
 
+def run_capture_file(
+    command: list[str],
+    *,
+    cwd: Path | str | None = None,
+    timeout_s: int = 60,
+    env: dict[str, str] | None = None,
+) -> tuple[int, str]:
+    """Roda comando curto capturando em ARQUIVO, nunca PIPE.
+
+    bug-B / bug-059 — ``subprocess.run(..., capture_output=True, timeout=N)``
+    pendura no Windows quando o timeout estoura: o ``communicate()`` pos-kill
+    espera TODO neto que herdou o handle do pipe fechar. Foi assim que
+    ``npm prefix -g`` (dentro de ``which()`` -> ``detect()``) segurou uma
+    chamada MCP por 1800s com a task ja rodando em background. Com arquivo
+    temporario, ``wait()`` retorna e o conteudo e lido — deadlock de EOF e
+    impossivel. No timeout a ARVORE morre (``taskkill /T`` no Windows).
+
+    Devolve ``(exit_code, stdout+stderr)``; 124 = timeout, 127 = nao executou.
+    """
+    import tempfile
+
+    with tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace") as out:
+        try:
+            proc = subprocess.Popen(
+                command,
+                cwd=str(cwd) if cwd else None,
+                env=sanitize_env(env) if env else None,
+                stdin=subprocess.DEVNULL,
+                stdout=out,
+                stderr=subprocess.STDOUT,
+            )
+        except OSError as exc:
+            return 127, str(exc)
+        try:
+            code = proc.wait(timeout=max(1, int(timeout_s)))
+        except subprocess.TimeoutExpired:
+            CliExecutor._kill_tree(proc.pid)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+            out.seek(0)
+            return 124, out.read() + f"\n[timeout after {timeout_s}s]"
+        out.seek(0)
+        return code, out.read()
+
+
 def _npm_global_bins_nt() -> list[Path]:
     """Dirs conhecidos de bin global npm no Windows (cache por processo)."""
     global _NPM_BINS_CACHE
@@ -488,14 +564,9 @@ def _npm_global_bins_nt() -> list[Path]:
 
         npm = shutil.which("npm.cmd") or shutil.which("npm")
         if npm:
-            out = subprocess.run(
-                [npm, "prefix", "-g"],
-                capture_output=True,
-                text=True,
-                timeout=15,
-            )
-            if out.returncode == 0 and out.stdout.strip():
-                cands.append(Path(out.stdout.strip()))
+            code, text = run_capture_file([npm, "prefix", "-g"], timeout_s=15)
+            if code == 0 and text.strip():
+                cands.append(Path(text.strip()))
     except Exception:  # noqa: BLE001
         pass
     _NPM_BINS_CACHE = cands

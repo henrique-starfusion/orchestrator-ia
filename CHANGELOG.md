@@ -2,6 +2,83 @@
 
 ## Unreleased
 
+## 0.4.63 - 2026-08-07
+
+O runtime parava de vez em quando e ninguém sabia por quê. Era um deadlock de
+pipe — e, na volta, a fila ficava barrada para sempre por uma task que nunca
+terminava. Esta versão corrige a causa e três camadas de defesa em volta dela.
+
+### Fixed
+
+- **bug-090 (causa raiz)** — `CliExecutor.run` escrevia o `stdin` **antes** de
+  subir as threads leitoras de `stdout`/`stderr`. Com prompt grande (acima do
+  teto de argv o prompt vai por stdin, `base_adapters:172`) travava dos dois
+  lados: o pai enchia o buffer de entrada (~64 KB no Windows) e esperava o filho
+  consumir; o filho enchia o de saída e esperava alguém ler — e as leitoras
+  ainda não existiam. Como `proc.wait(timeout=...)` só vem depois, **nenhum
+  timeout se aplicava**: nem o do papel, nem o watchdog de silêncio da 0.4.60.
+  Medido na task `2ffb76eb16df`: 40+ min parada entre `skill_selector` e
+  `planner`, segurando o `workspace.write.lock`. Agora a escrita é uma thread
+  própria, iniciada **depois** das leitoras
+- **bug-093** — não havia reaper de task **não-terminal**.
+  `_cancel_stale_received` só varre `RECEIVED`; task presa em
+  `PLANNING`/`EXECUTING` ficava para sempre, `_busy_task_id` seguia devolvendo
+  ela e toda task nova entrava em `QUEUED` atrás de uma que nunca terminaria —
+  ~11 h de fila parada no printbee. `_cancel_stale_execution()` cancela quando
+  `updated_at` passa de `maximum_duration_seconds + stale_execution_grace_s`
+  **ou** quando nenhum processo vivo segura o lock do workspace (o lock já
+  carrega o pid do dono, então não foi preciso campo novo na task). Task deste
+  processo nunca é ceifada; `QUEUED` fica de fora de propósito
+- **bug-094 (a)** — `_npm_global_bins_nt()` usava
+  `subprocess.run(capture_output=True, timeout=15)`. No Windows, quando o
+  timeout estoura, o `communicate()` pós-kill espera **todo neto** que herdou o
+  handle do pipe: é o bug-059, corrigido em `git_workspace._run_git` e nunca
+  aplicado aqui. Esse caminho roda dentro de `which()` → `detect()`, que
+  `orchestrator_run` chama **depois** de já ter disparado a task — por isso a
+  chamada MCP ficava 1800 s sem responder com a task rodando. Agora usa o novo
+  `run_capture_file()` (Popen + arquivo temporário + `taskkill /T`)
+- **bug-091** — `Set-DefaultAgentKey` gravava `"agent": "orquestrador"` também
+  no repositório **do próprio pacote**. Esse subagente é read-only por design
+  (sem `Write`/`Edit`) e só sabe delegar — e, com o runtime quebrado, delegar
+  trava. A sessão capaz de consertar o orquestrador ficava impedida de escrever,
+  e cada `orchestrator update` recolocava a chave. Agora o script detecta o repo
+  do pacote (`runtime/src/orchestrator_runtime/` na raiz) e pula a chave
+- **bug-092** — `redact()` era **quadrático** em linha longa sem segredo:
+  `[\w.\-\[\]]*` antes da alternação consome a linha inteira em cada posição
+  inicial e retrocede um char por vez. Medido: 2,4 MB de saída de agente (linhas
+  de 4 KB) = ~100 s de CPU a 100% só redigindo — e `redact()` roda no fim de
+  **toda** execução. Pré-filtro barato decide se a linha sequer menciona um
+  marcador; prefixo/sufixo da chave limitados a 64 chars
+
+### Added
+
+- **Auto-reparo de CLI de agente quebrado.** `codex` e `opencode` saíam `exit=1`
+  com **zero byte** como executor *e* como validator (task `143e8b2ca47b`; quem
+  salvou foi o corrector `claude/opus`). O bug-070 só colocava em quarentena —
+  esconde em vez de resolver. `agents/health.py` classifica a falha em
+  `install` / `auth` / `None`, e `agents/repair.py` reinstala **uma vez por
+  agente por processo** delegando a `scripts/Update-Agents.ps1 -Only <agente>`,
+  que já tem os mapas curados (npm/chocolatey/scoop/instalador nativo).
+  Falta de credencial **não** reinstala: emite o comando de login.
+  `timed_out` nunca é CLI quebrado, e sem marcador só classifica `install`
+  quando o agente morreu mudo **e** rápido — o corrector da GuardLine, com 17
+  min e 20 KB de stderr, é mérito, não CLI quebrado
+- **`.gitignore` na instalação.** `Configure-GitIgnore.ps1` escreve um bloco
+  delimitado com o estado local de agentes (`.claude/`, `.codex/`, `.cursor/`,
+  `.orchestrator/`, `.wolf/`, `graphify-out/`, `.mcp.json`…). Sem isso o estado
+  local vai para o commit e o próximo checkout **regride a versão instalada** —
+  foi o que aconteceu em printbee, adzora e trustsafe. Linhas do usuário fora do
+  bloco nunca são tocadas; adaptadores em markdown (`AGENTS.md`, `CLAUDE.md`)
+  ficam de fora de propósito, são instruções de projeto. Arquivo já rastreado
+  não é afetado por `.gitignore`: o script avisa e sugere `git rm -r --cached`.
+  O repositório do **próprio pacote** é exceção (mesma regra do bug-091): lá
+  `.cursor/rules/` e `.orchestrator/` são conteúdo versionado — é o que o pacote
+  distribui
+- Chaves novas em `policies.json`: `stale_execution_grace_s` (900),
+  `agent_auto_repair` (true), `agent_repair_timeout_s` (300)
+- Features de diagnóstico: `stdin_written_after_readers`,
+  `stale_execution_reaper`, `agent_broken_cli_detection`, `agent_auto_repair`
+
 ## 0.4.62 - 2026-08-07
 
 Dois defeitos que a primeira execução real do fan-out expôs.

@@ -464,6 +464,12 @@ try {
                 ProjectPath = $projectRoot
             } | Out-Null
 
+            # 0.4.63 — estado local de agentes fora do commit: versionado, o
+            # proximo checkout REGRIDE a versao instalada (printbee/adzora/trustsafe).
+            Invoke-ChildScript -Name 'Configure-GitIgnore.ps1' -Arguments @{
+                ProjectPath = $projectRoot
+            } | Out-Null
+
             Invoke-ChildScript -Name 'Write-InstallationReport.ps1' -Arguments @{
                 ProjectPath = $projectRoot
                 Mode        = 'update'
@@ -884,6 +890,11 @@ try {
 
     # bug-076 — trust do claude pre-aquecido (evita hang em workspace novo)
     Invoke-ChildScript -Name 'Repair-ClaudeTrust.ps1' -Arguments @{
+        ProjectPath = $projectRoot
+    } | Out-Null
+
+    # 0.4.63 — estado local de agentes fora do commit (ver nota no branch update).
+    Invoke-ChildScript -Name 'Configure-GitIgnore.ps1' -Arguments @{
         ProjectPath = $projectRoot
     } | Out-Null
 

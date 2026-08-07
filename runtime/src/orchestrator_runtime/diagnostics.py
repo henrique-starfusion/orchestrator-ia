@@ -85,6 +85,12 @@ FEATURES: tuple[str, ...] = (
     # sem veredito independente
     "value_scoped_secret_redaction",
     "independent_validation_flag",
+    # 0.4.63 — deadlock de pipe no stdin, reaper de task não-terminal e
+    # auto-reparo de CLI de agente quebrado
+    "stdin_written_after_readers",
+    "stale_execution_reaper",
+    "agent_broken_cli_detection",
+    "agent_auto_repair",
 )
 
 

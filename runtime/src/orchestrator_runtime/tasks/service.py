@@ -18,7 +18,9 @@ _log = logging.getLogger(__name__)
 
 from orchestrator_runtime.agents import AgentRegistry
 from orchestrator_runtime.agents.base import AgentRequest, AgentResult
+from orchestrator_runtime.agents.health import auth_hint, classify_agent_failure
 from orchestrator_runtime.agents.process import NO_OUTPUT_MARKER, CliExecutor
+from orchestrator_runtime.agents.repair import repair_agent
 from orchestrator_runtime.callers import caller_profile, detect_caller
 from orchestrator_runtime.config import RuntimeConfig, load_config
 from orchestrator_runtime.documentation import DocumentationUpdater
@@ -35,7 +37,7 @@ from orchestrator_runtime.execution.fanout import (
     decomposition_prompt,
     parse_subtasks,
 )
-from orchestrator_runtime.execution.locks import WriteLock
+from orchestrator_runtime.execution.locks import WriteLock, _pid_alive
 from orchestrator_runtime.execution.worktrees import (
     WorktreeHandle,
     apply_patch,
@@ -167,6 +169,10 @@ class TaskService:
         self._run_ctx: dict[str, Any] = {}
         # 0.4.25 — modelos com cota esgotada neste processo/run (agent, model)
         self._exhausted_models: set[tuple[str, str]] = set()
+        # 0.4.63 — agentes já reparados neste processo. UM reparo por agente:
+        # se reinstalar não resolveu, reinstalar de novo também não vai, e o
+        # laço queimaria o orçamento da task instalando npm em círculos.
+        self._repaired_agents: set[str] = set()
 
     def _cancel_stale_received(self) -> int:
         """Auto-cancel RECEIVED tasks older than stale_received_ttl_hours (P1-D 0.4.16)."""
@@ -199,6 +205,95 @@ class TaskService:
                     agent="runtime",
                 )
                 cancelled += 1
+        return cancelled
+
+    def _workspace_owner_alive(self) -> bool:
+        """O processo que segura o write lock deste workspace ainda existe?
+
+        Não há campo ``owner_pid`` na task — o dono real do workspace é quem
+        escreveu o lock, e o lock já carrega ``{"pid", "ts"}``. Lock ausente =
+        ninguém trabalhando.
+        """
+        path = self.lock.lock_path
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, json.JSONDecodeError):
+            return False
+        return _pid_alive(int(data.get("pid") or 0))
+
+    @staticmethod
+    def _age_seconds(stamp: str | None, now: datetime) -> float | None:
+        """Idade em segundos de um timestamp ISO do DB (naïve = UTC)."""
+        if not stamp:
+            return None
+        try:
+            dt = datetime.fromisoformat(str(stamp).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if dt.tzinfo is None:  # roundtrip pelo SQLite perde o tzinfo
+            dt = dt.replace(tzinfo=timezone.utc)
+        return (now - dt).total_seconds()
+
+    def _cancel_stale_execution(self) -> int:
+        """Cancela task NÃO-TERMINAL que nenhum processo vivo está tocando.
+
+        bug-090 — defesa em profundidade para o deadlock de pipe: mesmo com o
+        `process.py` corrigido, qualquer morte fora do caminho feliz (processo
+        MCP derrubado, máquina reiniciada, kill manual) deixava a task em
+        EXECUTING/PLANNING para sempre. ``_busy_task_id`` continuava devolvendo
+        ela e TODA task nova entrava em QUEUED atrás de uma que nunca
+        terminaria — foi o que custou ~11h de fila parada no printbee.
+
+        ``_cancel_stale_received`` cuida do RECEIVED; QUEUED fica de fora de
+        propósito (esperar na fila é o trabalho dela — quem a destrava é o
+        cancelamento de quem está na frente).
+        """
+        grace = int(self.config.limits.stale_execution_grace_s or 0)
+        if grace <= 0:
+            return 0
+        now = datetime.now(timezone.utc)
+        owner_alive = self._workspace_owner_alive()
+        cancelled = 0
+        for task in self.repo.list_tasks(limit=200):
+            if task.status in TERMINAL_STATES:
+                continue
+            if task.status in (TaskState.RECEIVED, TaskState.QUEUED):
+                continue
+            if task.id in self._running_tasks:
+                continue  # este processo está rodando: viva por definição
+            age_s = self._age_seconds(task.updated_at, now)
+            if age_s is None or age_s < grace:
+                continue  # jovem demais para julgar (ou timestamp ilegível)
+            hard_limit = int(task.constraints.maximum_duration_seconds) + grace
+            if age_s > hard_limit:
+                reason = (
+                    f"auto-cancel: {task.status.value} parada há {int(age_s)}s "
+                    f"(> maximum_duration_seconds + {grace}s)"
+                )
+            elif not owner_alive:
+                reason = (
+                    f"auto-cancel: {task.status.value} sem processo dono vivo "
+                    f"(parada há {int(age_s)}s)"
+                )
+            else:
+                continue
+            self.repo.transition(
+                task, TaskState.CANCELLED, reason=reason, agent="runtime", error=reason
+            )
+            self.bus.emit(
+                RuntimeEvent(
+                    task_id=task.id,
+                    type=EventType.TASK_CANCELLED,
+                    agent="runtime",
+                    data={"reason": reason, "summary": "stale execution reaped"},
+                )
+            )
+            cancelled += 1
+            # Destravar quem estava enfileirado atrás dela.
+            try:
+                self._maybe_start_next(task.project_path)
+            except Exception:  # noqa: BLE001
+                pass
         return cancelled
 
     # bug-064 — janela de idempotencia do create_task: double-submit (MCP/CLI
@@ -244,6 +339,7 @@ class TaskService:
         # ("exigÃªncia"); repara na ingestão, antes de persistir/analisar.
         prompt = repair_mojibake(prompt)
         self._cancel_stale_received()
+        self._cancel_stale_execution()
         # bug-064 — idempotencia: mesmo prompt + mesmo dry_run em janela curta
         # com task nao-terminal devolve a existente (auditada com evento dedup)
         # em vez de criar duplicata que pode travar RECEIVED sem dono.
@@ -364,6 +460,7 @@ class TaskService:
         # bug-064 — zumbis RECEIVED so eram varridos no create_task; quem
         # observa por MCP (list/status) agora tambem dispara a limpeza.
         self._cancel_stale_received()
+        self._cancel_stale_execution()
         # bug-085 — e adota a orfã: cancelar depois de 6h resolvia o zumbi mas
         # nunca o trabalho; quem observa tem processo vivo, entao pode rodar.
         self._adopt_orphan_received_safe()
@@ -454,6 +551,7 @@ class TaskService:
         # bug-064 — zumbis RECEIVED so eram varridos no create_task; o poll de
         # status (MCP) tambem dispara a limpeza, senao task orfã fica eterna.
         self._cancel_stale_received()
+        self._cancel_stale_execution()
         task = self.get(task_id)
         # bug-085 — o poll de status é o evento mais frequente da frota; é ele
         # que tira a órfã do limbo quando o processo criador não voltou.
@@ -2494,6 +2592,86 @@ class TaskService:
         )
         return any(m in desc for m in markers)
 
+    async def _maybe_repair_and_retry(
+        self,
+        adapter: Any,
+        request: AgentRequest,
+        result: AgentResult,
+        *,
+        task: TaskRecord,
+        role: str,
+        agent_id: str,
+    ) -> AgentResult:
+        """CLI quebrado: reinstala uma vez e reexecuta. Nunca derruba a task.
+
+        0.4.63 — o `codex` saía exit=1 com zero byte como executor E como
+        validator (task 143e8b2ca47b), e o `opencode` faz o mesmo nesta máquina.
+        O bug-070 só colocava em quarentena: esconde, não resolve, e a rodada
+        seguinte redescobre do zero. Falta de CREDENCIAL não é reinstalada —
+        reinstalar apaga a sessão e o remédio é o `auth_hint`.
+        """
+        kind = classify_agent_failure(result)
+        if kind is None:
+            return result
+
+        def _report(**data: Any) -> None:
+            # Emitir E persistir: quem investiga depois lê `task logs`, não o
+            # console do processo que morreu.
+            event = RuntimeEvent(
+                task_id=task.id,
+                type=EventType.AGENT_REPAIR,
+                role=role,
+                agent=agent_id,
+                data=data,
+            )
+            self.bus.emit(event)
+            self.repo.add_event(event)
+
+        if kind == "auth":
+            _report(
+                failure_kind="auth",
+                auth_command=auth_hint(agent_id),
+                summary=(
+                    f"{agent_id}: CLI vivo, sem credencial. Reinstalar não "
+                    f"resolve — rode: {auth_hint(agent_id)}"
+                ),
+            )
+            return result
+        if not self.config.limits.agent_auto_repair:
+            return result
+        if agent_id in self._repaired_agents:
+            return result
+        self._repaired_agents.add(agent_id)
+
+        _report(
+            failure_kind="install",
+            summary=f"{agent_id}: CLI parece quebrado; tentando reinstalar",
+        )
+        try:
+            repair = repair_agent(
+                agent_id,
+                project_path=self.config.project_path,
+                timeout_s=self.config.limits.agent_repair_timeout_s,
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Reparo é conveniência; explodir aqui trocaria uma falha de agente
+            # por uma falha de runtime.
+            _report(failure_kind="install", repair_error=str(exc))
+            return result
+
+        _report(
+            failure_kind="install",
+            repair_ok=repair.ok,
+            repair_available=repair.available,
+            summary=repair.summary,
+        )
+        if not repair.ok:
+            return result
+        try:
+            return await adapter.run(request)
+        except Exception:  # noqa: BLE001
+            return result
+
     def _enrich_changed_files(self, result: AgentResult) -> AgentResult:
         if result.changed_files:
             return result
@@ -2909,6 +3087,9 @@ class TaskService:
                 timeout_s=timeout_s,
             )
             result = await adapter.run(request)
+            result = await self._maybe_repair_and_retry(
+                adapter, request, result, task=task, role=role, agent_id=agent_id
+            )
             result = self._enrich_changed_files(result)
             last_result = result
             self.repo.add_agent_run(
