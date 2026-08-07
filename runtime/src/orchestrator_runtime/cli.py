@@ -159,10 +159,23 @@ def run_cmd(
             dry_run=dry_run,
         )
     )
+    # bug-095 — sem credencial nenhum reparo automático resolve; o dono precisa
+    # ver isso no fim do run, não caçar no `task logs`.
+    blockers = service.auth_blockers(task.id)
     if json_out:
-        _print_json(task.model_dump())
+        payload = task.model_dump()
+        if blockers:
+            payload["agent_auth_required"] = blockers
+            payload["action_required"] = service.auth_action_text(blockers)
+        _print_json(payload)
     else:
         typer.echo(f"task={task.id} status={task.status.value} score={task.last_score}")
+        for blocker in blockers:
+            typer.echo(
+                f"[ACAO] {blocker['agent']} sem credencial"
+                + (f" (papel {blocker['role']})" if blocker["role"] else "")
+                + f" — rode: {blocker['command']}"
+            )
     raise typer.Exit(0 if task.status.value == "COMPLETED" else 1)
 
 
@@ -213,10 +226,19 @@ def task_run(
         verbose=verbose and not json_out,
     )
     task = asyncio.run(service.run_task(task_id))
+    blockers = service.auth_blockers(task.id)  # bug-095
     if json_out:
-        _print_json(task.model_dump())
+        payload = task.model_dump()
+        if blockers:
+            payload["agent_auth_required"] = blockers
+            payload["action_required"] = service.auth_action_text(blockers)
+        _print_json(payload)
     else:
         typer.echo(f"task={task.id} status={task.status.value}")
+        for blocker in blockers:
+            typer.echo(
+                f"[ACAO] {blocker['agent']} sem credencial — rode: {blocker['command']}"
+            )
     raise typer.Exit(0 if task.status.value == "COMPLETED" else 1)
 
 
@@ -229,9 +251,11 @@ def task_status(
     service = build_service(project, verbose=False)
     data = service.status(task_id)
     if json_out:
-        _print_json(data)
+        _print_json(data)  # já traz agent_auth_required / action_required
     else:
         typer.echo(f"{data['id']} {data['status']}")
+        if data.get("action_required"):
+            typer.echo(f"[ACAO] {data['action_required']}")
 
 
 @task_app.command("list")

@@ -569,7 +569,60 @@ class TaskService:
             out["queue_position"] = self._queue_position(task.id, task.project_path)
             out["blocked_by"] = self._blocked_by_from_error(task.error)
         out.update(self._independence_note(task.id))
+        # bug-095 — falta de credencial só o dono resolve; tem que chegar ao chat
+        # a cada poll, não ficar enterrada no `task logs`.
+        out.update(self._auth_note(task.id))
         return out
+
+    def auth_blockers(self, task_id: str) -> list[dict[str, str]]:
+        """Agentes que pararam por falta de credencial, prontos para o chat.
+
+        bug-095 — o evento `agent_repair` já registrava isso, mas evento mora no
+        `task logs`, e quem precisa agir é o DONO, que está olhando o chat. Sem
+        credencial nenhum reparo automático resolve: reinstalar apaga a sessão e
+        só a pessoa pode fazer login. Ficava invisível: na primeira execução real
+        da 0.4.63 o `codex` caiu por `auth` duas vezes e o resultado da task não
+        dizia uma palavra sobre isso.
+
+        Deduplicado por agente — o mesmo CLI falha em vários papéis e o dono só
+        precisa rodar o comando uma vez.
+        """
+        try:
+            events = self.repo.list_events(task_id)
+        except Exception:  # noqa: BLE001
+            return []  # observabilidade nunca derruba quem chamou
+        blockers: dict[str, dict[str, str]] = {}
+        for event in events:
+            if event.get("type") != EventType.AGENT_REPAIR.value:
+                continue
+            data = event.get("data") or {}
+            if data.get("failure_kind") != "auth":
+                continue
+            agent = str(event.get("agent") or "?")
+            blockers[agent] = {
+                "agent": agent,
+                "role": str(event.get("role") or ""),
+                "command": str(data.get("auth_command") or auth_hint(agent)),
+            }
+        return list(blockers.values())
+
+    @staticmethod
+    def auth_action_text(blockers: list[dict[str, str]]) -> str:
+        """Uma linha acionável — o que o dono tem que digitar."""
+        alvos = "; ".join(f"{b['agent']} → {b['command']}" for b in blockers)
+        return (
+            f"AÇÃO DO DONO: agente(s) sem credencial. Reinstalar não resolve — "
+            f"faça login: {alvos}"
+        )
+
+    def _auth_note(self, task_id: str) -> dict[str, Any]:
+        blockers = self.auth_blockers(task_id)
+        if not blockers:
+            return {}
+        return {
+            "agent_auth_required": blockers,
+            "action_required": self.auth_action_text(blockers),
+        }
 
     # bug-089 — score 1.0 com validator morto lia-se como "revisado e aprovado".
     # Na task 143e8b2ca47b os DOIS validators (codex e opencode) sairam exit=1

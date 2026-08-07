@@ -91,6 +91,8 @@ FEATURES: tuple[str, ...] = (
     "stale_execution_reaper",
     "agent_broken_cli_detection",
     "agent_auto_repair",
+    # 0.4.64 — falta de credencial de agente sobe para o chat (só o dono resolve)
+    "agent_auth_blocker_surfaced",
 )
 
 

@@ -44,6 +44,34 @@ orchestrator version --json             # versão + code_fingerprint (detecta MC
 Overrides úteis: `--executor <agente> --validator <agente> --max-iterations N`.
 No Windows, **não** use `codex` como validator (trava por sandbox; use `claude`).
 
+### No Claude Code: dispare como TAREFA EM SEGUNDO PLANO
+
+Uma task do orquestrador leva de 5 a 30 min. Em primeiro plano ela prende a
+conversa inteira e o usuário fica sem ver nada acontecer. Rode o Bash com
+`run_in_background: true`: o comando vira uma **tarefa em segundo plano** que o
+usuário acompanha em `/tasks`, com a saída ao vivo gravada em arquivo, e você é
+notificado quando termina — enquanto isso você continua trabalhando.
+
+```
+Bash({ command: 'orchestrator run --prompt "<atividade com critérios>"',
+       run_in_background: true })
+```
+
+Regras que fazem a diferença entre acompanhar e ficar no escuro:
+
+- **Não canalize a saída** (`| tail`, `| head`, `| Select-Object`, `> arquivo`):
+  o pipe segura tudo até o fim e o painel fica mudo. Deixe transmitir e filtre
+  o arquivo de saída depois.
+- O retorno traz o caminho do arquivo de saída — leia esse arquivo para
+  acompanhar o progresso, em vez de recriar a task.
+- Só declare sucesso ou fracasso depois do estado terminal. `orchestrator run`
+  sai com código ≠ 0 quando a task não termina `COMPLETED`.
+
+Via MCP o `orchestrator_run` já volta na hora com o `task_id` (`wait=false` é o
+padrão) — mas ele **não** cria a tarefa em segundo plano que aparece em
+`/tasks`. Quando o usuário quiser ver o trabalho rodando, prefira o CLI em
+background.
+
 ### Loops de execução
 
 O pedido escolhe sozinho um roteiro com etapas obrigatórias e critérios próprios

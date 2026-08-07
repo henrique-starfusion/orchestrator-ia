@@ -793,6 +793,16 @@ class OrchestratorMcpTools:
         digest = analysis.get("session_digest")
         learning_saved = bool(digest)
         learning_path = f".orchestrator/memory/learnings/{task.id}.md"
+        # bug-095 — agente sem credencial é problema do DONO, não do runtime:
+        # nenhum reparo automático resolve. Vai no payload terminal (o que o
+        # chat de fato lê) e também em `message`, para cliente que só mostra ela.
+        auth_blockers = service.auth_blockers(task.id)
+        message = (
+            "Tarefa terminal. Retenha apenas session_digest + learning_path; "
+            "descarte o histórico verboso de polls/eventos."
+        )
+        if auth_blockers:
+            message = f"{service.auth_action_text(auth_blockers)}\n{message}"
         return {
             "task_id": task.id,
             "status": task.status.value,
@@ -817,12 +827,18 @@ class OrchestratorMcpTools:
                 "learning_saved": learning_saved,
                 "learning_path": learning_path if learning_saved else None,
             },
-            "remaining_issues": [],
-            "error": task.error,
-            "message": (
-                "Tarefa terminal. Retenha apenas session_digest + learning_path; "
-                "descarte o histórico verboso de polls/eventos."
+            "remaining_issues": [
+                f"{b['agent']} sem credencial"
+                + (f" (papel {b['role']})" if b["role"] else "")
+                + f": rode `{b['command']}`"
+                for b in auth_blockers
+            ],
+            "agent_auth_required": auth_blockers,
+            "action_required": (
+                service.auth_action_text(auth_blockers) if auth_blockers else None
             ),
+            "error": task.error,
+            "message": message,
         }
 
     def cancel(self, payload: dict[str, Any]) -> dict[str, Any]:

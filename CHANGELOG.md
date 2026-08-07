@@ -2,6 +2,44 @@
 
 ## Unreleased
 
+## 0.4.64 - 2026-08-07
+
+### Fixed
+
+- **bug-095** — agente sem credencial não chegava a quem pode resolver. A 0.4.63
+  já classificava `auth` e emitia `agent_repair` com o comando de login, mas
+  evento mora no `task logs` — e quem precisa agir é o **dono**, que está olhando
+  o chat. Na primeira execução real da 0.4.63 (task `b0b9f6cadb7a`) o `codex`
+  caiu por `auth` **duas vezes**, a task terminou `COMPLETED score=1.0` e nem o
+  resultado nem a saída do `run` disseram uma palavra. Reinstalar não resolve
+  credencial: só a pessoa pode fazer login, então o silêncio custava rodadas
+  inteiras de fallback a cada task. Agora o bloqueio sobe por três caminhos:
+  - `orchestrator_status` / `task status` ganham `agent_auth_required` (agente,
+    papel, comando) e `action_required` — a cada poll, não só no fim
+  - `orchestrator_result` leva o mesmo par, popula `remaining_issues` (que era
+    **sempre** `[]`) e prefixa `message`, para cliente de chat que só exibe ela
+  - `orchestrator run` / `task run` imprimem uma linha `[ACAO]` por agente
+
+  Deduplicado por agente: o mesmo CLI falha em vários papéis e o dono só precisa
+  rodar o comando uma vez. Falha `install` **não** vira pedido ao dono — essa o
+  runtime resolve sozinho.
+- Feature de diagnóstico: `agent_auth_blocker_surfaced`
+
+### Changed
+
+- **Claude Code dispara o orquestrador em segundo plano por padrão.** Uma task
+  leva de 5 a 30 min; em primeiro plano ela prende a conversa e o usuário fica
+  sem ver nada. O adaptador (`CLAUDE.usage.section.md`) e o subagente
+  `orquestrador` agora mandam usar `Bash` com `run_in_background: true` — o
+  comando vira tarefa em segundo plano visível em `/tasks`, com saída ao vivo em
+  arquivo e notificação no fim. Com o aviso explícito de **não canalizar** a
+  saída (`| tail`, `| Select-Object`, `> arquivo`): o pipe segura tudo até o fim
+  e o painel fica mudo. Via MCP o `orchestrator_run` já volta na hora, mas não
+  cria a tarefa de `/tasks`
+- O subagente `orquestrador` passa a levar `action_required` ao usuário mesmo
+  quando a task termina `COMPLETED` — sem o login, toda task seguinte repaga o
+  fallback
+
 ## 0.4.63 - 2026-08-07
 
 O runtime parava de vez em quando e ninguém sabia por quê. Era um deadlock de
