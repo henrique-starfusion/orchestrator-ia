@@ -92,6 +92,45 @@ de uma task, não entre tasks. Registro em `subtasks`
 (`merged`/`conflict`/`empty`/`failed`) e nos eventos `agent_started`/
 `agent_completed` com `mode=parallel_subtasks`.
 
+## Saúde e reparo de CLI de agente (0.4.63)
+
+Dois módulos novos em `agents/`, com responsabilidades deliberadamente
+separadas:
+
+| Módulo | Responsabilidade | O que **não** faz |
+|---|---|---|
+| `agents/health.py` | Classifica a falha de um `AgentResult` em `install`, `auth` ou `None`; guarda os marcadores e o comando de login de cada agente (`auth_hint`) | Não repara, não decide, não toca em processo |
+| `agents/repair.py` | Reinstala o CLI delegando a `scripts/Update-Agents.ps1 -Only <agente>` | Não classifica e não recria os mapas de instalação em Python |
+
+Quem **decide** reparar é `tasks/service.py`, lendo `agent_auto_repair` e
+`agent_repair_timeout_s`. A separação existe porque os remédios são opostos:
+reinstalar um CLI que só está deslogado apaga a sessão do usuário e não conserta
+nada — por isso `auth` vence `install` no empate, e `auth` **nunca** dispara
+reinstalação; emite o comando de login.
+
+O reparo delega ao script PowerShell em vez de reimplementar: os mapas curados
+(npm, chocolatey, scoop, instalador nativo) já vivem lá, e uma segunda cópia em
+Python seria a que ninguém revisa. Host sem PowerShell devolve "reparo
+indisponível" e a task segue — não é erro. A reinstalação acontece no máximo
+**uma vez por agente por processo**.
+
+O evento `agent_repair` (com `failure_kind`) sai em toda tentativa de reparo e
+sempre no caso `auth`, mas **não** é um log de detecção: falha `install` com
+`agent_auto_repair` desligado, ou com aquele agente já reparado neste processo,
+retorna em silêncio — sem evento. Quem instrumenta em cima desses eventos precisa
+saber que ausência de evento não prova ausência de CLI quebrado.
+
+Regra dura, e ela vale independentemente de qualquer configuração:
+
+> **`timed_out` nunca é CLI quebrado.** Quem passou do tempo estava vivo; esse
+> caminho já tem dono em `_timeout_issue`, e reinstalar um CLI que trabalhou até
+> o timeout é puro desperdício.
+
+Na ausência de qualquer marcador no log, `install` só é arriscado quando o
+agente morreu **mudo e rápido** (stdout vazio e duração abaixo de 90 s). O caso
+negativo que define esse limite é real: um corrector rodou 17 min, escreveu
+20 KB de stderr e saiu `exit=1` — isso é mérito, não infraestrutura.
+
 ## Fora do núcleo
 
 OpenWolf, Graphify, Caveman, MCPs globais de terceiros e skills externas são opt-in e **não** são necessários para o runtime.

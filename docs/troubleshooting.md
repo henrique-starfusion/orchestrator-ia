@@ -61,6 +61,171 @@ orchestrator update --project D:/StarFusion/bootstrap-agents --no-propagate
 
 Override de testes: `ORCHESTRATOR_PROJECTS_REGISTRY`.
 
+---
+
+## 0.4.63 — Task parada há horas e nenhum timeout dispara
+
+**Sintoma:** `task status` fica no mesmo estado (`PLANNING`, `EXECUTING`) por 40
+min ou mais. Nenhum timeout de papel dispara, o watchdog de silêncio da 0.4.60
+não mata ninguém, `task logs` não cresce, e o `workspace.write.lock` continua
+com o PID do processo vivo. Não há erro em lugar nenhum — a task simplesmente
+não anda.
+
+**Causa (bug-090):** `CliExecutor.run` escrevia o `stdin` **antes** de subir as
+threads leitoras de `stdout`/`stderr`. Prompt grande vai por stdin (acima do
+teto de argv, `agents/base_adapters.py:172`) e trava dos dois lados: o pai enche
+o buffer de entrada (~64 KB no Windows) e espera o filho consumir; o filho enche
+o de saída e espera alguém ler — e as leitoras ainda nem existiam. Como
+`proc.wait(timeout=...)` só vem **depois** dessa escrita, nenhum teto se
+aplicava: nem o do papel, nem o `agent_no_output_timeout_s`, nem o teto da task.
+
+**Como confirmar:**
+
+```bash
+orchestrator task status <task_id>   # mesmo estado, updated_at antigo
+orchestrator version --json          # fingerprint + features do runtime
+```
+
+Se `stdin_written_after_readers` **não** estiver na lista `features` de
+`orchestrator version --json`, o runtime é anterior à 0.4.63 e ainda tem o
+deadlock — rode `orchestrator update`. Com a task travada em aberto, o processo
+Python aparece vivo e sem CPU, e o prompt (`orchestrator task list --json`, que
+traz o prompt integral) passa dos ~64 KB. Em
+`.orchestrator/runtime/results/<task-id>/` você vê a outra ponta do deadlock:
+os arquivos `<papel>-<agente>.txt` guardam a **saída** do agente, e nesse
+cenário eles ficam vazios ou nem chegam a existir. A partir da 0.4.63 a escrita
+do stdin é thread própria, iniciada **depois** das leitoras
+(`agents/process.py:386-411`).
+
+---
+
+## 0.4.63 — Fila inteira em QUEUED atrás de uma task que nunca termina
+
+**Sintoma:** toda task nova entra em `QUEUED behind <id>` e nunca sai. O `<id>`
+que bloqueia está em `EXECUTING`/`PLANNING` há horas, não é terminal, e nenhum
+processo do orquestrador está de fato trabalhando nele — medido: ~11 h de fila
+parada no printbee.
+
+**Causa (bug-093):** só existia reaper de task `RECEIVED`
+(`_cancel_stale_received`). Task presa em estado não-terminal ficava para
+sempre; `_busy_task_id` seguia devolvendo ela e o gate de fila mandava todo
+mundo esperar. Qualquer morte fora do caminho feliz produzia isso — processo MCP
+derrubado, máquina reiniciada, kill manual — inclusive depois do bug-090
+corrigido.
+
+**Como confirmar:**
+
+```bash
+orchestrator task list                 # a bloqueadora não-terminal e a fila atrás dela
+orchestrator task status <bloqueadora> # updated_at parado
+```
+
+Confira também `.orchestrator/runtime/locks/workspace.write.lock`: o arquivo
+carrega `{"pid", "ts"}`; se o PID não existe mais, ninguém está segurando o
+workspace.
+
+**Comportamento (0.4.63):** `_cancel_stale_execution()` só olha para task
+não-terminal **parada há pelo menos `stale_execution_grace_s`** — mais nova que
+isso é jovem demais para julgar e é ignorada, mesmo que ninguém segure o lock.
+Passada a folga, ela é cancelada em dois casos: `updated_at` além de
+`maximum_duration_seconds + stale_execution_grace_s`, **ou** nenhum processo
+vivo segurando o lock do workspace. Não existe cancelamento imediato só porque o
+lock ficou sem dono. Cancelada, o runtime desfila a próxima. Task que **este**
+processo está rodando nunca é ceifada; `QUEUED` fica de fora de propósito —
+esperar é o trabalho dela, quem a destrava é o cancelamento de quem está na
+frente. Roda no `create`/`status`/`list`, então basta consultar.
+
+```json
+{ "stale_execution_grace_s": 900 }
+```
+
+`0` desliga o reaper. Feature: `stale_execution_reaper`.
+
+---
+
+## 0.4.63 — Chamada MCP muda por 1800 s com a task já rodando
+
+**Sintoma:** `orchestrator_run` não responde e o cliente MCP fica pendurado até
+o teto de 1800 s, **enquanto** a task aparece rodando normalmente em
+`orchestrator task list` num outro terminal. Cancelar no chat não adianta: a
+task já foi disparada, quem travou foi a resposta.
+
+**Causa (bug-094a):** `_npm_global_bins_nt()` usava
+`subprocess.run(capture_output=True, timeout=15)`. No Windows, quando esse
+timeout estoura, o `communicate()` pós-kill espera **todo neto** que herdou o
+handle do pipe — é o bug-059, corrigido em `git_workspace._run_git` e nunca
+aplicado aqui. Esse caminho roda dentro de `which()` → `detect()`, que
+`orchestrator_run` chama **depois** de já ter criado e disparado a task.
+
+**Como confirmar:** com a chamada pendurada, procure um `npm.cmd`/`node` órfão
+na árvore do processo MCP (`Get-Process npm,node`) enquanto
+`orchestrator task status <id>` responde normal pela CLI. É a assinatura: task
+viva, resposta morta.
+
+**Comportamento (0.4.63):** captura por **arquivo temporário**, nunca por PIPE
+(`run_capture_file`, `agents/process.py:506`): `Popen` + arquivo + `taskkill /T`
+no timeout. Deadlock de EOF fica impossível e a árvore inteira morre junto.
+Devolve `124` no timeout e `127` quando nem executou.
+
+---
+
+## 0.4.63 — CLI de agente sai `exit=1` com zero byte
+
+**Sintoma:** o agente termina em segundos com `exit=1`, `stdout=0B stderr=0B`, e
+a task queima iteração atrás de iteração. Observado com `codex` e `opencode`,
+como executor **e** como validator, em mais de um projeto (task `143e8b2ca47b`:
+quem salvou foi o corrector `claude/opus`). Até a 0.4.62 o agente só entrava em
+quarentena (bug-070) — o sintoma sumia da vista sem nada ter sido consertado.
+
+**Causa:** o CLI do agente está quebrado (instalação corrompida, módulo ausente,
+versão sem suporte) **ou** sem credencial. Os dois se parecem no log e pedem
+remédios opostos: reinstalar um CLI que só está deslogado apaga a sessão e não
+conserta nada.
+
+**Como confirmar:**
+
+```bash
+orchestrator task logs <task_id>     # procure exit=1 com stdout/stderr vazios
+codex --version                      # teste o CLI fora do orquestrador
+```
+
+Nos eventos da task procure `agent_repair` (`orchestrator_events`): ele traz
+`failure_kind` (`install` ou `auth`), e no caso `auth` o comando de login a
+rodar. Feature: `agent_broken_cli_detection`.
+
+Ausência do evento **não** significa que o runtime não detectou nada: o caso
+`auth` sempre reporta, mas o caso `install` só emite evento quando o reparo vai
+de fato ser tentado. Com `agent_auto_repair: false`, ou quando aquele agente já
+foi reparado antes **neste mesmo processo**, o runtime devolve o resultado do
+agente em silêncio, sem evento. Se você desligou o auto-reparo, confie no
+`task logs` (`exit=1` com saída vazia), não no evento.
+
+**Comportamento (0.4.63):** `agents/health.py` classifica a falha em
+`install` / `auth` / nenhuma, e `agents/repair.py` reinstala **uma vez por
+agente por processo**, delegando a `scripts/Update-Agents.ps1 -Only <agente>` —
+que já tem os mapas curados (npm/chocolatey/scoop/instalador nativo). Falta de
+credencial **não** reinstala: o runtime emite o comando de login e para por aí.
+Se a reinstalação der certo, o agente é executado de novo na hora.
+
+```json
+{ "agent_auto_repair": true, "agent_repair_timeout_s": 300 }
+```
+
+`agent_auto_repair: false` desliga a reinstalação: falha classificada como
+`install` volta como está, **sem** evento `agent_repair` e sem nenhuma tentativa
+— a chave desliga o caminho inteiro, diagnóstico incluído. O caso `auth`
+continua reportando, porque ali nunca houve reinstalação a desligar. Host sem
+PowerShell não é erro: o reparo se declara indisponível (`repair_available:
+false` no evento) e a task segue.
+
+**Nota importante:** `timed_out` **nunca** é classificado como CLI quebrado —
+quem passou do tempo estava vivo, e esse caminho tem dono em `_timeout_issue`.
+Sem nenhum marcador no log, só arrisca `install` quando o agente morreu **mudo e
+rápido** (stdout vazio e duração < 90 s). Agente que rodou 17 min e escreveu
+20 KB de stderr é mérito, não infraestrutura.
+
+---
+
 ## 0.4.60 — Task gasta 1h e termina INCOMPLETE sem entregar nada
 
 **Sintoma:** `task status` mostra INCOMPLETE com
