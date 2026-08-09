@@ -93,6 +93,10 @@ FEATURES: tuple[str, ...] = (
     "agent_auto_repair",
     # 0.4.64 — falta de credencial de agente sobe para o chat (só o dono resolve)
     "agent_auth_blocker_surfaced",
+    # 0.4.66 — a fila entrega a task E espera quem vai executa-la; update nunca
+    # substitui binario de CLI em execucao
+    "queue_handoff_joined",
+    "agent_update_defers_running_cli",
 )
 
 

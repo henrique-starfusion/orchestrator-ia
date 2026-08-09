@@ -112,6 +112,22 @@ def agents_cmd(
 
 
 @app.command("run")
+def _drain_queue(service, *, json_out: bool) -> None:
+    """Espera as tasks que este processo tirou da fila (bug-098).
+
+    Sem isto, terminar uma task DESENFILEIRA a próxima e a mata em seguida: a
+    thread de dequeue é daemon e o CLI sai logo depois. Ela fica em RECEIVED,
+    fora de ``list_queued``, esperando que alguém faça poll — 11,5 min no
+    printbee em 09/08, 47 HORAS em 07/08.
+    """
+    try:
+        pendentes = service.join_background()
+    except Exception:  # noqa: BLE001
+        return  # drenar é conveniência; nunca troca o desfecho do comando
+    if pendentes and not json_out:
+        typer.echo(f"[fila] {pendentes} task(s) desenfileirada(s) executada(s)")
+
+
 def run_cmd(
     prompt: str = typer.Option(..., "--prompt", help="Atividade a executar"),
     project: Optional[Path] = typer.Option(None, "--project", help="Caminho do projeto"),
@@ -159,6 +175,9 @@ def run_cmd(
             dry_run=dry_run,
         )
     )
+    # bug-098 — este processo pode ter tirado a próxima task da fila; sair agora
+    # mata a thread e a deixa órfã em RECEIVED. Drena antes de morrer.
+    _drain_queue(service, json_out=json_out)
     # bug-095 — sem credencial nenhum reparo automático resolve; o dono precisa
     # ver isso no fim do run, não caçar no `task logs`.
     blockers = service.auth_blockers(task.id)
@@ -226,6 +245,7 @@ def task_run(
         verbose=verbose and not json_out,
     )
     task = asyncio.run(service.run_task(task_id))
+    _drain_queue(service, json_out=json_out)  # bug-098
     blockers = service.auth_blockers(task.id)  # bug-095
     if json_out:
         payload = task.model_dump()

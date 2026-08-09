@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+## 0.4.66 - 2026-08-09
+
+### Fixed
+
+- **bug-098** — a fila entregava a task e matava quem ia executá-la. Ao terminar
+  uma task, `_maybe_start_next` desenfileira a próxima e a inicia numa thread
+  **daemon**. Só que quem dispara isso é o `finally` do `run_task` — no CLI, o
+  processo sai no instante seguinte e leva a thread junto. A task já tinha sido
+  transicionada de `QUEUED` para `RECEIVED`, então sai de `list_queued` e
+  ninguém mais a enxerga pela fila; sobra só a adoção de órfã, que depende de
+  alguém fazer poll. Medido no printbee: `06d74af53ee0` terminou 17:35:53 e
+  `a0a588e6937b` foi para `RECEIVED` **no mesmo segundo**, ficando 11,5 min
+  parada até o dono cancelar e recriar a mesma task à mão. Em 07/08 a sequência
+  idêntica durou **47 horas**, até o auto-cancel de 6h. Agora
+  `TaskService.join_background()` espera as tasks que o processo tirou da fila,
+  e o CLI (`run` e `task run`) drena antes de sair. O servidor MCP segue vivo e
+  não chama — só quem morreria
+- **bug-099** — `Update-Agents.ps1` substituía o binário de um CLI **em
+  execução**. No Windows isso não é "update pulado": o npm baixa o pacote, falha
+  o move final com `EBUSY` e faz rollback **parcial** — o pacote principal fica,
+  o de plataforma não chega. O CLI não fica desatualizado, fica **destruído**.
+  Foi exatamente o que aconteceu com o `codex` em 07/08, durante um
+  `orchestrator update` com codex rodando como executor: 340 MB presos num
+  staging órfão, `@openai/codex-win32-x64` ausente e `exit=1` com zero byte em
+  toda a frota por dois dias — e o script tratou como simples aviso. Agora
+  agente com processo vivo é reportado como **`deferred_running`**, com linha
+  `[ACAO]` dizendo para rodar de novo depois. Consequência esperada: rodar
+  `orchestrator update` de dentro do Claude Code adia o update do próprio
+  `claude` — correto, o binário dele também está em uso
+- Features de diagnóstico: `queue_handoff_joined`,
+  `agent_update_defers_running_cli`
+
 ## 0.4.65 - 2026-08-07
 
 ### Fixed

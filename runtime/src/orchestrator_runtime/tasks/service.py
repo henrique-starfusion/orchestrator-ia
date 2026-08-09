@@ -173,6 +173,8 @@ class TaskService:
         # se reinstalar não resolveu, reinstalar de novo também não vai, e o
         # laço queimaria o orçamento da task instalando npm em círculos.
         self._repaired_agents: set[str] = set()
+        # bug-098 — threads de dequeue/adoção iniciadas por ESTE processo.
+        self._background_threads: list[threading.Thread] = []
 
     def _cancel_stale_received(self) -> int:
         """Auto-cancel RECEIVED tasks older than stale_received_ttl_hours (P1-D 0.4.16)."""
@@ -783,9 +785,33 @@ class TaskService:
             except Exception as exc:  # noqa: BLE001
                 _log.exception("%s run_task %s failed: %s", name, task_id, exc)
 
-        threading.Thread(
+        thread = threading.Thread(
             target=_bg, daemon=True, name=f"orch-{name}-{task_id[:8]}"
-        ).start()
+        )
+        # bug-098 — a thread é daemon (o servidor MCP não pode ficar preso nela),
+        # mas o CLI PRECISA esperá-la: quem sai do processo mata a thread junto.
+        self._background_threads.append(thread)
+        thread.start()
+
+    def join_background(self, timeout_s: float | None = None) -> int:
+        """Espera as tasks que ESTE processo tirou da fila. Devolve quantas.
+
+        bug-098 — o dequeue roda em thread daemon, e quem o dispara é o
+        ``finally`` do ``run_task``: no CLI, o processo sai no instante seguinte
+        e leva a thread. A task já tinha sido transicionada de QUEUED para
+        RECEIVED, então sai de ``list_queued`` e ninguém mais a enxerga pela
+        fila — só a adoção de órfã, que depende de alguém fazer poll.
+
+        Medido no printbee: `06d74af53ee0` terminou 17:35:53 e `a0a588e6937b`
+        foi para RECEIVED no MESMO segundo; ficou 11,5 min parada até o dono
+        cancelar. Em 07/08 a mesma coisa durou 47 HORAS.
+
+        O servidor MCP segue vivo e não chama isto — só o CLI, que morreria.
+        """
+        pendentes = [t for t in self._background_threads if t.is_alive()]
+        for thread in pendentes:
+            thread.join(timeout=timeout_s)
+        return len(pendentes)
 
     def _adopt_orphan_received(self, project_path: str) -> None:
         """Assume task RECEIVED que ficou sem dono (bug-085).

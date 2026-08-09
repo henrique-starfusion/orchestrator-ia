@@ -122,6 +122,48 @@ To update manually, run: irm https://code.kimi.com/kimi-code/install.ps1 | iex
         'update gravou probe-results com skipped=true; probe deve rodar por padrao'
     )
 
+    # --- bug-099: CLI em execucao nao pode ter o binario substituido -------
+    # Substituir .exe em uso no Windows nao "pula o update": o npm baixa, falha
+    # o move final com EBUSY e deixa instalacao PARCIAL — foi assim que o codex
+    # ficou dois dias saindo exit=1 com zero byte na frota inteira.
+    # Teste real: um processo de verdade chamado `codex` (ping renomeado).
+    $fakeExe = Join-Path $env:TEMP 'codex.exe'
+    $fakeProc = $null
+    try {
+        Copy-Item -LiteralPath (Join-Path $env:SystemRoot 'System32\ping.exe') `
+            -Destination $fakeExe -Force
+        $fakeProc = Start-Process -FilePath $fakeExe `
+            -ArgumentList '-n', '60', '127.0.0.1' -PassThru -WindowStyle Hidden
+        Start-Sleep -Milliseconds 400
+
+        $outBusy = & powershell.exe -NoProfile -ExecutionPolicy Bypass `
+            -File (Join-Path $repoRoot 'scripts\Update-Agents.ps1') `
+            -ProjectPath $tempDir -DryRun 2>&1 | Out-String
+
+        Assert-Test -Condition ($outBusy -match '\[ADIADO\] codex') -Message (
+            'update NAO adiou o codex com processo em execucao (risco de EBUSY e instalacao parcial)'
+        )
+        # Contagem >= 1: `claude` tambem aparece adiado quando a suite roda de
+        # dentro do Claude Code — e isso esta CERTO, o binario dele tambem esta
+        # em uso. Nao fixar o numero para o teste nao depender do harness.
+        $mAdiados = [regex]::Match($outBusy, 'adiados=(\d+)')
+        Assert-Test -Condition ($mAdiados.Success -and [int]$mAdiados.Groups[1].Value -ge 1) `
+            -Message 'resumo do Update-Agents nao contabilizou agente adiado'
+    }
+    finally {
+        if ($fakeProc) { Stop-Process -Id $fakeProc.Id -Force -ErrorAction SilentlyContinue }
+        Start-Sleep -Milliseconds 200
+        Remove-Item -LiteralPath $fakeExe -Force -ErrorAction SilentlyContinue
+    }
+
+    # Sem processo do agente, o update volta a acontecer normalmente.
+    $outLivre = & powershell.exe -NoProfile -ExecutionPolicy Bypass `
+        -File (Join-Path $repoRoot 'scripts\Update-Agents.ps1') `
+        -ProjectPath $tempDir -DryRun 2>&1 | Out-String
+    Assert-Test -Condition ($outLivre -notmatch '\[ADIADO\] codex') -Message (
+        'update adiou o codex mesmo sem processo em execucao — guard cedo demais'
+    )
+
     Write-Host ('PASS: {0}' -f $TestName) -ForegroundColor Green
     $exitCode = 0
 }

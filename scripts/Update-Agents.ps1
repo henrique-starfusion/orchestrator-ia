@@ -155,6 +155,26 @@ function Invoke-AgentUpdateAttempt {
 
 $onlyName = ([string]$Only).Trim()
 
+# bug-099 — NUNCA substituir o binario de um CLI que esta rodando AGORA.
+# No Windows o .exe em uso fica travado; o npm baixa o pacote, falha o move
+# final com EBUSY e faz rollback PARCIAL: o pacote principal fica, o pacote de
+# plataforma nao chega. O CLI nao fica "sem atualizar" — fica DESTRUIDO.
+# Foi exatamente isso com o codex em 07/08: `npm error code EBUSY` durante um
+# `orchestrator update` com codex executando como executor, 340MB presos num
+# staging orfao e `exit=1 / 0 byte` em toda a frota por dois dias.
+# Update adiado e resultado legitimo; update que quebra o agente nao e.
+function Test-AgentProcessRunning {
+    param([string]$Name)
+    $candidatos = @($Name)
+    if ($Name -eq 'kimi-code') { $candidatos += 'kimi' }
+    if ($Name -eq 'kimi') { $candidatos += 'kimi-code' }
+    foreach ($c in $candidatos) {
+        $procs = @(Get-Process -Name $c -ErrorAction SilentlyContinue)
+        if ($procs.Count -gt 0) { return $true }
+    }
+    return $false
+}
+
 foreach ($agent in @($detected.agents)) {
     $name = [string]$agent.name
     if ([string]::IsNullOrWhiteSpace($name)) { continue }
@@ -169,6 +189,18 @@ foreach ($agent in @($detected.agents)) {
             method = $null
             exit_code = $null
             notes  = 'IDE client — CLI update nao aplicavel'
+        }
+        continue
+    }
+
+    # bug-099: CLI em execucao -> adiar. Substituir binario em uso o DESTROI.
+    if (Test-AgentProcessRunning -Name $name) {
+        Write-Host ("[ADIADO] {0}: processo em execucao; update pulado para nao quebrar o CLI (EBUSY)." -f $name)
+        $results += [pscustomobject]@{
+            agent = $name; status = 'deferred_running'; method = $null; exit_code = $null
+            installation_method = [string]$agent.installation_method
+            manual_command = $null
+            notes = 'processo do agente em execucao; substituir o binario causaria EBUSY e instalacao parcial'
         }
         continue
     }
@@ -343,9 +375,13 @@ else {
 
 $updatedCount = @($results | Where-Object { $_.status -eq 'updated' }).Count
 $failedCount = @($results | Where-Object { $_.status -eq 'failed' }).Count
+$deferredList = @($results | Where-Object { $_.status -eq 'deferred_running' })
 $manualList = @($results | Where-Object { $_.status -eq 'manual_required' })
-Write-Host ("[OK] Update-Agents concluido (updated={0} failed={1} manual={2} total={3}; falhas = avisos)." -f `
-        $updatedCount, $failedCount, $manualList.Count, $results.Count)
+Write-Host ("[OK] Update-Agents concluido (updated={0} failed={1} adiados={2} manual={3} total={4}; falhas = avisos)." -f `
+        $updatedCount, $failedCount, $deferredList.Count, $manualList.Count, $results.Count)
+foreach ($item in $deferredList) {
+    Write-Host ("[ACAO] {0}: rode o update de novo quando o agente nao estiver executando." -f $item.agent)
+}
 # Comando manual no fim: e a unica saida acionavel, e no meio do log some.
 foreach ($item in $manualList) {
     Write-Host ("[ACAO] {0}: atualize manualmente -> {1}" -f $item.agent, $item.manual_command)
