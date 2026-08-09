@@ -97,6 +97,11 @@ FEATURES: tuple[str, ...] = (
     # substitui binario de CLI em execucao
     "queue_handoff_joined",
     "agent_update_defers_running_cli",
+    # 0.4.67 — o teto da fase comporta o refino; plano cru e declarado; pytest
+    # sem teste coletado deixa de ser cobrado como regressao
+    "selecting_cap_fits_planner_refine",
+    "plan_refined_flag",
+    "pytest_no_tests_not_a_failure",
 )
 
 

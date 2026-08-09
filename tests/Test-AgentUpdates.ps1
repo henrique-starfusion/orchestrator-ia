@@ -127,6 +127,11 @@ To update manually, run: irm https://code.kimi.com/kimi-code/install.ps1 | iex
     # o move final com EBUSY e deixa instalacao PARCIAL — foi assim que o codex
     # ficou dois dias saindo exit=1 com zero byte na frota inteira.
     # Teste real: um processo de verdade chamado `codex` (ping renomeado).
+    # O ambiente pode ter um codex REAL rodando (executor de outra task da
+    # frota). Nesse caso o guard adia de verdade e o caso negativo nao se
+    # aplica — medir antes em vez de assumir.
+    $codexRealRodando = @(Get-Process -Name 'codex' -ErrorAction SilentlyContinue).Count -gt 0
+
     $fakeExe = Join-Path $env:TEMP 'codex.exe'
     $fakeProc = $null
     try {
@@ -157,12 +162,17 @@ To update manually, run: irm https://code.kimi.com/kimi-code/install.ps1 | iex
     }
 
     # Sem processo do agente, o update volta a acontecer normalmente.
-    $outLivre = & powershell.exe -NoProfile -ExecutionPolicy Bypass `
-        -File (Join-Path $repoRoot 'scripts\Update-Agents.ps1') `
-        -ProjectPath $tempDir -DryRun 2>&1 | Out-String
-    Assert-Test -Condition ($outLivre -notmatch '\[ADIADO\] codex') -Message (
-        'update adiou o codex mesmo sem processo em execucao — guard cedo demais'
-    )
+    if ($codexRealRodando) {
+        Write-Host '[SKIP] caso negativo: ha um codex REAL rodando nesta maquina (executor de outra task).'
+    }
+    else {
+        $outLivre = & powershell.exe -NoProfile -ExecutionPolicy Bypass `
+            -File (Join-Path $repoRoot 'scripts\Update-Agents.ps1') `
+            -ProjectPath $tempDir -DryRun 2>&1 | Out-String
+        Assert-Test -Condition ($outLivre -notmatch '\[ADIADO\] codex') -Message (
+            'update adiou o codex mesmo sem processo em execucao — guard cedo demais'
+        )
+    }
 
     Write-Host ('PASS: {0}' -f $TestName) -ForegroundColor Green
     $exitCode = 0

@@ -121,7 +121,19 @@ class TaskService:
     # SELECTING_AGENTS mais que isso; o plano determinístico já existe.
     PLANNER_REFINE_CAP_S = 300
     # 0.4.24 — teto total da fase SELECTING_AGENTS (skill_selector + planner refine)
-    SELECTING_AGENTS_CAP_S = 180
+    #
+    # bug-101 — era 180, MENOR que o próprio `PLANNER_REFINE_CAP_S`. Como o teto
+    # efetivo do refino é `min(300, 180 - decorrido)`, os 300s prometidos NUNCA
+    # eram alcançáveis: o planner tinha ~180s reais. E o modelo preferido do
+    # planner é `fable` (o mais deliberativo). Medido no printbee: 4 refinos,
+    # 2 concluíram em 57s e 81s, 2 morreram em 180s cravados com ZERO byte —
+    # `claude -p` só imprime no fim, então o timeout não deixa nem saída
+    # parcial. 50% de perda, e a task seguia sem plano refinado.
+    #
+    # Agora a fase comporta o skill_selector + o refino inteiro, por construção.
+    @property
+    def selecting_agents_cap_s(self) -> int:
+        return int(self.config.limits.skill_selection_timeout_s) + self.PLANNER_REFINE_CAP_S
 
     def __init__(
         self,
@@ -599,7 +611,61 @@ class TaskService:
         # bug-095 — falta de credencial só o dono resolve; tem que chegar ao chat
         # a cada poll, não ficar enterrada no `task logs`.
         out.update(self._auth_note(task.id))
+        # bug-102 — plano cru não pode se passar por plano refinado.
+        out.update(self._plan_note(task.id))
         return out
+
+    def _mark_plan_not_refined(self, task: TaskRecord, *, agent: str, detail: str) -> None:
+        """Grava que o plano ficou só com o determinístico (bug-102).
+
+        O refino é advisory de propósito, mas o resultado precisa distinguir
+        "plano refinado por um modelo" de "plano cru". Persistido em `analysis`
+        para sobreviver ao processo — evento sozinho some do `status`.
+        """
+        try:
+            fresh = self.get(task.id)
+            analysis = dict(fresh.analysis or {})
+            analysis["plan_refined"] = False
+            analysis["plan_refine_failure"] = f"{agent}: {detail}"
+            fresh.analysis = analysis
+            self.repo.save(fresh)
+            task.analysis = analysis
+        except Exception:  # noqa: BLE001
+            pass  # observabilidade nunca derruba a task
+        event = RuntimeEvent(
+            task_id=task.id,
+            type=EventType.AGENT_COMPLETED,
+            role="planner",
+            agent=agent,
+            data={
+                "status": "failed",
+                "plan_refined": False,
+                "summary": (
+                    f"plano NÃO refinado ({agent}: {detail}) — a task segue com o "
+                    "plano determinístico"
+                ),
+            },
+        )
+        self.bus.emit(event)
+        try:
+            self.repo.add_event(event)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _plan_note(self, task_id: str) -> dict[str, Any]:
+        try:
+            analysis = self.get(task_id).analysis or {}
+        except Exception:  # noqa: BLE001
+            return {}
+        if analysis.get("plan_refined") is not False:
+            return {}
+        return {
+            "plan_refined": False,
+            "plan_warning": (
+                "o plano NÃO foi refinado por um modelo — a task rodou com o "
+                f"plano determinístico ({analysis.get('plan_refine_failure')})"
+            ),
+        }
 
     def auth_blockers(self, task_id: str) -> list[dict[str, str]]:
         """Agentes que pararam por falta de credencial, prontos para o chat.
@@ -1091,9 +1157,9 @@ class TaskService:
         # Planner agent (Claude no MVP) — refina plano; falha nao aborta se dry artifacts ok
         try:
             selecting_elapsed = time.monotonic() - selecting_started
-            if selecting_elapsed >= self.SELECTING_AGENTS_CAP_S:
+            if selecting_elapsed >= self.selecting_agents_cap_s:
                 raise TimeoutError(
-                    f"SELECTING_AGENTS excedeu {self.SELECTING_AGENTS_CAP_S}s "
+                    f"SELECTING_AGENTS excedeu {self.selecting_agents_cap_s}s "
                     f"(elapsed={selecting_elapsed:.0f}s)"
                 )
             task = self._ensure_runnable(task)
@@ -1117,19 +1183,34 @@ class TaskService:
             # 0.4.24: teto = min(PLANNER_REFINE_CAP, restante SELECTING_AGENTS_CAP).
             remaining_selecting = max(
                 30,
-                int(self.SELECTING_AGENTS_CAP_S - (time.monotonic() - selecting_started)),
+                int(self.selecting_agents_cap_s - (time.monotonic() - selecting_started)),
             )
             refine_cap = min(self.PLANNER_REFINE_CAP_S, remaining_selecting)
-            await self._run_agent(
+            refino = await self._run_agent(
                 plan_roles.planner,
                 "planner",
                 plan_prompt,
                 task,
                 timeout_cap_s=refine_cap,
             )
+            # bug-102 — refino perdido tem que APARECER. Ele é advisory, então a
+            # task segue com o plano determinístico e termina COMPLETED score
+            # 1.0 — idêntica a uma que FOI refinada. No printbee 2 de 4 tasks
+            # rodaram sem plano refinado e nada no resultado dizia isso.
+            if refino is None or getattr(refino, "status", None) != "completed":
+                self._mark_plan_not_refined(
+                    task,
+                    agent=plan_roles.planner,
+                    detail=(
+                        f"timeout em {refine_cap}s"
+                        if getattr(refino, "timed_out", False)
+                        else f"status={getattr(refino, 'status', 'sem resultado')}"
+                    ),
+                )
         except CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001
+            self._mark_plan_not_refined(task, agent=plan_roles.planner, detail=str(exc))
             self.bus.emit(
                 RuntimeEvent(
                     task_id=task.id,

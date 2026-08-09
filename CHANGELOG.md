@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+## 0.4.67 - 2026-08-09
+
+Três defeitos que a análise das falhas do printbee expôs. Nenhum era agente
+quebrado — os três eram o runtime cobrando o preço errado.
+
+### Fixed
+
+- **bug-101** — `SELECTING_AGENTS_CAP_S` era **180**, menor que o próprio
+  `PLANNER_REFINE_CAP_S` (**300**). Como o teto efetivo do refino é
+  `min(300, 180 - decorrido)`, os 300 s prometidos ao planner **nunca eram
+  alcançáveis**: ele tinha ~180 s reais. E `role_model_preferences.planner`
+  começa por `fable`, o modelo mais deliberativo — o menor orçamento da pipeline
+  entregue ao agente mais lento. Medido no printbee: 4 refinos, 2 concluíram em
+  57 s e 81 s, **2 morreram em 180 s cravados com ZERO byte** (`claude -p` só
+  imprime no fim, então o kill não deixa nem saída parcial). 50 % de perda. O
+  teto da fase agora é `skill_selection_timeout_s + PLANNER_REFINE_CAP_S`, por
+  construção — mexer num não deixa mais o outro inalcançável
+- **bug-102** — refino perdido era **invisível**. Ele é advisory de propósito, e
+  a task segue com o plano determinístico — mas terminava `COMPLETED score=1.0`,
+  indistinguível de uma que foi refinada. Duas das quatro tasks do printbee
+  rodaram com plano cru e nada no resultado dizia. Agora `status` traz
+  `plan_refined: false` + `plan_warning`, persistidos em `analysis` para
+  sobreviver ao processo. Mesma família de `independent_validation` (0.4.62) e
+  `agent_auth_required` (0.4.64): o runtime decide certo, mas tem que contar
+- **bug-100** — `pytest` sai **5** (`EXIT_NOTESTSCOLLECTED`) quando não há teste
+  para rodar, e isso virava `failed/introduced`. O printbee é .NET + Angular; a
+  descoberta propunha `pytest -q`, ele saía 5 em **toda** task e a task era
+  cobrada por não ter quebrado nada. Agora é `skipped/no_tests_collected` —
+  mesma família de `tool_missing` e `deps_missing`: ambiente, não mérito. Exit 5
+  de qualquer outro comando continua falha
+- Features de diagnóstico: `selecting_cap_fits_planner_refine`,
+  `plan_refined_flag`, `pytest_no_tests_not_a_failure`
+
 ## 0.4.66 - 2026-08-09
 
 ### Fixed

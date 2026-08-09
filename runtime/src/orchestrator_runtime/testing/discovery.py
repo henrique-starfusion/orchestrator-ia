@@ -312,6 +312,33 @@ class TestRunner:
                 )
                 status = "passed" if result.exit_code == 0 and not result.timed_out else "failed"
                 failure_kind = None
+                # bug-100 — pytest sai 5 (EXIT_NOTESTSCOLLECTED) quando NAO HA
+                # teste para rodar. Isso e ausencia de suite, nao regressao. O
+                # printbee e .NET + Angular; a descoberta propunha `pytest -q`,
+                # ele saia 5 em TODA task e virava "introduced" — a task era
+                # cobrada por nao ter quebrado nada. Mesma familia de
+                # tool_missing e deps_missing: ambiente, nao merito.
+                sem_teste_coletado = (
+                    status == "failed"
+                    and not result.timed_out
+                    and result.exit_code == 5
+                    and "pytest" in " ".join(command)
+                )
+                if sem_teste_coletado:
+                    results.append(
+                        {
+                            "command": " ".join(command),
+                            "category": spec.category,
+                            "exit_code": result.exit_code,
+                            "duration_s": time.monotonic() - started,
+                            "stdout": result.stdout[-8000:],
+                            "stderr": result.stderr[-8000:],
+                            "status": "skipped",
+                            "discovery_source": spec.source,
+                            "failure_kind": "no_tests_collected",
+                        }
+                    )
+                    continue
                 if status == "failed":
                     failure_kind = "introduced"
                     # bug-065 — mesma assinatura (comando + exit code) já
