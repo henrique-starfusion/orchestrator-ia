@@ -108,6 +108,9 @@ FEATURES: tuple[str, ...] = (
     "validator_claims_are_falsifiable",
     "degradation_ledger",
     "curated_skill_packs",
+    # 0.4.69 — task nascida com o workspace ocupado entra na fila, não fica
+    # esperando em RECEIVED fora dela
+    "create_enqueues_when_busy",
 )
 
 

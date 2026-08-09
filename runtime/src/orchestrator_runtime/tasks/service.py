@@ -429,6 +429,26 @@ class TaskService:
         self.repo.add_event(event)
         if first_run:
             self._onboard_first_run(task)
+        # bug-103 — task nascida com o workspace OCUPADO entra na FILA aqui, não
+        # fica esperando em RECEIVED.
+        #
+        # `_enqueue_task` só acontecia dentro do `run_task`; quem cria por MCP
+        # (`orchestrator_run`, wait=false) ou por `task create` nunca chama
+        # `run_task`, então a task ficava RECEIVED — e RECEIVED está FORA de
+        # `list_queued`, ou seja, o dequeue (corrigido no bug-098) nem olha para
+        # ela. Sobrava a adoção de órfã: uma por vez, só com o workspace livre e
+        # só se alguém fizesse poll.
+        #
+        # Medido no printbee: `edeee9684e66` ficou 9899s (2h45min) entre o
+        # `task_created` e o primeiro estado; `2d933db18554` passou 2h47min com
+        # UM único evento — nunca começou. Em QUEUED as duas teriam sido
+        # puxadas em ordem pela cadeia de dequeue, sem depender de ninguém.
+        try:
+            busy = self._busy_task_id(task.project_path, exclude_id=task.id)
+            if busy:
+                return self._enqueue_task(task, blocked_by=busy)
+        except Exception:  # noqa: BLE001
+            pass  # enfileirar é otimização; nunca impede a criação
         return task
 
     def _onboard_first_run(self, task: TaskRecord) -> None:

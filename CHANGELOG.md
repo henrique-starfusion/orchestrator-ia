@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 0.4.69 - 2026-08-09
+
+### Fixed
+
+- **bug-103** — task nascida com o workspace **ocupado** ficava em `RECEIVED`,
+  fora da fila. `_enqueue_task` só acontecia dentro do `run_task`; quem cria por
+  MCP (`orchestrator_run`, `wait=false`) ou por `task create` nunca chama
+  `run_task`, então a task nascia `RECEIVED` — e `RECEIVED` está **fora de
+  `list_queued`**, ou seja, a cadeia de dequeue (corrigida no bug-098) nem
+  olhava para ela. Sobrava a adoção de órfã: **uma por vez**, só com o workspace
+  livre e só se alguém fizesse poll. Medido no printbee em 09/08:
+  `edeee9684e66` passou **9899 s (2 h45)** entre o `task_created` e o primeiro
+  estado; `2d933db18554` passou **2 h47 com um único evento** — nunca começou.
+  Agora `create_task` enfileira quando o workspace está ocupado, e a fila drena
+  em FIFO sem depender de ninguém observar. `run_task` já promovia
+  `QUEUED → RECEIVED` ao liberar, então o caminho de execução não muda
+- Feature de diagnóstico: `create_enqueues_when_busy`
+
 ## 0.4.68 - 2026-08-09
 
 Honestidade do resultado e uma porta de entrada para skills externas.
