@@ -102,6 +102,12 @@ FEATURES: tuple[str, ...] = (
     "selecting_cap_fits_planner_refine",
     "plan_refined_flag",
     "pytest_no_tests_not_a_failure",
+    # 0.4.68 — integridade de teste no diff, validador que observa em vez de
+    # confiar, registro único de degradação e pacotes de skills curados
+    "test_weakening_detection",
+    "validator_claims_are_falsifiable",
+    "degradation_ledger",
+    "curated_skill_packs",
 )
 
 

@@ -834,6 +834,8 @@ class OrchestratorMcpTools:
                 for b in auth_blockers
             ],
             "agent_auth_required": auth_blockers,
+            # 0.4.68 — registro único do que o runtime aceitou degradar.
+            "degradations": service.degradations(task.id),
             "action_required": (
                 service.auth_action_text(auth_blockers) if auth_blockers else None
             ),

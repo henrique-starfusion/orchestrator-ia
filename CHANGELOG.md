@@ -2,6 +2,54 @@
 
 ## Unreleased
 
+## 0.4.68 - 2026-08-09
+
+Honestidade do resultado e uma porta de entrada para skills externas.
+
+### Added
+
+- **Detecção de enfraquecimento de teste.** O executor escreve o código **e** os
+  testes, e o gate só verifica se a suíte fica verde — nada impedia baixar uma
+  asserção, marcar `skip` ou apagar um caso para passar, e o resultado sairia
+  `COMPLETED score=1.0` igual a trabalho honesto. `validation/test_integrity.py`
+  lê o **diff de verdade** (git, não a narrativa do agente) dos arquivos de
+  teste e sinaliza três padrões mecânicos: asserções removidas, testes
+  desligados, casos apagados. Severidade **não-bloqueante** de propósito —
+  refator legítimo também remove asserção, e esta frota já pagou caro por
+  heurística de texto confiante demais (bug-097). Vira `blocking` só se o
+  validador confirmar
+- **O validador julga por observação.** O prompt passa a dizer explicitamente
+  que as afirmações do executor são hipóteses **falsificáveis**, que o diff e a
+  saída dos testes são a verdade, que ele deve reexecutar o que puder em vez de
+  inferir do código, e que o não verificável vira `UNVERIFIABLE` em vez de
+  aceitação por omissão
+- **Registro único de degradação.** Três releases criaram três avisos ad-hoc
+  para a mesma ideia: `independent_validation` (0.4.62), `agent_auth_required`
+  (0.4.64), `plan_refined` (0.4.67). A quarta degradação seria um quarto campo
+  solto. Agora `status` e `orchestrator_result` trazem `degradations` — uma
+  lista com `kind`, `impact`, `detail` e `action`. Os campos antigos continuam
+  saindo; cliente que já os consome não quebra
+- **Pacotes de skills curados.** `orchestrator skills list` e
+  `orchestrator skills install <pacote> --project <projeto>` instalam coleções
+  externas em `.orchestrator/skills/<pacote>/`, com `SKILLPACK.json` de
+  procedência (origem, licença, data, contagem). O mapa é **curado no script** —
+  nunca URL livre, mesma regra do mapa de agentes. Primeiro pacote: `marketing`,
+  49 skills MIT de Corey Haines. Instalação é **por projeto**: o seletor recebe
+  a lista inteira a cada task e descrições demais encarecem também as tasks de
+  código
+- Features de diagnóstico: `test_weakening_detection`,
+  `validator_claims_are_falsifiable`, `degradation_ledger`, `curated_skill_packs`
+
+### Créditos
+
+A heurística de integridade de teste (*"um teste alterado é culpado até a
+justificativa remontar a uma spec"*) e a postura de tratar afirmações como
+falsificáveis foram **reimplementadas** a partir do
+[fable-method](https://github.com/Sahir619/fable-method) (MIT). Nenhum texto ou
+prompt foi copiado. As skills de marketing são de
+[coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills)
+(MIT), instaladas na íntegra.
+
 ## 0.4.67 - 2026-08-09
 
 Três defeitos que a análise das falhas do printbee expôs. Nenhum era agente

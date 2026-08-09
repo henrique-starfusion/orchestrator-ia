@@ -71,6 +71,11 @@ from orchestrator_runtime.tasks.state_machine import (
 TERMINAL_LIKE = TERMINAL_STATES
 from orchestrator_runtime.testing import TestRunner
 from orchestrator_runtime.testing.discovery import stack_test_commands
+from orchestrator_runtime.validation.test_integrity import (
+    analyze_diff,
+    is_test_path,
+    summarize,
+)
 from orchestrator_runtime.validation import (
     CompletionGate,
     DeterministicValidator,
@@ -613,6 +618,10 @@ class TaskService:
         out.update(self._auth_note(task.id))
         # bug-102 — plano cru não pode se passar por plano refinado.
         out.update(self._plan_note(task.id))
+        # 0.4.68 — e o registro único: "esta task rodou inteira?" numa pergunta.
+        degradacoes = self.degradations(task.id)
+        if degradacoes:
+            out["degradations"] = degradacoes
         return out
 
     def _mark_plan_not_refined(self, task: TaskRecord, *, agent: str, detail: str) -> None:
@@ -666,6 +675,57 @@ class TaskService:
                 f"plano determinístico ({analysis.get('plan_refine_failure')})"
             ),
         }
+
+    def degradations(self, task_id: str) -> list[dict[str, str]]:
+        """Tudo que o runtime aceitou degradar, num lugar só (0.4.68).
+
+        Três vezes seguidas o mesmo padrão apareceu nesta frota — validação sem
+        veredito independente (bug-089), agente sem credencial (bug-095), plano
+        não refinado (bug-102) — e cada vez virou um campo novo com formato
+        próprio. A quarta seria um quarto campo solto.
+
+        Aqui o registro é UM: `kind`, o que se perdeu, e o que o dono pode
+        fazer. Os campos antigos continuam saindo no `status` — cliente que já
+        os consome não quebra —, mas quem quiser saber "esta task rodou
+        inteira?" agora tem uma pergunta só.
+
+        A regra que os três casos ensinaram: **degradação aceita precisa
+        aparecer no resultado**. O runtime decidir certo não basta.
+        """
+        registro: list[dict[str, str]] = []
+
+        nota = self._independence_note(task_id)
+        if nota.get("independent_validation") is False:
+            registro.append(
+                {
+                    "kind": "validation_not_independent",
+                    "impact": "o score não reflete revisão de mérito",
+                    "detail": str(nota.get("validation_warning") or ""),
+                    "action": "reexecute a validação com um validator vivo",
+                }
+            )
+
+        for bloqueio in self.auth_blockers(task_id):
+            registro.append(
+                {
+                    "kind": "agent_auth_required",
+                    "impact": f"{bloqueio['agent']} não pôde trabalhar",
+                    "detail": f"CLI sem credencial (papel {bloqueio['role'] or '?'})",
+                    "action": bloqueio["command"],
+                }
+            )
+
+        plano = self._plan_note(task_id)
+        if plano.get("plan_refined") is False:
+            registro.append(
+                {
+                    "kind": "plan_not_refined",
+                    "impact": "a task rodou com o plano determinístico, sem refino de modelo",
+                    "detail": str(plano.get("plan_warning") or ""),
+                    "action": "reexecute se o plano importava para o resultado",
+                }
+            )
+        return registro
 
     def auth_blockers(self, task_id: str) -> list[dict[str, str]]:
         """Agentes que pararam por falta de credencial, prontos para o chat.
@@ -1761,6 +1821,20 @@ class TaskService:
                         det.get("summary", "")
                         + " | blocking: validator==executor (independent validation required)"
                     )
+            # 0.4.68 — enfraquecimento de teste entra no registro como
+            # não-bloqueante: refator legítimo também remove asserção, e esta
+            # frota já pagou caro por heurística de texto confiante demais
+            # (bug-097). Quem transforma em blocking é o validador, se
+            # confirmar. Mas some do relatório NUNCA.
+            integridade = self._test_integrity_findings(changed_files)
+            if integridade:
+                base = len(det.get("non_blocking_issues") or [])
+                det["non_blocking_issues"] = list(
+                    det.get("non_blocking_issues") or []
+                ) + [
+                    f.as_issue(f"VAL-TI{base + i:02d}")
+                    for i, f in enumerate(integridade, start=1)
+                ]
             val_prompt = self._build_validator_prompt(task, det, test_results, changed_files)
             val_result = await self._run_agent(val_agent, "validator", val_prompt, task)
             last_validation = self.llm_validator.parse(val_result.stdout, det)
@@ -2498,6 +2572,26 @@ class TaskService:
         ).strip()
         return explanation[:500] or None
 
+    def _test_integrity_findings(self, changed_files: list[str]) -> list:
+        """Sinais de enfraquecimento de teste no diff da iteração (0.4.68).
+
+        O executor escreve o código E os testes, e o gate só olha se a suíte
+        fica verde — nada impedia baixar uma asserção para passar. Lê o diff de
+        verdade (git), não a narrativa do agente.
+        """
+        alvos = [f for f in changed_files if is_test_path(f)]
+        if not alvos:
+            return []
+        try:
+            proc = run_git(
+                self.config.project_path, "diff", "--unified=0", "--", *alvos
+            )
+            if proc.returncode != 0:
+                return []
+            return analyze_diff(proc.stdout)
+        except Exception:  # noqa: BLE001
+            return []  # heurística de apoio nunca derruba a validação
+
     def _build_validator_prompt(
         self,
         task: TaskRecord,
@@ -2510,9 +2604,22 @@ class TaskService:
         skills = self._skills_block(task)
         skills_section = f"{skills}\n" if skills else ""
         child = self._child_agent_restriction_block()
+        integridade = summarize(self._test_integrity_findings(changed_files))
+        integridade_section = f"{integridade}\n" if integridade else ""
         return (
             "Valide a tarefa e responda APENAS JSON com status/score/blocking_issues.\n"
             f"{child}\n"
+            # 0.4.68 — o veredito vem da OBSERVAÇÃO, não da narrativa. O maior
+            # modo de falha documentado de agente de código é declarar sucesso
+            # independente do resultado; nesta frota já apareceu como score 1.0
+            # com os dois validators mortos (bug-089).
+            "COMO JULGAR: trate as afirmações do executor como hipóteses "
+            "falsificáveis, não como fatos. O diff e a saída dos testes abaixo "
+            "são a verdade; o relato do agente, não. Reexecute o que puder com "
+            "suas próprias ferramentas em vez de inferir do código. O que você "
+            "NÃO conseguir verificar, marque como UNVERIFIABLE no "
+            "non_blocking_issues — nunca aceite por omissão.\n"
+            f"{integridade_section}"
             # bug-067 — o juiz roda `git status` com as próprias ferramentas e
             # via arquivos sujos da INFRA do orquestrador (update/propagação,
             # adapters) como "alteração fora de escopo" — iter 1 da task

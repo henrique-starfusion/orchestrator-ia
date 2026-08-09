@@ -359,6 +359,28 @@ orchestrator-ia.bat skills -ProjectPath C:\meu-projeto
 
 Skills externas: `.orchestrator/skills/external/` · Quarentena: `quarantined/`
 
+### Pacotes de skills (0.4.68+)
+
+Coleções externas entram por um instalador com **mapa curado** — nunca por URL
+livre, mesma regra do mapa de agentes:
+
+```bash
+orchestrator skills list
+orchestrator skills install marketing --project D:\StarFusion\vavi
+```
+
+Instala em `.orchestrator/skills/<pacote>/` com um `SKILLPACK.json` de
+procedência (origem, licença, data, contagem). O `skill_selector` passa a
+considerá-las na task seguinte, sem código novo.
+
+| Pacote | Conteúdo | Licença |
+|---|---|---|
+| `marketing` | 49 skills: CRO, copy, SEO, ads, pricing, lançamento, RevOps | MIT (Corey Haines) |
+
+**Instale por projeto, não na frota.** O seletor recebe a lista inteira de
+skills a cada task; 49 descrições extras encarecem também as tasks de código.
+Um pacote de marketing num backend é só custo.
+
 ### Perfis de invocação por CLI
 
 Cada agente tem um perfil declarativo em `.orchestrator/agents/profiles/<cli>.json` (mecânica de invocação: subcomando não-interativo, flag de prompt, saída, timeout). **CLI novo = JSON novo, zero código** — o dispatch e a skill `call-agent` leem o perfil. Schema: `package/schemas/agent-profile.schema.json`. Agentes classe IDE (cursor, kiro) são detectados por presença no PATH, sem sonda de execução.
@@ -463,6 +485,47 @@ package/
 - Arquitetura: [`docs/installer-architecture.md`](docs/installer-architecture.md)
 - CLI: [`docs/cli-reference.md`](docs/cli-reference.md)
 - One-liner: [`docs/quickstart-oneliner.md`](docs/quickstart-oneliner.md)
+
+---
+
+## Honestidade do resultado
+
+O modo de falha mais documentado de agente de código é **declarar sucesso
+independente do que aconteceu**. Esta frota já viveu isso: uma task fechou
+`COMPLETED score=1.0` com os **dois** validators mortos. O runtime aceita
+degradar — e é certo que aceite —, mas o resultado tem que dizer.
+
+Toda degradação aceita aparece em `orchestrator task status` e no
+`orchestrator_result`, num registro único:
+
+```json
+"degradations": [
+  {"kind": "validation_not_independent", "impact": "o score não reflete revisão de mérito", "action": "reexecute com um validator vivo"},
+  {"kind": "agent_auth_required",        "impact": "codex não pôde trabalhar",              "action": "codex login"},
+  {"kind": "plan_not_refined",           "impact": "rodou com o plano determinístico",      "action": "reexecute se o plano importava"}
+]
+```
+
+Os campos antigos (`independent_validation`, `agent_auth_required`,
+`plan_refined`) continuam saindo — cliente que já os consome não quebra.
+
+### Integridade de teste (0.4.68+)
+
+O executor escreve o código **e** os testes, e o gate só verifica se a suíte
+fica verde — nada impedia baixar uma asserção para passar. O runtime lê o
+**diff de verdade** dos arquivos de teste e sinaliza três padrões mecânicos:
+asserções removidas, testes desligados por `skip`/`Ignore`, casos apagados.
+
+O achado é **não-bloqueante** de propósito: refator legítimo também remove
+asserção. Ele obriga o validador a justificar — *um teste alterado é culpado
+até a justificativa remontar à spec* — e vira `blocking` só se o juiz
+confirmar. O validador também é instruído a tratar o relato do executor como
+hipótese falsificável, reexecutar o que puder e marcar `UNVERIFIABLE` em vez de
+aceitar por omissão.
+
+> Heurística reimplementada a partir do
+> [fable-method](https://github.com/Sahir619/fable-method) (MIT). Nenhum texto
+> ou prompt foi copiado.
 
 ---
 

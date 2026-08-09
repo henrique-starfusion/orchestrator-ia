@@ -10,6 +10,11 @@ param(
 
     [string]$PackageRoot,
 
+    # 0.4.68 — `orchestrator skills <list|install> [<pacote>]`
+    [ValidateSet('', 'list', 'install')]
+    [string]$SkillAction = '',
+    [string]$SkillPack,
+
     [string]$TaskClass,
     [string]$Prompt,
     [ValidateSet('claude', 'codex', 'cursor', 'gemini', 'opencode', 'kimi', 'auto')]
@@ -565,6 +570,23 @@ try {
         }
 
         'skills' {
+            # 0.4.68 — pacotes de skills curados. Sem -SkillAction, mantem o
+            # comportamento antigo (listar o registry do projeto).
+            if ($SkillAction) {
+                $packArgs = @{ ProjectPath = $projectRoot }
+                if ($SkillAction -eq 'list') { $packArgs.List = $true }
+                else {
+                    if (-not $SkillPack) {
+                        Write-Host '[ERRO] uso: orchestrator skills install <pacote>'
+                        exit 2
+                    }
+                    $packArgs.Pack = $SkillPack
+                }
+                if ($Force) { $packArgs.Force = $true }
+                if ($DryRun) { $packArgs.DryRun = $true }
+                $code = Invoke-ChildScript -Name 'Install-SkillPack.ps1' -Arguments $packArgs
+                exit ([int]$code)
+            }
             Write-Host '[INFO] Modo skills: listando skills registradas.'
             $skillsRegistry = Join-Path (Get-OrchestratorRoot -ProjectPath $projectRoot) 'skills\registry.json'
             if (-not (Test-Path -LiteralPath $skillsRegistry)) {

@@ -151,6 +151,14 @@ function parseArgs(argv) {
     out.passthrough.push('-LegacyAction', action);
   }
 
+  // 0.4.68 — skills <list|install> [<pacote>]; sem ação = listar o registry.
+  if (out.command === 'skills' && args.length > 0 && !args[0].startsWith('-')) {
+    out.passthrough.push('-SkillAction', args.shift());
+    if (args.length > 0 && !args[0].startsWith('-')) {
+      out.passthrough.push('-SkillPack', args.shift());
+    }
+  }
+
   // Runtime: preserve remaining args almost as-is
   if (out.command === 'run' || out.command === 'task' || out.command === 'tools'
       || out.command === 'mcp' || out.command === 'cursor' || out.command === 'agents') {
