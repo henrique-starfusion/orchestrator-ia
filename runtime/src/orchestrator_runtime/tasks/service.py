@@ -11,6 +11,7 @@ import re
 import threading
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -82,6 +83,30 @@ from orchestrator_runtime.validation.test_integrity import (
 # chamador (20s bloqueante, 30s polling); o piso existe para um perfil futuro
 # com valor agressivo não transformar sinal de vida em enchente de eventos.
 LOOP_HEARTBEAT_MIN_S = 10
+
+
+@dataclass
+class TaskRunContext:
+    """Estado do run de UMA task. Até a 0.4.73 isto vivia no serviço.
+
+    Com uma única task ativa por projeto funcionava: `_execute_loop` reatribuía
+    tudo no topo e ninguém competia. Mas o servidor MCP roda todas as tasks no
+    MESMO processo — então, no instante em que duas rodam juntas, a task B zera
+    o relógio, o baseline git, o `run_ctx` e a lista de modelos esgotados da
+    task A. O resultado não é um erro: é `changed_files` atribuído à task
+    errada, orçamento de tempo calculado do início errado e learning gravado com
+    o contexto de outra. Falha silenciosa, que a serialização escondia.
+
+    Um contexto por task_id, criado sob demanda e descartado no fim do run.
+    """
+
+    started_monotonic: float = field(default_factory=time.monotonic)
+    git_baseline: GitBaseline = field(default_factory=GitBaseline)
+    run_ctx: dict[str, Any] = field(default_factory=dict)
+    exhausted_models: set[tuple[str, str]] = field(default_factory=set)
+    # (role, agent_id) da última etapa despachada — o heartbeat do loop nomeia
+    # quem está no ar, e com N tasks concorrentes isso é por task.
+    current_agent: tuple[str, str] | None = None
 from orchestrator_runtime.validation import (
     CompletionGate,
     DeterministicValidator,
@@ -185,22 +210,31 @@ class TaskService:
         self.lock = WriteLock(
             config.orchestrator_root / "runtime" / "locks" / "workspace.write.lock"
         )
-        self._loop_started_monotonic: float | None = None
-        # 0.4.73 — (role, agent_id) da última etapa despachada, para o heartbeat
-        # do loop dizer QUEM está no ar (ou quem acabou de sair).
-        self._current_agent: tuple[str, str] | None = None
-        self._git_baseline: GitBaseline = GitBaseline()
-        # Contexto do run corrente para o learning (locals do loop não
-        # persistidos na task): changed_files, test_results, last_validation.
-        self._run_ctx: dict[str, Any] = {}
-        # 0.4.25 — modelos com cota esgotada neste processo/run (agent, model)
-        self._exhausted_models: set[tuple[str, str]] = set()
+        # 0.4.74 — contexto POR TASK (relógio, baseline git, run_ctx, modelos
+        # esgotados, etapa corrente). Antes eram atributos do serviço, o que só
+        # funcionava com uma task ativa por vez — ver `TaskRunContext`.
+        self._contexts: dict[str, TaskRunContext] = {}
         # 0.4.63 — agentes já reparados neste processo. UM reparo por agente:
         # se reinstalar não resolveu, reinstalar de novo também não vai, e o
         # laço queimaria o orçamento da task instalando npm em círculos.
         self._repaired_agents: set[str] = set()
         # bug-098 — threads de dequeue/adoção iniciadas por ESTE processo.
         self._background_threads: list[threading.Thread] = []
+
+    def _ctx(self, task: "TaskRecord | str") -> TaskRunContext:
+        """Contexto do run desta task, criado sob demanda (0.4.74).
+
+        Criar sob demanda é de propósito: o heartbeat do loop bate de uma thread
+        e o `status` de outro processo — nenhum dos dois pode depender de o
+        contexto já existir, e um contexto vazio é resposta honesta ("ainda não
+        começou" / "já terminou").
+        """
+        task_id = task if isinstance(task, str) else task.id
+        ctx = self._contexts.get(task_id)
+        if ctx is None:
+            ctx = TaskRunContext()
+            self._contexts[task_id] = ctx
+        return ctx
 
     def _cancel_stale_received(self) -> int:
         """Auto-cancel RECEIVED tasks older than stale_received_ttl_hours (P1-D 0.4.16)."""
@@ -302,7 +336,7 @@ class TaskService:
         ativos = sorted(
             getattr(getattr(self, "executor", None), "_active_pids", None) or ()
         )
-        role, agent = self._current_agent or (None, None)
+        role, agent = self._ctx(task_id).current_agent or (None, None)
         if ativos:
             quem = f"{agent}/{role}" if agent else "agente"
             onde = f"{quem} no ar (pid={ativos[0]})"
@@ -1378,6 +1412,9 @@ class TaskService:
                     result = self.get(task_id)
                 finally:
                     self._running_tasks.discard(task_id)
+                    # 0.4.74 — o contexto morre com o run. Um processo MCP de
+                    # vida longa acumularia baseline git de toda task já vista.
+                    self._contexts.pop(task_id, None)
             return result
         except CancelledError:
             return self.get(task_id)
@@ -1448,10 +1485,12 @@ class TaskService:
         # que abortar AQUI — o objeto task recebido é snapshot e o check
         # antigo de cancel_requested só rodava depois do primeiro transition.
         task = self._ensure_runnable(self.get(task.id))
-        self._loop_started_monotonic = time.monotonic()
-        self._git_baseline = capture_baseline(self.config.project_path)
-        self._run_ctx = {}
-        self._exhausted_models = set()
+        # 0.4.74 — contexto NOVO desta task. Antes estes quatro eram atributos do
+        # serviço, então esta linha zerava o run de qualquer task concorrente.
+        self._contexts[task.id] = TaskRunContext(
+            started_monotonic=time.monotonic(),
+            git_baseline=capture_baseline(self.config.project_path),
+        )
 
         # RECEIVED -> ANALYZING (WAITING_FOR_USER -> ANALYZING no resume)
         if task.status == TaskState.RECEIVED:
@@ -1518,7 +1557,7 @@ class TaskService:
         self.repo.transition(task, TaskState.PLANNING, reason="planning")
         plan_roles = await self.manager.select_strategy(task, analysis)
         task.plan = self.planner.plan(task, analysis, plan_roles)
-        self._run_ctx["strategy"] = plan_roles.strategy
+        self._ctx(task).run_ctx["strategy"] = plan_roles.strategy
         self.repo.save(task)
         self.repo.add_routing_decision(task.id, plan_roles.strategy, plan_roles.model_dump())
         self.bus.emit(
@@ -1674,10 +1713,10 @@ class TaskService:
             # CLI; printbee: suite da raiz quebrada — INCOMPLETE 1d63d2a5cb28)
             # era cobrada como "introduced" e a task estava condenada por
             # mérito alheio. Assinatura igual na iteração vira "preexisting".
-            if task.iteration == 1 and "test_baseline" not in self._run_ctx:
+            if task.iteration == 1 and "test_baseline" not in self._ctx(task).run_ctx:
                 try:
                     baseline = self.tests.run_all(self.config.project_path)
-                    self._run_ctx["test_baseline"] = baseline
+                    self._ctx(task).run_ctx["test_baseline"] = baseline
                     for br in baseline:
                         self.repo.add_test_run(
                             task_id=task.id,
@@ -1702,7 +1741,7 @@ class TaskService:
                 except Exception as base_exc:  # noqa: BLE001
                     # Infra no baseline: segue sem ele (comportamento estrito
                     # de antes da 0.4.44) em vez de derrubar a task.
-                    self._run_ctx["test_baseline_error"] = str(base_exc)
+                    self._ctx(task).run_ctx["test_baseline_error"] = str(base_exc)
             exec_prompt = self._build_executor_prompt(
                 task,
                 last_validation,
@@ -2004,7 +2043,7 @@ class TaskService:
             changed_files = list(
                 dict.fromkeys(changed_files + exec_result.changed_files)
             )
-            self._run_ctx["changed_files"] = changed_files
+            self._ctx(task).run_ctx["changed_files"] = changed_files
 
             # ---------------------------------------------------------------
             # 0.4.28 — plano incompleto: mandar CONTINUAR em vez de validar.
@@ -2111,10 +2150,10 @@ class TaskService:
             test_results = self.tests.run_all(
                 self.config.project_path,
                 extra_dirs=nested_test_dirs,
-                baseline=self._run_ctx.get("test_baseline"),
+                baseline=self._ctx(task).run_ctx.get("test_baseline"),
             )
             last_test_results = test_results
-            self._run_ctx["test_results"] = test_results
+            self._ctx(task).run_ctx["test_results"] = test_results
             for tr in test_results:
                 self.repo.add_test_run(task_id=task.id, **tr)
             self.bus.emit(
@@ -2348,7 +2387,7 @@ class TaskService:
                 issue_counts[f"{iid}|{norm}"] = issue_counts.get(f"{iid}|{norm}", 0) + 1
 
             task.last_score = float(last_validation.get("score") or 0)
-            self._run_ctx["last_validation"] = last_validation
+            self._ctx(task).run_ctx["last_validation"] = last_validation
             self.repo.save(task)
             self.bus.emit(
                 RuntimeEvent(
@@ -3098,7 +3137,7 @@ class TaskService:
         )
 
     def _remaining_duration_s(self, task: TaskRecord) -> int:
-        started = self._loop_started_monotonic
+        started = self._ctx(task).started_monotonic
         if started is None:
             return int(task.constraints.maximum_duration_seconds)
         elapsed = time.monotonic() - started
@@ -3217,7 +3256,7 @@ class TaskService:
             ],
             "summary": summary,
         }
-        self._run_ctx["last_validation"] = last_validation
+        self._ctx(task).run_ctx["last_validation"] = last_validation
         decision = await self.manager.evaluate_iteration(
             task, last_validation, task.iteration
         )
@@ -3391,10 +3430,14 @@ class TaskService:
         except Exception:  # noqa: BLE001
             return result
 
-    def _enrich_changed_files(self, result: AgentResult) -> AgentResult:
+    def _enrich_changed_files(
+        self, result: AgentResult, task: TaskRecord
+    ) -> AgentResult:
         if result.changed_files:
             return result
-        from_git = changed_files_since(self.config.project_path, self._git_baseline)
+        from_git = changed_files_since(
+            self.config.project_path, self._ctx(task).git_baseline
+        )
         if from_git:
             result.changed_files = list(from_git)
         return result
@@ -3681,7 +3724,7 @@ class TaskService:
         do chamador — sessao bloqueante fica muda entre um sinal e outro.
         """
         # 0.4.73 — quem o heartbeat do loop vai nomear como etapa corrente.
-        self._current_agent = (role, agent_id)
+        self._ctx(task).current_agent = (role, agent_id)
         if getattr(self, "executor", None) is None:
             return
 
@@ -3715,7 +3758,9 @@ class TaskService:
         def _workspace_progress() -> bool:
             try:
                 return bool(
-                    changed_files_since(self.config.project_path, self._git_baseline)
+                    changed_files_since(
+                        self.config.project_path, self._ctx(task).git_baseline
+                    )
                 )
             except Exception:  # noqa: BLE001
                 # Git indisponivel/lento: sem prova de morte, nao mata.
@@ -3775,7 +3820,7 @@ class TaskService:
         usable = [
             c
             for c in candidates
-            if (agent_id, str(c[0] or "")) not in self._exhausted_models
+            if (agent_id, str(c[0] or "")) not in self._ctx(task).exhausted_models
         ]
         if not usable:
             usable = list(candidates)
@@ -3811,7 +3856,7 @@ class TaskService:
             result = await self._maybe_repair_and_retry(
                 adapter, request, result, task=task, role=role, agent_id=agent_id
             )
-            result = self._enrich_changed_files(result)
+            result = self._enrich_changed_files(result, task)
             last_result = result
             self.repo.add_agent_run(
                 task_id=task.id,
@@ -3863,7 +3908,7 @@ class TaskService:
             has_next = idx + 1 < len(usable)
             if has_next and should_retry_next_model(result):
                 exhausted_key = (agent_id, str(model or ""))
-                self._exhausted_models.add(exhausted_key)
+                self._ctx(task).exhausted_models.add(exhausted_key)
                 next_model = usable[idx + 1][0]
                 self.bus.emit(
                     RuntimeEvent(
@@ -3967,7 +4012,7 @@ class TaskService:
                 task,
                 success=success,
                 strategy=strategy,
-                run_ctx=self._run_ctx,
+                run_ctx=self._ctx(task).run_ctx,
             )
             digest = L.build_digest(learning, max_chars=limits.digest_max_chars)
             # Disponibiliza o digest para o result/status do MCP.

@@ -58,7 +58,10 @@ def test_enrich_changed_files_fills_empty_result(project: Path):
     _init_repo(project)
     config = load_config(project, fake_agents=True)
     service = TaskService(config, verbose=False)
-    service._git_baseline = capture_baseline(project)
+    # 0.4.74 — o baseline e POR TASK: era atributo do servico e a segunda task a
+    # comecar reatribuia o da primeira, atribuindo arquivos ao run errado.
+    task = service.create_task("x")
+    service._ctx(task).git_baseline = capture_baseline(project)
     (project / "via_agent.py").write_text("ok\n", encoding="utf-8")
     result = AgentResult(
         session_id="s",
@@ -68,7 +71,7 @@ def test_enrich_changed_files_fills_empty_result(project: Path):
         exit_code=0,
         changed_files=[],
     )
-    enriched = service._enrich_changed_files(result)
+    enriched = service._enrich_changed_files(result, task)
     assert "via_agent.py" in enriched.changed_files
 
 

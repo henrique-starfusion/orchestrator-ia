@@ -81,7 +81,7 @@ def test_sem_agente_no_ar_a_batida_diz_isso(project: Path) -> None:
     """O caso que motivou tudo: vao entre etapas nao pode parecer silencio."""
     svc = build_service(project, fake_agents=True)
     task = svc.create_task("x")
-    svc._current_agent = ("executor", "codex")
+    svc._ctx(task).current_agent = ("executor", "codex")
     svc.executor._active_pids.clear()
 
     svc._emit_loop_progress(task.id, pid=os.getpid(), elapsed_s=10)
@@ -95,7 +95,7 @@ def test_sem_agente_no_ar_a_batida_diz_isso(project: Path) -> None:
 def test_primeira_etapa_nao_inventa_agente(project: Path) -> None:
     svc = build_service(project, fake_agents=True)
     task = svc.create_task("x")
-    svc._current_agent = None
+    svc._ctx(task).current_agent = None
 
     svc._emit_loop_progress(task.id, pid=os.getpid(), elapsed_s=1)
 
@@ -108,7 +108,7 @@ def test_primeira_etapa_nao_inventa_agente(project: Path) -> None:
 def test_agente_no_ar_aparece_com_pid(project: Path) -> None:
     svc = build_service(project, fake_agents=True)
     task = svc.create_task("x")
-    svc._current_agent = ("executor", "claude")
+    svc._ctx(task).current_agent = ("executor", "claude")
     svc.executor._active_pids.add(4242)
     try:
         svc._emit_loop_progress(task.id, pid=os.getpid(), elapsed_s=5)
@@ -127,7 +127,24 @@ def test_run_agent_registra_quem_esta_no_ar(project: Path) -> None:
 
     svc._register_heartbeat(task, role="validator", agent_id="claude")
 
-    assert svc._current_agent == ("validator", "claude")
+    assert svc._ctx(task).current_agent == ("validator", "claude")
+
+
+def test_etapa_corrente_nao_vaza_entre_tasks(project: Path) -> None:
+    """0.4.74 — duas tasks no mesmo processo nao podem trocar de etapa.
+
+    Antes `_current_agent` era do SERVICO: a segunda task a despachar um agente
+    reescrevia o nome que o heartbeat da primeira ia reportar.
+    """
+    svc = build_service(project, fake_agents=True)
+    a = svc.create_task("a")
+    b = svc.create_task("b")
+
+    svc._register_heartbeat(a, role="executor", agent_id="codex")
+    svc._register_heartbeat(b, role="validator", agent_id="claude")
+
+    assert svc._ctx(a).current_agent == ("executor", "codex")
+    assert svc._ctx(b).current_agent == ("validator", "claude")
 
 
 # --------------------------------------------------------------------------
@@ -248,7 +265,7 @@ def test_last_event_at_filtra_por_tipo(project: Path) -> None:
 def test_status_traz_o_sinal_de_vida(project: Path) -> None:
     svc = build_service(project, fake_agents=True)
     task = svc.create_task("x")
-    svc._current_agent = ("executor", "codex")
+    svc._ctx(task).current_agent = ("executor", "codex")
     svc._emit_loop_progress(task.id, pid=os.getpid(), elapsed_s=7)
 
     live = svc.status(task.id).get("live")
@@ -306,7 +323,7 @@ def test_mcp_status_traz_o_sinal_e_a_mensagem(project: Path) -> None:
     )
     svc = tools._service()
     task = svc.create_task("x")
-    svc._current_agent = ("executor", "codex")
+    svc._ctx(task).current_agent = ("executor", "codex")
     svc._emit_loop_progress(task.id, pid=os.getpid(), elapsed_s=7)
 
     out = tools.status({"task_id": task.id})
@@ -314,6 +331,8 @@ def test_mcp_status_traz_o_sinal_e_a_mensagem(project: Path) -> None:
     assert out["live"]["agent_active"] is False
     assert "pid vivo" in out["message"]
     assert "entre etapas" in out["message"]
+    # 0.4.74 — sem repetir o resumo: ele ja vem de `last_data["summary"]`
+    assert out["message"].count("entre etapas") == 1
 
 
 def test_mcp_status_terminal_nao_traz_sinal(project: Path) -> None:

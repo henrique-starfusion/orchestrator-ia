@@ -719,9 +719,14 @@ class OrchestratorMcpTools:
                 vivo = {True: "pid vivo", False: "pid MORTO", None: "pid ?"}[
                     live.get("pid_alive")
                 ]
-                message_parts.append(
-                    f"{live['summary']} (sinal há {live.get('signal_age_s')}s, {vivo})"
-                )
+                sufixo = f"(sinal há {live.get('signal_age_s')}s, {vivo})"
+                # 0.4.74 — quando o último evento JÁ é o sinal de vida, o resumo
+                # dele saía duas vezes na `message`. A idade e o estado do pid
+                # entram sempre: são a parte que responde "travou?".
+                if live["summary"] == last_data.get("summary"):
+                    message_parts.append(sufixo)
+                else:
+                    message_parts.append(f"{live['summary']} {sufixo}")
             message_parts.append("poll orchestrator_status / orchestrator_events")
 
         queue_position = None

@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     create_engine,
+    event,
     select,
 )
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -213,8 +214,44 @@ class DocumentationUpdateRow(Base):
     payload_json = Column(Text, default="{}")
 
 
+# 0.4.74 — quanto um escritor espera antes de desistir com "database is locked".
+# Uma transação deste runtime é um INSERT ou um UPDATE de uma linha; 15s é ordem
+# de magnitude acima do pior caso e ainda muito abaixo de qualquer timeout de
+# papel, então esperar é sempre melhor que falhar.
+SQLITE_BUSY_TIMEOUT_MS = 15_000
+
+
 def create_session_factory(db_path: str) -> sessionmaker[Session]:
-    engine = create_engine(f"sqlite:///{db_path}", future=True)
+    """Engine SQLite preparada para VÁRIOS escritores.
+
+    0.4.74 — o default do SQLite (`journal_mode=delete`) dá um lock de arquivo
+    inteiro por escrita: qualquer segundo escritor leva `database is locked` na
+    hora. Até a 0.4.73 isso não aparecia porque só havia uma task ativa por
+    projeto — a serialização escondia o problema. Com tasks concorrentes há três
+    escritores por projeto no mesmo processo, mais uma thread de heartbeat por
+    task (0.4.73), mais os outros processos (MCP, CLI, reaper).
+
+    WAL deixa leitor e escritor conviverem; `busy_timeout` faz o escritor
+    ESPERAR sua vez em vez de estourar. `synchronous=NORMAL` é o par usual de WAL
+    (durável contra crash de processo, que é o caso real aqui; só perde no crash
+    de sistema operacional, onde a task já morreu de qualquer forma).
+    """
+    engine = create_engine(
+        f"sqlite:///{db_path}",
+        future=True,
+        connect_args={"timeout": SQLITE_BUSY_TIMEOUT_MS / 1000},
+    )
+
+    @event.listens_for(engine, "connect")
+    def _set_sqlite_pragmas(dbapi_connection, _record):  # noqa: ANN001
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+        finally:
+            cursor.close()
+
     Base.metadata.create_all(engine)
     return sessionmaker(bind=engine, expire_on_commit=False, future=True)
 
