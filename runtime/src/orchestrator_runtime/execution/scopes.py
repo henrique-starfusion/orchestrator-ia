@@ -20,6 +20,7 @@ exatamente o comportamento da 0.4.73.
 
 from __future__ import annotations
 
+import re
 from pathlib import PurePosixPath
 
 
@@ -101,6 +102,40 @@ def path_in_scope(caminho: str, escopo: object) -> bool:
     if not normalizado:
         return True
     return any(_cobre(prefixo, normalizado[0]) for prefixo in alvos)
+
+
+# Token com barra e extensão/segmentos plausíveis de caminho de projeto.
+_TOKEN_CAMINHO = re.compile(r"[A-Za-z0-9_.\-]+(?:[/\\][A-Za-z0-9_.\-]+)+")
+
+
+def infer_scope(prompt: str, known_roots: object = None) -> tuple[str, ...]:
+    """Escopo lido do que o PRÓPRIO PEDIDO nomeia, nada além.
+
+    0.4.74 — só entra caminho que aparece literalmente no prompt E cuja primeira
+    pasta existe no projeto. Prompt que não nomeia caminho devolve escopo vazio, e
+    vazio serializa.
+
+    Deliberadamente burro. A tentação é pedir o escopo a um modelo, mas nesta
+    arquitetura o escopo é o que AUTORIZA duas tasks a rodarem juntas: um escopo
+    inventado com confiança liberaria exatamente o par que não podia rodar junto.
+    Adivinhar errado aqui custa dois agentes no mesmo arquivo (bug-077); não
+    adivinhar custa só serializar, que é o comportamento de antes.
+    """
+    raizes = {str(r).strip().replace("\\", "/").strip("/") for r in (known_roots or [])}
+    achados: list[str] = []
+    for bruto in _TOKEN_CAMINHO.findall(prompt or ""):
+        candidato = normalize_scope([bruto.rstrip(".,;:)")])
+        if not candidato:
+            continue
+        caminho = candidato[0]
+        primeira = caminho.split("/")[0]
+        # Sem lista de raízes não há como conferir existência; aceitar tudo aí
+        # inventaria escopo a partir de qualquer coisa com barra no texto
+        # (URL, versão, comando) — e escopo errado é pior que escopo nenhum.
+        if not raizes or primeira not in raizes:
+            continue
+        achados.append(caminho)
+    return normalize_scope(achados)
 
 
 def outside_scope(arquivos: object, escopo: object) -> list[str]:

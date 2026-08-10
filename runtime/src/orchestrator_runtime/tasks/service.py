@@ -40,6 +40,12 @@ from orchestrator_runtime.execution.fanout import (
     parse_subtasks,
 )
 from orchestrator_runtime.execution.locks import WriteLock, _pid_alive
+from orchestrator_runtime.execution.scopes import (
+    normalize_scope,
+    outside_scope,
+    path_in_scope,
+    scopes_overlap,
+)
 from orchestrator_runtime.execution.worktrees import (
     WorktreeHandle,
     apply_patch,
@@ -107,6 +113,11 @@ class TaskRunContext:
     # (role, agent_id) da última etapa despachada — o heartbeat do loop nomeia
     # quem está no ar, e com N tasks concorrentes isso é por task.
     current_agent: tuple[str, str] | None = None
+    # 0.4.74 — executor de CLI próprio. `on_heartbeat` e `progress_probe` são
+    # atributos do executor: compartilhá-lo entre tasks concorrentes faria a
+    # última a despachar roubar o heartbeat das outras e substituir a sonda de
+    # silêncio delas. Mesmo motivo do `_subtask_executor` do fan-out.
+    executor: Any = None
 from orchestrator_runtime.validation import (
     CompletionGate,
     DeterministicValidator,
@@ -210,6 +221,21 @@ class TaskService:
         self.lock = WriteLock(
             config.orchestrator_root / "runtime" / "locks" / "workspace.write.lock"
         )
+        # 0.4.74 — TESTING é o único trecho que continua exclusivo. Escopos
+        # disjuntos separam CÓDIGO, não recurso de máquina: duas suítes no mesmo
+        # diretório disputam build dir, cache e porta, e o resultado de uma
+        # contamina o da outra independentemente de quais arquivos cada task
+        # mexeu. Timeout largo porque suíte lenta é normal; a alternativa
+        # (rodar junto) produz falha de teste que não existe.
+        self._tests_lock = WriteLock(
+            config.orchestrator_root / "runtime" / "locks" / "tests.run.lock",
+            timeout_s=1800,
+        )
+        # As tasks concorrentes rodam cada uma em sua thread com seu event loop
+        # (`_start_background` → `asyncio.run`), e o `WriteLock` recusa na hora
+        # quando outro asyncio task o segura. Este portão de thread garante que
+        # só um chamador deste processo chegue ao lock de arquivo por vez.
+        self._tests_gate = threading.Lock()
         # 0.4.74 — contexto POR TASK (relógio, baseline git, run_ctx, modelos
         # esgotados, etapa corrente). Antes eram atributos do serviço, o que só
         # funcionava com uma task ativa por vez — ver `TaskRunContext`.
@@ -269,19 +295,53 @@ class TaskService:
                 cancelled += 1
         return cancelled
 
-    def _workspace_owner_alive(self) -> bool:
-        """O processo que segura o write lock deste workspace ainda existe?
-
-        Não há campo ``owner_pid`` na task — o dono real do workspace é quem
-        escreveu o lock, e o lock já carrega ``{"pid", "ts"}``. Lock ausente =
-        ninguém trabalhando.
-        """
-        path = self.lock.lock_path
+    def _last_progress_event(self, task_id: str) -> dict[str, Any] | None:
+        """Último sinal de vida da task (heartbeat do loop ou do agente)."""
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            return self.repo.last_event(
+                task_id,
+                types=(
+                    EventType.LOOP_PROGRESS.value,
+                    EventType.AGENT_PROGRESS.value,
+                ),
+            )
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _legacy_workspace_owner_alive(self) -> bool:
+        """Sinal de vida ANTIGO: o pid gravado no write lock do workspace.
+
+        Até a 0.4.73 o loop segurava esse lock durante toda a execução, então o
+        lock era a prova de que alguém trabalhava. A 0.4.74 deixou de segurá-lo
+        (segurar era a própria serialização do projeto), mas isto continua aqui
+        como ponte: durante a atualização da frota há processos na 0.4.73 rodando
+        tasks, e eles não emitem `loop_progress` com pid. Sem esta ponte, o reaper
+        de um processo novo cancelaria a task viva de um processo velho.
+        """
+        try:
+            data = json.loads(self.lock.lock_path.read_text(encoding="utf-8"))
         except (OSError, ValueError, json.JSONDecodeError):
             return False
         return _pid_alive(int(data.get("pid") or 0))
+
+    def _task_owner_alive(self, task_id: str) -> bool:
+        """O processo que roda ESTA task ainda existe?
+
+        0.4.74 — antes a pergunta era do WORKSPACE, respondida pelo pid do write
+        lock, calculada UMA vez e aplicada a todas as tasks. Isso desmonta de duas
+        formas com concorrência: o lock deixou de ser segurado pelo loop, e mesmo
+        que fosse, o dono da task A não diz nada sobre o da task B.
+
+        O pid por task vem do heartbeat do loop (0.4.73), cuja primeira batida sai
+        no instante em que o loop começa — então task viva SEMPRE tem dono
+        conhecido. Sem pid nenhum, cai no sinal legado do lock; sem os dois,
+        ninguém está trabalhando nela.
+        """
+        evento = self._last_progress_event(task_id)
+        pid = (evento or {}).get("data", {}).get("pid") if evento else None
+        if isinstance(pid, int) and pid > 0:
+            return _pid_alive(pid)
+        return self._legacy_workspace_owner_alive()
 
     @staticmethod
     def _age_seconds(stamp: str | None, now: datetime) -> float | None:
@@ -333,10 +393,17 @@ class TaskService:
         """Uma batida do heartbeat do loop: fase, idade da fase e quem está no ar."""
         fresh = self.get(task_id)
         fase_s = self._age_seconds(fresh.updated_at, datetime.now(timezone.utc))
-        ativos = sorted(
-            getattr(getattr(self, "executor", None), "_active_pids", None) or ()
-        )
-        role, agent = self._ctx(task_id).current_agent or (None, None)
+        ctx = self._ctx(task_id)
+        # 0.4.74 — os PIDs vivos são do executor DESTA task: com concorrência,
+        # ler o compartilhado faria a task A relatar "agente no ar" por causa do
+        # agente da task B. Antes de a task despachar o primeiro agente ela ainda
+        # não tem executor — aí o compartilhado é a única fonte, e sem
+        # concorrência ele é a fonte certa de qualquer forma.
+        dono = ctx.executor
+        if dono is None and not self._concurrency_on():
+            dono = getattr(self, "executor", None)
+        ativos = sorted(getattr(dono, "_active_pids", None) or ())
+        role, agent = ctx.current_agent or (None, None)
         if ativos:
             quem = f"{agent}/{role}" if agent else "agente"
             onde = f"{quem} no ar (pid={ativos[0]})"
@@ -365,6 +432,48 @@ class TaskService:
         self.repo.add_event(evento)
 
     @contextmanager
+    def _test_lock(self):
+        """Rodada de testes exclusiva no projeto (0.4.74).
+
+        Escopo disjunto separa código, não recurso de máquina: duas suítes no
+        mesmo diretório disputam build dir, cache e porta, e a falha resultante
+        não existe no código de nenhuma das duas — é a pior classe de falha,
+        porque manda o corrector caçar defeito que não está lá.
+
+        Se o lock de arquivo não vier na janela, roda mesmo assim e registra:
+        suíte serializada é o objetivo, mas travar a task por causa do lock
+        seria trocar um resultado sujo por nenhum resultado.
+        """
+        self._tests_gate.acquire()
+        pegou = False
+        try:
+            try:
+                self._tests_lock.acquire()
+                pegou = True
+            except TimeoutError:
+                self.bus.emit(
+                    RuntimeEvent(
+                        task_id="-",
+                        type=EventType.TEST_STARTED,
+                        agent="runtime",
+                        data={
+                            "serialized": False,
+                            "summary": (
+                                "lock de testes não veio na janela — rodando sem "
+                                "exclusividade; resultado pode sofrer interferência"
+                            ),
+                        },
+                    )
+                )
+            try:
+                yield
+            finally:
+                if pegou:
+                    self._tests_lock.release()
+        finally:
+            self._tests_gate.release()
+
+    @contextmanager
     def _loop_heartbeat(self, task: TaskRecord):
         """Sinal de vida do PRÓPRIO loop, inclusive onde nenhum agente roda.
 
@@ -387,13 +496,21 @@ class TaskService:
         pid = os.getpid()
 
         def _bater() -> None:
-            while not parar.wait(cadencia):
+            # 0.4.74 — a PRIMEIRA batida sai na hora, não depois de uma cadência.
+            # É ela que registra o pid dono da task, e o reaper depende disso para
+            # distinguir "processo morreu" de "não sei quem é o dono". Esperar 20s
+            # deixava uma janela em que uma task viva não tinha dono conhecido.
+            primeira = True
+            while primeira or not parar.wait(cadencia):
+                primeira = False
                 try:
                     self._emit_loop_progress(
                         task.id, pid=pid, elapsed_s=int(time.monotonic() - inicio)
                     )
                 except Exception:  # noqa: BLE001
                     pass  # sinal de vida nunca derruba a task
+                if parar.is_set():
+                    return
 
         thread = threading.Thread(
             target=_bater, daemon=True, name=f"loop-hb-{task.id[:8]}"
@@ -491,7 +608,6 @@ class TaskService:
         if grace <= 0:
             return 0
         now = datetime.now(timezone.utc)
-        owner_alive = self._workspace_owner_alive()
         cancelled = 0
         for task in self.repo.list_tasks(limit=200):
             if task.status in TERMINAL_STATES:
@@ -519,7 +635,8 @@ class TaskService:
                     f"{int(total_s)}s e sem sinal de vida há {int(idle_s)}s "
                     f"(> maximum_duration_seconds + {grace}s)"
                 )
-            elif not owner_alive:
+            elif not self._task_owner_alive(task.id):
+                # 0.4.74 — a pergunta é por TASK, não pelo workspace.
                 reason = (
                     f"auto-cancel: em {task.status.value} sem processo dono vivo "
                     f"e sem sinal de vida há {int(idle_s)}s"
@@ -584,6 +701,7 @@ class TaskService:
         executor: str | None = None,
         validator: str | None = None,
         dry_run: bool = False,
+        scope: list[str] | None = None,
     ) -> TaskRecord:
         # bug-049 — prompt vindo de terminal CP1252 chega com mojibake UTF-8
         # ("exigÃªncia"); repara na ingestão, antes de persistir/analisar.
@@ -614,6 +732,7 @@ class TaskService:
             executor=executor,
             validator=validator,
             dry_run=dry_run,
+            scope=list(normalize_scope(scope)),
         )
         task = TaskRecord(
             prompt=prompt,
@@ -650,7 +769,7 @@ class TaskService:
         # UM único evento — nunca começou. Em QUEUED as duas teriam sido
         # puxadas em ordem pela cadeia de dequeue, sem depender de ninguém.
         try:
-            busy = self._busy_task_id(task.project_path, exclude_id=task.id)
+            busy = self._blocking_task_id(task.project_path, task)
             if busy:
                 return self._enqueue_task(task, blocked_by=busy)
         except Exception:  # noqa: BLE001
@@ -1009,7 +1128,50 @@ class TaskService:
                     "action": "reexecute se o plano importava para o resultado",
                 }
             )
+
+        desvio = self.scope_violations(task_id)
+        if desvio:
+            registro.append(
+                {
+                    "kind": "scope_violation",
+                    "impact": (
+                        "a task escreveu fora do escopo que a admitiu para rodar "
+                        "em paralelo"
+                    ),
+                    "detail": (
+                        f"{len(desvio)} arquivo(s) fora de "
+                        f"{', '.join(self.task_scope(self.get(task_id))) or '?'}: "
+                        f"{', '.join(desvio[:10])}"
+                    ),
+                    "action": (
+                        "confira se o trabalho é legítimo (escopo declarado curto) "
+                        "ou se atropelou outra task; ajuste o --scope na reexecução"
+                    ),
+                }
+            )
         return registro
+
+    def scope_violations(self, task_id: str) -> list[str]:
+        """Arquivos que a task tocou FORA do escopo declarado (0.4.74).
+
+        É a metade de DETECÇÃO da garantia. Como o trabalho acontece todo na
+        árvore local, o runtime impede duas tasks de escopos sobrepostos serem
+        admitidas juntas, mas não impede o agente de escrever onde quiser depois
+        de admitido. O desvio então tem que ser medido e contado — invisível ele
+        transforma a admissão numa garantia de fachada.
+
+        Base é o que a task REPORTOU ter mudado (`agent_runs.changed_files`), não
+        o `git status`: com duas tasks na mesma árvore, o git não sabe de quem é
+        cada arquivo.
+        """
+        escopo = self.task_scope(self.get(task_id))
+        if not escopo:
+            return []
+        try:
+            tocados = self.repo.changed_files_reported(task_id)
+        except Exception:  # noqa: BLE001
+            return []
+        return outside_scope(tocados, escopo)
 
     def _prior_rejection(self, task_id: str) -> dict[str, Any] | None:
         """Última validação gravada, se ela REJEITOU (bug-107)."""
@@ -1171,13 +1333,27 @@ class TaskService:
                 return i
         return len(self.repo.list_queued(project_path)) + 1
 
-    def _busy_task_id(self, project_path: str, exclude_id: str | None = None) -> str | None:
-        """Id da task que ocupa o workspace, ou None se livre."""
-        active = self.repo.find_active_execution(project_path)
-        if active and active.id != exclude_id:
-            return active.id
+    def task_scope(self, task: TaskRecord) -> tuple[str, ...]:
+        """Escopo de arquivos efetivo da task (0.4.74).
+
+        O do DONO (`--scope`) vence o do planner: quem conhece o projeto é quem
+        pede, e o planner erra o escopo com frequência suficiente para não ter a
+        palavra final. Vazio nos dois = DESCONHECIDO, e desconhecido serializa.
+        """
+        do_dono = normalize_scope(getattr(task.constraints, "scope", None))
+        if do_dono:
+            return do_dono
+        analise = task.analysis if isinstance(task.analysis, dict) else {}
+        return normalize_scope(analise.get("scope"))
+
+    def _active_tasks(self, project_path: str, exclude_id: str | None) -> list[TaskRecord]:
+        """Tasks executando no projeto, do DB e deste processo, sem repetir."""
+        ativas: dict[str, TaskRecord] = {}
+        for t in self.repo.list_active_executions(project_path):
+            if t.id != exclude_id:
+                ativas[t.id] = t
         for rid in list(self._running_tasks):
-            if rid == exclude_id:
+            if rid == exclude_id or rid in ativas:
                 continue
             other = self.repo.get(rid)
             # bug-059: coroutine zumbi (presa no pré-loop) mantém a task em
@@ -1188,8 +1364,47 @@ class TaskService:
                 and other.project_path == project_path
                 and other.status not in TERMINAL_STATES
             ):
-                return rid
+                ativas[rid] = other
+        return list(ativas.values())
+
+    def _blocking_task_id(
+        self, project_path: str, task: TaskRecord | None = None, *, exclude_id: str | None = None
+    ) -> str | None:
+        """Id da task que impede esta de começar agora, ou None se pode entrar.
+
+        0.4.74 — duas barreiras, nesta ordem:
+
+        1. **Teto** (`max_parallel_tasks`). Protege a máquina: cada task gasta ~6
+           invocações de CLI, e foi exaustão de recurso que produziu o
+           `0xC0000142` do bug-109.
+        2. **Escopo**. Mesmo abaixo do teto, só entra quem for comprovadamente
+           disjunto de TODAS as ativas. Escopo desconhecido sobrepõe tudo, então
+           task sem escopo declarado continua serializando como na 0.4.73.
+
+        Sem `task` (chamadas de "o workspace está livre?") a pergunta é só sobre
+        haver alguém ativo — é o comportamento antigo e os chamadores dependem
+        dele.
+        """
+        alvo_id = exclude_id if task is None else task.id
+        ativas = self._active_tasks(project_path, alvo_id)
+        if not ativas:
+            return None
+        if task is None:
+            return ativas[0].id
+
+        teto = max(1, int(self.config.limits.max_parallel_tasks or 1))
+        if len(ativas) >= teto:
+            return ativas[0].id
+
+        meu = self.task_scope(task)
+        for outra in ativas:
+            if scopes_overlap(meu, self.task_scope(outra)):
+                return outra.id
         return None
+
+    def _busy_task_id(self, project_path: str, exclude_id: str | None = None) -> str | None:
+        """Há alguém executando no projeto? (sem julgar escopo nem teto)"""
+        return self._blocking_task_id(project_path, None, exclude_id=exclude_id)
 
     def _enqueue_task(self, task: TaskRecord, blocked_by: str) -> TaskRecord:
         """Coloca task na fila FIFO do workspace (estado QUEUED)."""
@@ -1240,26 +1455,46 @@ class TaskService:
         return task
 
     def _maybe_start_next(self, project_path: str) -> None:
-        """Dequeue FIFO: inicia a próxima QUEUED quando o workspace liberar."""
-        if self._busy_task_id(project_path) is not None:
-            return
+        """Dequeue FIFO: puxa da fila tudo que couber agora.
+
+        0.4.74 — antes puxava UMA e só se o workspace estivesse totalmente livre.
+        Com teto > 1 a fila anda enquanto há vaga E escopo disjunto: a próxima
+        pode estar bloqueada por sobreposição enquanto a seguinte entra
+        tranquila, então a varredura não pára na primeira recusa — ela ignora
+        quem não cabe e continua. Parar na primeira seria FIFO estrito e
+        deixaria vaga ociosa por causa de uma task que não pode entrar.
+        """
         queued = self.repo.list_queued(project_path)
         if not queued:
-            self._adopt_orphan_received(project_path)
+            if self._busy_task_id(project_path) is None:
+                self._adopt_orphan_received(project_path)
             return
-        nxt = queued[0]
-        nxt = self.get(nxt.id)
-        if nxt.status != TaskState.QUEUED:
-            return
-        nxt.error = None
-        self.repo.save(nxt)
-        self.repo.transition(
-            nxt,
-            TaskState.RECEIVED,
-            reason="dequeued — workspace free",
-            agent="runtime",
-        )
-        self._start_background(nxt.id, name="dequeue")
+
+        # As admitidas nesta passada contam para o teto e para o escopo AQUI, em
+        # memória: `transition` as deixa em RECEIVED, que não é estado ativo, e a
+        # thread só entra em `_running_tasks` depois. Sem esta contagem local, um
+        # laço com 5 na fila admitiria as 5 de uma vez e furaria o teto.
+        ocupando = self._active_tasks(project_path, None)
+        teto = max(1, int(self.config.limits.max_parallel_tasks or 1))
+        for candidata in queued:
+            if len(ocupando) >= teto:
+                return
+            atual = self.get(candidata.id)
+            if atual.status != TaskState.QUEUED:
+                continue
+            meu = self.task_scope(atual)
+            if any(scopes_overlap(meu, self.task_scope(o)) for o in ocupando):
+                continue  # não cabe agora; a próxima da fila pode caber
+            atual.error = None
+            self.repo.save(atual)
+            self.repo.transition(
+                atual,
+                TaskState.RECEIVED,
+                reason="dequeued — há vaga e o escopo não colide",
+                agent="runtime",
+            )
+            ocupando.append(self.get(atual.id))
+            self._start_background(atual.id, name="dequeue")
 
     def _start_background(self, task_id: str, *, name: str) -> None:
         def _bg() -> None:
@@ -1377,8 +1612,10 @@ class TaskService:
         if task.constraints.dry_run:
             return await self._dry_run(task)
 
-        # 0.4.19 — se outra task já ocupa o workspace, enfileira (não compete).
-        busy = self._busy_task_id(task.project_path, exclude_id=task_id)
+        # 0.4.19 — não compete pelo workspace: enfileira.
+        # 0.4.74 — "ocupado" deixou de ser "existe alguém rodando" e passou a ser
+        # "não há vaga no teto OU o escopo colide com quem está rodando".
+        busy = self._blocking_task_id(task.project_path, task)
         if busy:
             return self._enqueue_task(task, blocked_by=busy)
         if task.status == TaskState.QUEUED:
@@ -1397,29 +1634,42 @@ class TaskService:
                 task = self.get(task_id)
 
         project_path = task.project_path
-        held_lock = False
+        entrou = False
         result = task
         try:
-            with self.lock:
-                held_lock = True
-                self._running_tasks.add(task_id)
-                try:
-                    # 0.4.73 — sinal de vida do loop cobre TODA a execução,
-                    # inclusive os vãos sem agente no ar.
-                    with self._loop_heartbeat(task):
-                        result = await self._execute_loop(task)
-                except CancelledError:
-                    result = self.get(task_id)
-                finally:
-                    self._running_tasks.discard(task_id)
-                    # 0.4.74 — o contexto morre com o run. Um processo MCP de
-                    # vida longa acumularia baseline git de toda task já vista.
-                    self._contexts.pop(task_id, None)
+            # 0.4.74 — o loop NÃO segura mais o write lock do workspace.
+            # Segurá-lo por 25-40 min era a própria serialização do projeto: a
+            # exclusão mútua agora é a admissão (teto + escopo disjunto), feita
+            # antes de chegar aqui e válida entre processos porque olha o DB. O
+            # lock passou a cobrir só o `TESTING`, onde duas suítes no mesmo
+            # diretório se atrapalham de verdade (ver `_test_lock`).
+            entrou = True
+            self._running_tasks.add(task_id)
+            try:
+                # 0.4.73 — sinal de vida do loop cobre TODA a execução,
+                # inclusive os vãos sem agente no ar.
+                with self._loop_heartbeat(task):
+                    result = await self._execute_loop(task)
+            except CancelledError:
+                result = self.get(task_id)
+            finally:
+                self._running_tasks.discard(task_id)
+                # 0.4.74 — o contexto morre com o run. Um processo MCP de
+                # vida longa acumularia baseline git de toda task já vista.
+                self._contexts.pop(task_id, None)
             return result
         except CancelledError:
             return self.get(task_id)
         except TimeoutError as exc:
-            # Lock ocupado (outra coroutine/processo): fila explícita QUEUED.
+            # Lock de testes ocupado tempo demais: fila explícita QUEUED em vez
+            # de FAILED. Antes era o lock do workspace inteiro.
+            #
+            # `entrou = False` importa: quem acabou de ser enfileirado não pode
+            # disparar o próprio dequeue no `finally`. Até a 0.4.73 isso era
+            # acidente do `held_lock` (a exceção vinha ANTES de ele virar True);
+            # agora é explícito, senão a task volta da fila na mesma hora, bate no
+            # mesmo timeout e gira para sempre.
+            entrou = False
             task = self.get(task_id)
             blocked = (
                 self._busy_task_id(project_path, exclude_id=task_id) or "unknown"
@@ -1448,8 +1698,8 @@ class TaskService:
             self._persist_episode(task, success=False)
             raise
         finally:
-            # Só dequeue se realmente rodamos sob o lock (não no caminho QUEUED).
-            if held_lock:
+            # Só dequeue se realmente rodamos o loop (não no caminho QUEUED).
+            if entrou:
                 self._maybe_start_next(project_path)
 
     async def resume(self, task_id: str) -> TaskRecord:
@@ -1715,7 +1965,8 @@ class TaskService:
             # mérito alheio. Assinatura igual na iteração vira "preexisting".
             if task.iteration == 1 and "test_baseline" not in self._ctx(task).run_ctx:
                 try:
-                    baseline = self.tests.run_all(self.config.project_path)
+                    with self._test_lock():
+                        baseline = self.tests.run_all(self.config.project_path)
                     self._ctx(task).run_ctx["test_baseline"] = baseline
                     for br in baseline:
                         self.repo.add_test_run(
@@ -2147,11 +2398,12 @@ class TaskService:
                     ).exists()
                 }
             )
-            test_results = self.tests.run_all(
-                self.config.project_path,
-                extra_dirs=nested_test_dirs,
-                baseline=self._ctx(task).run_ctx.get("test_baseline"),
-            )
+            with self._test_lock():
+                test_results = self.tests.run_all(
+                    self.config.project_path,
+                    extra_dirs=nested_test_dirs,
+                    baseline=self._ctx(task).run_ctx.get("test_baseline"),
+                )
             last_test_results = test_results
             self._ctx(task).run_ctx["test_results"] = test_results
             for tr in test_results:
@@ -3438,6 +3690,17 @@ class TaskService:
         from_git = changed_files_since(
             self.config.project_path, self._ctx(task).git_baseline
         )
+        # 0.4.74 — o fallback via git vê a árvore INTEIRA, então com duas tasks
+        # concorrentes ele traria os arquivos da outra. Quando há escopo
+        # declarado, o que veio do git é filtrado por ele: atribuir arquivo alheio
+        # à task contamina o registro, o learning e o prompt do validator.
+        #
+        # Só o FALLBACK é filtrado. O que o agente relatou explicitamente passa
+        # inteiro — é dele que sai a detecção de desvio (`scope_violation`), e
+        # filtrar aqui esconderia justamente o que precisa ser visto.
+        escopo = self.task_scope(task)
+        if from_git and escopo:
+            from_git = [f for f in from_git if path_in_scope(f, escopo)]
         if from_git:
             result.changed_files = list(from_git)
         return result
@@ -3716,6 +3979,69 @@ class TaskService:
         except Exception:  # noqa: BLE001
             pass  # registro nunca derruba a execução
 
+    def _task_executor(self, task: TaskRecord) -> CliExecutor:
+        """Executor de CLI desta task, criado uma vez e guardado no contexto.
+
+        0.4.74 — o executor carrega `on_heartbeat` e `progress_probe`, que são
+        POR TASK. Com o executor compartilhado, a segunda task a despachar um
+        agente reescrevia o callback de heartbeat da primeira (batidas atribuídas
+        à task errada) e trocava a sonda de silêncio dela — e a sonda é o que
+        decide se um agente calado é morto ou vivo (bug-086).
+
+        É CÓPIA RASA do executor principal, não um `CliExecutor` novo: construir
+        um do zero descartaria qualquer executor injetado — dublê de teste,
+        agente em quarentena, `echo` do perfil do chamador. Só os campos por task
+        são reiniciados; o resto (opções, tipo, comportamento) vem de quem
+        configurou o principal.
+        """
+        ctx = self._ctx(task)
+        if ctx.executor is not None:
+            return ctx.executor
+        base = getattr(self, "executor", None)
+        if base is None:
+            return None  # type: ignore[return-value]
+        if not self._concurrency_on():
+            # Sem concorrência não há o que isolar, e o executor compartilhado é
+            # o que o chamador configurou (echo, dublê, quarentena).
+            ctx.executor = base
+            return base
+        executor = copy.copy(base)
+        # `copy.copy` compartilharia o conjunto de PIDs com o principal, e é dele
+        # que sai o `agent_active` do heartbeat: compartilhado, a task A relataria
+        # "agente no ar" por causa do agente da task B.
+        executor._active_pids = set()
+        executor.on_heartbeat = None
+        executor.progress_probe = None
+        ctx.executor = executor
+        return executor
+
+    def _concurrency_on(self) -> bool:
+        """Este projeto admite mais de uma task ativa?"""
+        return int(self.config.limits.max_parallel_tasks or 1) > 1
+
+    def _adapter_for(self, task: TaskRecord, adapter: Any) -> Any:
+        """Adapter a usar nesta task: o do registry, ou uma cópia isolada.
+
+        0.4.74 — com concorrência, `on_heartbeat` e `progress_probe` (atributos do
+        EXECUTOR, que o adapter carrega) precisam ser por task; senão a segunda a
+        despachar rouba o heartbeat da primeira e substitui a sonda de silêncio
+        dela. A cópia é rasa pelo mesmo motivo do fan-out: registry novo
+        descartaria adapter customizado e recarregaria os profiles do disco.
+
+        Com teto 1 devolve o adapter ORIGINAL, intocado. Não é economia: copiar um
+        adapter que guarda estado observável (contador, cache de sessão) faz o
+        estado ir para a cópia e desaparecer para quem tem a referência. Sem
+        concorrência não há nada a isolar, então não se paga esse risco.
+        """
+        if not self._concurrency_on():
+            return adapter
+        copia = copy.copy(adapter)
+        if hasattr(copia, "executor"):
+            executor = self._task_executor(task)
+            if executor is not None:
+                copia.executor = executor
+        return copia
+
     def _register_heartbeat(self, task: TaskRecord, *, role: str, agent_id: str) -> None:
         """Sinal de vida do CLI durante EXECUTING.
 
@@ -3727,6 +4053,8 @@ class TaskService:
         self._ctx(task).current_agent = (role, agent_id)
         if getattr(self, "executor", None) is None:
             return
+        # 0.4.74 — daqui para baixo tudo vai no executor DESTA task.
+        executor = self._task_executor(task)
 
         def _emit_heartbeat(elapsed: int, pid: int, _t=task, _r=role, _a=agent_id):
             evt = RuntimeEvent(
@@ -3747,7 +4075,7 @@ class TaskService:
                 pass  # sinal de vida nunca derruba a execucao
 
         try:
-            self.executor.on_heartbeat = _emit_heartbeat
+            executor.on_heartbeat = _emit_heartbeat
         except Exception:  # noqa: BLE001
             pass
 
@@ -3755,22 +4083,30 @@ class TaskService:
         # imprime no fim: silencio sozinho nao prova nada, silencio COM zero
         # arquivo tocado prova. Sem isso, 40 min de agente pendurado saiam do
         # orcamento do agente seguinte, que morria trabalhando.
+        #
+        # 0.4.74 — a sonda olha o ESCOPO da task, não a árvore inteira. Com duas
+        # tasks escrevendo no mesmo projeto, a árvore inteira sempre "mudou": a
+        # task A veria a escrita da B e concluiria que o próprio agente pendurado
+        # está trabalhando — exatamente a prova que o bug-086 precisava, virada
+        # do avesso. Sem escopo declarado o comportamento é o de antes.
         def _workspace_progress() -> bool:
             try:
-                return bool(
-                    changed_files_since(
-                        self.config.project_path, self._ctx(task).git_baseline
-                    )
+                mudados = changed_files_since(
+                    self.config.project_path, self._ctx(task).git_baseline
                 )
+                escopo = self.task_scope(task)
+                if escopo:
+                    mudados = [f for f in mudados if path_in_scope(f, escopo)]
+                return bool(mudados)
             except Exception:  # noqa: BLE001
                 # Git indisponivel/lento: sem prova de morte, nao mata.
                 return True
 
         try:
-            self.executor.no_output_timeout_s = (
+            executor.no_output_timeout_s = (
                 self.config.limits.agent_no_output_timeout_s
             )
-            self.executor.progress_probe = _workspace_progress
+            executor.progress_probe = _workspace_progress
         except Exception:  # noqa: BLE001
             pass
 
@@ -3798,6 +4134,8 @@ class TaskService:
                     break
         if adapter is None or not adapter.detect().available:
             raise RuntimeError(f"Agente indisponivel para papel {role}: {agent_id}")
+
+        adapter = self._adapter_for(task, adapter)
 
         timeout_s = self._resolve_agent_timeout(role, task)
         if timeout_cap_s is not None:

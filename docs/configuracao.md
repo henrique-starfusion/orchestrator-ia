@@ -66,6 +66,7 @@ Lido em `load_config` (`config.py:215`) e materializado em `RuntimeLimits`
 | `allow_parallel_read_only_analysis` | bool | true | **Declarada e carregada, nunca consultada.** Nenhum módulo lê | só `config.py:256` |
 | `allow_parallel_workspace_writes` | bool | false | Liga o fan-out: subtarefas em worktrees separados e fusão por patch, só na primeira passada de execução | `config.py:259`; `_fanout_enabled` em `tasks/service.py:2484` |
 | `max_parallel_subtasks` | int | 4 | Teto de subtarefas simultâneas do fan-out | `config.py:262`; `tasks/service.py:2484` em diante |
+| `max_parallel_tasks` | int | 3 | Teto de **tasks** ativas ao mesmo tempo no projeto (0.4.74). Máximo, não promessa: duas tasks só rodam juntas se os escopos de arquivo forem comprovadamente disjuntos, e escopo desconhecido serializa. **1 restaura o comportamento da 0.4.73** | `config.py`; `_blocking_task_id` em `tasks/service.py` |
 
 O comentário no próprio código registra que as duas primeiras existiam desde o
 começo sem nenhum leitor e que a 0.4.61 passou a ler só a segunda

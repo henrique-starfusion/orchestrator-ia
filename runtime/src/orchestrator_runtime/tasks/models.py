@@ -108,6 +108,10 @@ class TaskConstraints(BaseModel):
     executor: str | None = None
     validator: str | None = None
     dry_run: bool = False
+    # 0.4.74 — caminhos que esta task pode tocar, declarados pelo DONO
+    # (`--scope`). Tem precedência sobre o escopo que o planner declara: quem
+    # conhece o projeto é quem pede. Vazio = sem declaração do dono.
+    scope: list[str] = Field(default_factory=list)
 
 
 class TaskRecord(BaseModel):
@@ -158,3 +162,7 @@ class TaskAnalysis(BaseModel):
     summary: str = ""
     # 0.4.27 — loop de execução escolhido pelo pedido (planning/loops.py)
     loop: str | None = None
+    # 0.4.74 — caminhos que a task deve tocar, na leitura do planner. Vira o
+    # escopo efetivo quando o dono não declarou nada. Vazio = desconhecido, e
+    # desconhecido serializa (ver execution/scopes.py).
+    scope: list[str] = Field(default_factory=list)

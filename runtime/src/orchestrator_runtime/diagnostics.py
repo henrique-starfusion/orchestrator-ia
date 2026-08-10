@@ -129,6 +129,12 @@ FEATURES: tuple[str, ...] = (
     # `status` diz se andou sem exigir leitura do log inteiro
     "loop_heartbeat_between_agents",
     "status_answers_is_it_alive",
+    # 0.4.74 — mais de uma task por projeto, admitida por escopo de arquivo
+    "parallel_tasks_per_project",
+    "file_scope_admission",
+    "scope_violation_reported",
+    "per_task_run_context",
+    "sqlite_wal_multi_writer",
 )
 
 

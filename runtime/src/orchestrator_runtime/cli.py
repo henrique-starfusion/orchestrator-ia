@@ -141,6 +141,14 @@ def run_cmd(
     loop: Optional[str] = typer.Option(
         None, "--loop", help="Loop de execucao (bug|mvp|landing|conteudo|saas)"
     ),
+    scope: Optional[list[str]] = typer.Option(
+        None,
+        "--scope",
+        help=(
+            "Caminho que esta task pode tocar (repetivel). Duas tasks so rodam "
+            "juntas com escopos disjuntos; sem --scope a task serializa"
+        ),
+    ),
     fake_agents: bool = typer.Option(False, "--fake-agents", help="Adapters falsos (CI)"),
     json_out: bool = typer.Option(False, "--json"),
     dry_run: bool = typer.Option(False, "--dry-run"),
@@ -173,6 +181,7 @@ def run_cmd(
             executor=executor,
             validator=validator,
             dry_run=dry_run,
+            scope=list(scope or []),
         )
     )
     # bug-098 — este processo pode ter tirado a próxima task da fila; sair agora

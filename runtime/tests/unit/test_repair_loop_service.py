@@ -116,19 +116,24 @@ def test_empty_agent_output_stops_incomplete_with_clear_error(project):
 
 
 def test_lock_timeout_does_not_mark_task_failed(project, monkeypatch):
+    """Contrato: contencao NUNCA vira FAILED — o destino e QUEUED.
+
+    0.4.74 — o gatilho mudou. O loop nao segura mais o WriteLock do workspace
+    (segurar por 25-40 min era a propria serializacao do projeto), entao quebrar
+    `service.lock.acquire` nao produz mais contencao. O TimeoutError que sobra vem
+    do lock de TESTES; a garantia de que ele enfileira em vez de falhar continua
+    sendo o que este teste protege.
+    """
     config = load_config(project, fake_agents=True)
     service = TaskService(config, verbose=False)
     task = service.create_task("hello lock test", max_iterations=1)
 
-    def _boom():
+    async def _boom(_task):
         raise TimeoutError("Não foi possível obter lock: fake")
 
-    monkeypatch.setattr(service.lock, "acquire", _boom)
+    monkeypatch.setattr(service, "_execute_loop", _boom)
     result = asyncio.run(service.run_task(task.id))
     refreshed = service.get(task.id)
-    # Contrato real: lock ocupado NUNCA vira FAILED. Desde 0.4.19 (fila por
-    # workspace) o destino e QUEUED — service.py:485-492 enfileira em vez de
-    # deixar em RECEIVED, para que a task seja retomada quando o lock liberar.
     assert refreshed.status != TaskState.FAILED
     assert refreshed.status == TaskState.QUEUED
     assert result.status == TaskState.QUEUED

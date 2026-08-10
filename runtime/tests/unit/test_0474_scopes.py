@@ -12,6 +12,7 @@ e prefixo TEXTUAL do outro e nao tem nada a ver com ele.
 from __future__ import annotations
 
 from orchestrator_runtime.execution.scopes import (
+    infer_scope,
     normalize_scope,
     outside_scope,
     path_in_scope,
@@ -144,3 +145,46 @@ def test_desvio_normaliza_antes_de_comparar() -> None:
 
 def test_authz_conta_como_desvio_de_auth() -> None:
     assert outside_scope(["src/authz/perm.py"], ["src/auth"]) == ["src/authz/perm.py"]
+
+
+# --------------------------------------------------------------------------
+# escopo inferido do pedido — deliberadamente burro
+# --------------------------------------------------------------------------
+
+_RAIZES = ["src", "tests", "docs", "README.md"]
+
+
+def test_infere_caminho_nomeado_no_pedido() -> None:
+    escopo = infer_scope(
+        "Corrija o bug em src/api/rotas.py e cubra em tests/api", _RAIZES
+    )
+
+    assert escopo == ("src/api/rotas.py", "tests/api")
+
+
+def test_pedido_sem_caminho_nao_inventa_escopo() -> None:
+    """Vazio serializa. Escopo adivinhado AUTORIZARIA duas tasks a rodarem
+    juntas — adivinhar errado custa dois agentes no mesmo arquivo (bug-077)."""
+    assert infer_scope("Corrija o login que esta lento", _RAIZES) == ()
+
+
+def test_url_nao_vira_escopo() -> None:
+    assert infer_scope("Veja https://github.com/x/y para o contexto", _RAIZES) == ()
+
+
+def test_pasta_desconhecida_nao_vira_escopo() -> None:
+    """Se a primeira pasta nao existe no projeto, o token nao era caminho."""
+    assert infer_scope("ajuste o modulo a/b/c.py", _RAIZES) == ()
+
+
+def test_sem_lista_de_raizes_nao_infere_nada() -> None:
+    """Sem como conferir existencia, qualquer coisa com barra viraria escopo."""
+    assert infer_scope("src/api/rotas.py", None) == ()
+
+
+def test_pontuacao_no_fim_do_caminho_e_removida() -> None:
+    assert infer_scope("mexa em src/api/rotas.py.", _RAIZES) == ("src/api/rotas.py",)
+
+
+def test_caminho_com_barra_invertida_do_windows() -> None:
+    assert infer_scope("edite src\\api\\rotas.py", _RAIZES) == ("src/api/rotas.py",)

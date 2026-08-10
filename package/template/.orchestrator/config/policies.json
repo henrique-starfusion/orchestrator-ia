@@ -26,6 +26,7 @@
   "allow_parallel_read_only_analysis": true,
   "allow_parallel_workspace_writes": false,
   "max_parallel_subtasks": 4,
+  "max_parallel_tasks": 3,
   "documentation_policy": {
     "required_before_completion": true,
     "message": "Ao final de cada tarefa, revisar e atualizar a documentacao afetada antes da conclusao."

@@ -227,20 +227,27 @@ def test_timeout_without_output_rotates_and_stops(project):
 # ------------------------------------------------------------- lock / cancel
 
 
-def test_lock_busy_enqueues_as_queued(project, monkeypatch):
-    """0.4.19: lock ocupado → QUEUED (não RECEIVED+blocked_by_lock mudo)."""
+def test_lock_busy_enqueues_as_queued(project):
+    """0.4.19: workspace ocupado → QUEUED (não RECEIVED+blocked_by_lock mudo).
+
+    0.4.74 — "ocupado" deixou de ser "o WriteLock esta na mao de alguem" e passou
+    a ser "nao ha vaga no teto OU o escopo colide com quem esta rodando". O teste
+    passa a montar a contencao real: uma task ativa no projeto, teto 1.
+    """
     config = load_config(project, fake_agents=True)
     service = TaskService(config, verbose=False)
+    ocupante = service.create_task("primeira", max_iterations=1)
+    service.repo.transition(
+        ocupante, TaskState.ANALYZING, reason="ocupando o projeto", agent="runtime"
+    )
+
     task = service.create_task("hello lock", max_iterations=1)
-
-    def _boom():
-        raise TimeoutError("Não foi possível obter lock: fake")
-
-    monkeypatch.setattr(service.lock, "acquire", _boom)
     asyncio.run(service.run_task(task.id))
+
     refreshed = service.get(task.id)
     assert refreshed.status == TaskState.QUEUED
     assert (refreshed.error or "").startswith("queued_behind:")
+    assert ocupante.id in (refreshed.error or "")
 
 
 def test_queue_error_cleared_on_successful_run(project, monkeypatch):

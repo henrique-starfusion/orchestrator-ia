@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any, Iterable
 
+from orchestrator_runtime.execution.scopes import infer_scope
 from orchestrator_runtime.planning.loops import detect_loop, get_loop
 from orchestrator_runtime.tasks.models import (
     AcceptanceCriterion,
@@ -153,6 +154,10 @@ class TaskAnalyzer:
             acceptance_criteria=[],
             summary=prompt.strip()[:240],
             loop=loop_id,
+            # 0.4.74 — escopo de arquivos lido do que o pedido NOMEIA, conferido
+            # contra as pastas de topo do projeto. Prompt sem caminho devolve
+            # vazio, e vazio serializa a task (execution/scopes.py).
+            scope=list(infer_scope(prompt, project_files)),
         )
 
 

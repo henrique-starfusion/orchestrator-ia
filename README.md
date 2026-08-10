@@ -531,6 +531,45 @@ seguida); e falta de recurso da máquina disparava uma reinstalação que **tamb
 não conseguia nascer**. Quando o remédio custa cinco minutos, "não foi o CLI"
 precisa ser uma resposta possível.
 
+### Mais de uma task por projeto (0.4.74+)
+
+Até a 0.4.73 o projeto era serializado por inteiro: uma task ativa, as outras em
+`QUEUED`, e a segunda esperando 25 a 40 min. Mas o que precisa ser exclusivo não é
+o projeto — é o **código**. Duas tasks em pastas diferentes nunca se atrapalham.
+
+Agora `max_parallel_tasks` (3 no template) é o teto, e o **escopo de arquivos**
+decide quem entra:
+
+```bash
+orchestrator run --prompt "corrigir paginação" --scope src/api --scope tests/api
+```
+
+Sem `--scope`, o escopo sai dos caminhos que o próprio pedido nomeia e que existem
+no projeto. Pedido que não nomeia caminho nenhum fica **sem** escopo — e sem
+escopo a task serializa, exatamente como antes.
+
+Três regras carregam o desenho:
+
+| Regra | Por quê |
+|---|---|
+| Escopo vazio **sobrepõe tudo** | Sem prova de disjunção não há vaga. É o que faz "não sei" custar lentidão em vez de colisão |
+| Comparação por **segmentos** de caminho | `src/auth` é prefixo textual de `src/authz` e não tem nada a ver com ele |
+| O teto vale **junto** com o escopo | Escopo separa código; o teto protege a máquina. Cada task gasta ~6 invocações de CLI, e foi exaustão de recurso que produziu o `0xC0000142` do bug-109 |
+
+O `TESTING` continua exclusivo, com lock próprio: escopo disjunto separa código,
+não recurso de máquina, e duas suítes no mesmo diretório disputam build dir, cache
+e porta — a falha que sai daí não existe no código de nenhuma das duas.
+
+**O limite, dito com clareza:** como o trabalho todo acontece na branch local, a
+garantia é **admissão + detecção**, não impossibilidade. O runtime impede duas
+tasks de escopos sobrepostos serem admitidas juntas; ele não impede um agente de
+escrever fora do escopo depois de admitido. Esse desvio é medido e sobe como
+degradação `scope_violation` — visível ao validator e ao dono. A disciplina de
+higiene git injetada no prompt do agente (nunca `git add -A` numa árvore
+compartilhada) deixa de ser precaução e passa a ser condição de funcionamento.
+
+Para voltar ao comportamento antigo, `max_parallel_tasks: 1`.
+
 ### Dá para acompanhar o que está rodando (0.4.73+)
 
 Task longa parada no mesmo estado é indistinguível de task morta — e essa dúvida

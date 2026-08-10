@@ -151,15 +151,10 @@ class TaskRepository:
             ).all()
             return [self._from_row(r) for r in rows]
 
-    def find_active_execution(self, project_path: str) -> TaskRecord | None:
-        """Return the first non-terminal, non-QUEUED, non-RECEIVED task for project_path.
-
-        A task in these statuses is considered 'actively executing':
-        ANALYZING, RETRIEVING_MEMORY, PLANNING, SELECTING_AGENTS, EXECUTING,
-        TESTING, VALIDATING, CORRECTING, UPDATING_DOCUMENTATION, CONSOLIDATING,
-        WAITING_FOR_USER.
-        """
-        active_statuses = {
+    # Task nestes estados está EXECUTANDO: não é terminal, não está em QUEUED nem
+    # em RECEIVED (esses dois ainda não começaram).
+    ACTIVE_STATUSES: frozenset[TaskState] = frozenset(
+        {
             TaskState.ANALYZING,
             TaskState.RETRIEVING_MEMORY,
             TaskState.PLANNING,
@@ -172,15 +167,33 @@ class TaskRepository:
             TaskState.CONSOLIDATING,
             TaskState.WAITING_FOR_USER,
         }
+    )
+
+    def list_active_executions(
+        self, project_path: str, *, limit: int = 50
+    ) -> list[TaskRecord]:
+        """TODAS as tasks executando no projeto, mais antiga primeiro.
+
+        0.4.74 — a admissão de concorrência precisa do conjunto, não do primeiro:
+        para decidir se uma task nova pode entrar é preciso comparar o escopo dela
+        com o de CADA uma que já está rodando.
+        """
         with self.session() as s:
             rows = s.scalars(
                 select(TaskRow)
                 .where(TaskRow.project_path == project_path)
-                .where(TaskRow.status.in_([st.value for st in active_statuses]))
+                .where(
+                    TaskRow.status.in_([st.value for st in self.ACTIVE_STATUSES])
+                )
                 .order_by(TaskRow.created_at.asc())
-                .limit(1)
+                .limit(limit)
             ).all()
-            return self._from_row(rows[0]) if rows else None
+            return [self._from_row(r) for r in rows]
+
+    def find_active_execution(self, project_path: str) -> TaskRecord | None:
+        """A task executando há mais tempo no projeto, ou None."""
+        ativas = self.list_active_executions(project_path, limit=1)
+        return ativas[0] if ativas else None
 
     def save(self, task: TaskRecord) -> TaskRecord:
         task.updated_at = datetime.now(timezone.utc).isoformat()
@@ -376,6 +389,26 @@ class TaskRepository:
         with self.session() as s:
             s.add(AgentRunRow(**kwargs))
             s.commit()
+
+    def changed_files_reported(self, task_id: str) -> list[str]:
+        """Arquivos que os agentes DESTA task relataram ter mudado (0.4.74).
+
+        Base da detecção de desvio de escopo. Não vem de `git status`: com duas
+        tasks na mesma árvore o git não sabe de quem é cada arquivo — só o
+        registro por run sabe.
+        """
+        with self.session() as s:
+            rows = s.scalars(
+                select(AgentRunRow.changed_files_json).where(
+                    AgentRunRow.task_id == task_id
+                )
+            ).all()
+        arquivos: list[str] = []
+        for bruto in rows:
+            for item in loads(bruto, []) or []:
+                if item:
+                    arquivos.append(str(item))
+        return arquivos
 
     def list_recent_agent_runs(self, agent: str, limit: int = 5) -> list[dict[str, Any]]:
         """Runs mais recentes de um agente (qualquer task) — circuit breaker

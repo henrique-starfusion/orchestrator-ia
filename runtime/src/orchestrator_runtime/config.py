@@ -41,6 +41,17 @@ class RuntimeLimits(BaseModel):
     # compensa em tarefa que se divide de verdade em escopos disjuntos.
     allow_parallel_workspace_writes: bool = False
     max_parallel_subtasks: int = 4
+    # 0.4.74 — quantas TASKS podem estar ativas ao mesmo tempo no projeto. Até a
+    # 0.4.73 era 1 por construção (uma task ativa por projeto, as outras em
+    # QUEUED), e a segunda esperava a primeira terminar inteira — 25 a 40 min de
+    # desenvolvimento parado.
+    #
+    # O teto não é a única barreira: duas tasks só rodam juntas se os ESCOPOS de
+    # arquivo forem comprovadamente disjuntos (execution/scopes.py). Escopo
+    # desconhecido serializa. Ou seja, 3 é o máximo, não uma promessa.
+    #
+    # 1 restaura exatamente o comportamento da 0.4.73.
+    max_parallel_tasks: int = 1
     caveman_enabled: bool = True
     skill_selection_enabled: bool = True
     skill_selection_max_skills: int = 5
@@ -297,6 +308,7 @@ def load_config(
             policies.get("allow_parallel_workspace_writes", False)
         ),
         max_parallel_subtasks=int(policies.get("max_parallel_subtasks", 4)),
+        max_parallel_tasks=max(1, int(policies.get("max_parallel_tasks", 1) or 1)),
         caveman_enabled=bool(
             (policies.get("token_economy") or {}).get("caveman_enabled", True)
         ),

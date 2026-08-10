@@ -2,6 +2,87 @@
 
 ## Unreleased
 
+## 0.4.74 - 2026-08-10
+
+Pedido do dono: *"quero que o orquestrador execute mais de 1 tarefa no mesmo
+projeto; o que temos que garantir é que 2 agentes não mexam no mesmo código"*.
+
+### Added
+
+- **`max_parallel_tasks`** (3 no template, **1 restaura a 0.4.73**). Até agora o
+  projeto era serializado por inteiro — uma task ativa, as outras em QUEUED, e a
+  segunda esperando 25 a 40 min. O que precisa ser exclusivo não é o projeto, é o
+  **código**: duas tasks em pastas diferentes nunca se atrapalham
+- **Escopo de arquivos por task** (`execution/scopes.py`). Duas tasks só rodam
+  juntas com escopos **comprovadamente disjuntos**. Comparação por segmentos de
+  caminho, nunca textual: `src/auth` não colide com `src/authz`
+- `orchestrator run --scope src/api --scope tests/api` (repetível). Sem `--scope`,
+  o escopo sai dos caminhos que o **próprio pedido nomeia** e que existem no
+  projeto; pedido sem caminho nenhum fica sem escopo
+- Degradação **`scope_violation`** no `status`/`result`: agente que escreveu fora
+  do escopo declarado
+- Lock próprio para o **`TESTING`**. Escopo disjunto separa código, não recurso de
+  máquina — duas suítes no mesmo diretório disputam build dir, cache e porta, e a
+  falha resultante não existe no código de nenhuma das duas
+- Features de diagnóstico: `parallel_tasks_per_project`, `file_scope_admission`,
+  `scope_violation_reported`, `per_task_run_context`, `sqlite_wal_multi_writer`
+
+### Fixed
+
+- **Estado do run vivia no serviço.** `_run_ctx`, `_git_baseline`,
+  `_loop_started_monotonic`, `_exhausted_models` e `_current_agent` eram atributos
+  de `TaskService`, e `_execute_loop` reatribuía os quatro primeiros no topo. Como
+  o servidor MCP roda todas as tasks no mesmo processo, a task B **zerava** o
+  relógio, o baseline git e o contexto da A — arquivo mudado atribuído à task
+  errada, orçamento contado do início errado, learning gravado com contexto de
+  outra. Sem erro nenhum. Agora `TaskRunContext` por task
+- **SQLite sem WAL.** O default (`journal_mode=delete`) trava o arquivo inteiro
+  por escrita: o segundo escritor levaria `database is locked` na hora. Agora WAL
+  + `busy_timeout=15s` + `synchronous=NORMAL`. Efeito colateral medido: a suíte
+  caiu de 154 s para 88 s
+- **Executor era compartilhado.** `on_heartbeat` e `progress_probe` são atributos
+  do executor: a segunda task a despachar um agente reescrevia o callback da
+  primeira e trocava a sonda de silêncio dela — e a sonda é o que decide se um
+  agente calado está morto (bug-086). Executor por task quando há concorrência;
+  com teto 1 segue o compartilhado, intocado
+- **Sonda do watchdog e `changed_files` por escopo.** A sonda olhava a árvore
+  inteira: com duas tasks, a A veria a escrita da B e concluiria que o próprio
+  agente pendurado está trabalhando — a prova do bug-086 virada do avesso
+- **Reaper com pid por task.** `owner_alive` vinha do pid no write lock,
+  calculado **uma vez** e aplicado a todas as tasks. Agora vem do
+  `loop_progress`, cuja primeira batida passou a sair no instante em que o loop
+  começa; o lock continua como ponte para processos ainda na 0.4.73
+- Rota de `TimeoutError` girava para sempre: a task era enfileirada e o `finally`
+  a desenfileirava na mesma hora. Até a 0.4.73 o `held_lock` protegia disso por
+  acidente
+
+### Changed
+
+- **O loop não segura mais o write lock do workspace.** Segurá-lo por 25-40 min
+  *era* a serialização do projeto. Quem usava a existência daquele arquivo de lock
+  como "alguém está trabalhando" precisa passar a olhar `loop_progress`
+- Dequeue puxa **tudo que couber**, não uma por vez, e não pára na primeira
+  recusa: FIFO estrito deixaria vaga ociosa por causa de uma task que não pode
+  entrar
+
+### Known
+
+- **A garantia é admissão + detecção, não impossibilidade.** Com tudo na branch
+  local, o runtime impede duas tasks de escopos sobrepostos serem admitidas
+  juntas, mas não impede o agente de escrever fora do escopo depois de admitido —
+  isso é medido (`scope_violation`), não bloqueado. A disciplina de
+  `_git_hygiene_block()` (bug-077: seis quase-arrastões num dia no printbee) deixa
+  de ser precaução e passa a ser condição de funcionamento
+- **Escopo vazio serializa.** É a regra que sustenta o resto: sem prova de
+  disjunção não há vaga. Na prática, task cujo pedido não nomeia caminho nenhum se
+  comporta como na 0.4.73 — quem quer paralelismo garantido passa `--scope`
+- A inferência de escopo é **deliberadamente burra**: só caminho que aparece
+  literalmente no pedido e cuja pasta de topo existe. Adivinhar aqui não é
+  cosmético — o escopo é o que AUTORIZA duas tasks a rodarem juntas, e um escopo
+  inventado com confiança liberaria exatamente o par que não podia
+- Teto 3 é máximo, não promessa: cada task gasta ~6 invocações de CLI, e foi
+  exaustão de recurso que produziu o `0xC0000142` do bug-109
+
 ## 0.4.73 - 2026-08-10
 
 Pedido do dono depois de três investigações manuais para concluir "não travou":
