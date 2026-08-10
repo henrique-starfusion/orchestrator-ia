@@ -346,6 +346,98 @@ def task_logs(
     _print_json(service.logs(task_id))
 
 
+@task_app.command("watch")
+def task_watch(
+    task_id: str = typer.Argument(...),
+    project: Optional[Path] = typer.Option(None, "--project"),
+    interval: float = typer.Option(3.0, "--interval", help="Segundos entre leituras"),
+    verbose: bool = typer.Option(
+        False, "--verbose", help="Inclui cada batida de heartbeat"
+    ),
+    all_events: bool = typer.Option(
+        False, "--all", help="Reproduz o histórico desde o início"
+    ),
+    timeout: Optional[int] = typer.Option(
+        None, "--timeout", help="Desiste depois de N segundos (default: sem limite)"
+    ),
+    json_out: bool = typer.Option(False, "--json", help="Uma linha JSON por evento"),
+) -> None:
+    """Acompanha uma task ao vivo até ela terminar.
+
+    0.4.75 — existe para ninguém mais escrever laço de shell. No trustsafe
+    apareceram TRÊS `until ... sleep` vigiando a MESMA task, com `sleep`
+    diferente em cada um: o pipe engolia a saída, o painel ficava mudo, e a
+    sessão recriava o vigia achando que tinha travado.
+
+    Transmite direto, sem pipe: `orchestrator task watch <id>` numa tarefa de
+    segundo plano basta, e ela morre sozinha quando a task chega a estado
+    terminal. Sai com código != 0 se a task não terminar `COMPLETED` — mesmo
+    contrato do `run`.
+    """
+    import time
+
+    from orchestrator_runtime.watch import (
+        format_event_line,
+        format_live_line,
+        relevant,
+    )
+
+    service = build_service(project, verbose=False)
+    limite = None if timeout is None else time.monotonic() + max(1, int(timeout))
+    cursor = 0
+    if not all_events:
+        # Começa da ponta: quem chama para acompanhar quer o que vem AGORA, não
+        # a releitura de 40 min de histórico. `--all` reproduz tudo.
+        volta = service.follow_events(task_id, 0)
+        cursor = volta["cursor"]
+        if not json_out:
+            typer.echo(
+                f"acompanhando {volta['task_id']} — {volta['status']} "
+                f"iter={volta['iteration']} (Ctrl-C sai; a task segue rodando)"
+            )
+            linha = format_live_line(volta.get("live"))
+            if linha:
+                typer.echo(linha)
+
+    ultimo_status = None
+    try:
+        while True:
+            volta = service.follow_events(task_id, cursor)
+            cursor = volta["cursor"]
+            for evento in relevant(volta["events"], verbose=verbose):
+                if json_out:
+                    # JSONL: uma linha por evento. `_print_json` indenta, e
+                    # indentado não é consumível linha a linha por quem segue.
+                    typer.echo(json.dumps(evento, ensure_ascii=False, default=str))
+                else:
+                    typer.echo(format_event_line(evento))
+            if volta["terminal"]:
+                if not json_out:
+                    typer.echo(
+                        f"== {volta['task_id']} {volta['status']} "
+                        f"iter={volta['iteration']}"
+                    )
+                raise typer.Exit(0 if volta["status"] == "COMPLETED" else 1)
+            if not json_out and volta["status"] != ultimo_status:
+                # Estado novo sem evento visível (fase sem agente): mostra a
+                # linha de vida, senão a tela fica muda justamente nos vãos.
+                linha = format_live_line(volta.get("live"))
+                if linha:
+                    typer.echo(linha)
+                ultimo_status = volta["status"]
+            if limite is not None and time.monotonic() > limite:
+                if not json_out:
+                    typer.echo(
+                        f"== desisti de esperar; {volta['task_id']} segue "
+                        f"{volta['status']} (a task NÃO foi cancelada)"
+                    )
+                raise typer.Exit(2)
+            time.sleep(max(0.2, float(interval)))
+    except KeyboardInterrupt:
+        typer.echo("\n== saí do acompanhamento; a task continua rodando")
+        raise typer.Exit(130) from None
+
+
 @task_app.command("artifacts")
 def task_artifacts(
     task_id: str = typer.Argument(...),

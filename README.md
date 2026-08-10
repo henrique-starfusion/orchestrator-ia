@@ -570,6 +570,33 @@ compartilhada) deixa de ser precaução e passa a ser condição de funcionament
 
 Para voltar ao comportamento antigo, `max_parallel_tasks: 1`.
 
+### Um jeito só de acompanhar (0.4.75+)
+
+```bash
+orchestrator task watch <task_id>
+```
+
+Transmite cada evento na hora, sai sozinho quando a task chega a estado terminal e
+devolve código ≠ 0 se não terminou `COMPLETED` — mesmo contrato do `run`. Numa
+tarefa de segundo plano, dispare **uma vez** e esqueça.
+
+| Opção | Para quê |
+|---|---|
+| `--verbose` | inclui cada batida de heartbeat (por padrão fica fora: repete a mesma frase a cada 20-30 s) |
+| `--all` | reproduz o histórico desde o início, não só o que vem agora |
+| `--json` | JSONL, uma linha por evento — para outro agente consumir sem parsear texto |
+| `--timeout N` | desiste de olhar. **Não** cancela a task, e a tela diz isso |
+
+`task watch` é somente leitura: sair dele nunca toca na task.
+
+Isto existe por um motivo medido. No trustsafe apareceram **três** tarefas de
+segundo plano vigiando a **mesma** task, cada uma com um `until … sleep` escrito à
+mão e com intervalo diferente. Não era task duplicada — era o vigia duplicado: o
+`| grep -q` engolia a saída, o painel ficava mudo entre os ciclos, e a sessão
+recriava o vigia achando que tinha travado. As regras dos seis adaptadores agora
+mandam usar `task watch` e proíbem laço de shell, porque sem instrução escrita cada
+sessão inventa a sua.
+
 ### Dá para acompanhar o que está rodando (0.4.73+)
 
 Task longa parada no mesmo estado é indistinguível de task morta — e essa dúvida

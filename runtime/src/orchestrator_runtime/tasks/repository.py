@@ -340,6 +340,36 @@ class TaskRepository:
                 for r in rows
             ]
 
+    def list_events_since(
+        self, task_id: str, after_id: int = 0, *, limit: int = 500
+    ) -> list[dict[str, Any]]:
+        """Eventos com id > `after_id`, em ordem, com o id incluído.
+
+        0.4.75 — `list_events` devolve a task inteira e sem id, então quem
+        acompanha ao vivo não tem como pedir "só o que chegou depois". Sem isso,
+        cada sessão da frota escrevia seu próprio laço de `sleep` + `grep` em
+        shell — e três deles acabaram vigiando a mesma task no trustsafe.
+        """
+        with self.session() as s:
+            rows = s.scalars(
+                select(TaskEventRow)
+                .where(TaskEventRow.task_id == task_id)
+                .where(TaskEventRow.id > int(after_id))
+                .order_by(TaskEventRow.id.asc())
+                .limit(limit)
+            ).all()
+            return [
+                {
+                    "id": r.id,
+                    "timestamp": r.timestamp,
+                    "type": r.type,
+                    "role": r.role,
+                    "agent": r.agent,
+                    "data": loads(r.data_json, {}),
+                }
+                for r in rows
+            ]
+
     def last_event(
         self,
         task_id: str,

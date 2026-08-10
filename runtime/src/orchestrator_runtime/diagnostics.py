@@ -135,6 +135,8 @@ FEATURES: tuple[str, ...] = (
     "scope_violation_reported",
     "per_task_run_context",
     "sqlite_wal_multi_writer",
+    # 0.4.75 — um jeito padrão de acompanhar, para ninguém inventar laço de shell
+    "task_watch_streams_events",
 )
 
 

@@ -37,12 +37,42 @@ orchestrator run --prompt "<atividade com critérios de aceitação>"
 orchestrator task list                  # tasks recentes e seus estados
 orchestrator task status <task_id>      # estado, iteração, score, blockers
 orchestrator task logs <task_id>        # saída dos agentes
+orchestrator task watch <task_id>       # ACOMPANHA ao vivo até terminar
 orchestrator task resume <task_id>      # retomar task não-terminal
 orchestrator version --json             # versão + code_fingerprint (detecta MCP stale)
 ```
 
 Overrides úteis: `--executor <agente> --validator <agente> --max-iterations N`.
 No Windows, **não** use `codex` como validator (trava por sandbox; use `claude`).
+
+### Para ACOMPANHAR uma task, use `task watch` — não invente vigia
+
+Existe **um** jeito padrão de seguir uma task rodando:
+
+```bash
+orchestrator task watch <task_id>
+```
+
+Ele transmite cada evento na hora, sai sozinho quando a task chega a estado
+terminal e devolve código diferente de 0 se ela não terminou `COMPLETED` — mesmo
+contrato do `run`. Opções: `--verbose` (inclui cada batida de heartbeat), `--all`
+(reproduz o histórico), `--json` (uma linha JSON por evento, para outro agente
+consumir), `--timeout N` (desiste de olhar; **não** cancela a task).
+
+**NÃO escreva laço de shell para isso.** Nada de `until orchestrator task status`
+com `sleep` dentro, nada de canalizar em `grep -q`, nada de `watch`. Isso já custou
+caro: no trustsafe três tarefas de segundo plano ficaram vigiando a MESMA task
+(`c210252e2c58`), cada uma com um `sleep` diferente, porque o pipe engolia a saída,
+o painel ficava mudo entre os ciclos e a sessão recriava o vigia achando que tinha
+travado. Um `task watch` resolve, e resolve uma vez.
+
+Antes de criar QUALQUER acompanhamento, veja se já existe um rodando. Vigia
+duplicado não duplica trabalho (é leitura), mas torna o painel ilegível — que foi
+exatamente o problema.
+
+`task status` continua sendo a foto pontual; `task watch` é o filme. Se só quer
+saber se travou, `task status --text` já traz a linha `[VIVO]` com a idade do sinal
+e se o PID dono está vivo.
 
 ### Loops de execução
 

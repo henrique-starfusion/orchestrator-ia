@@ -972,6 +972,31 @@ class TaskService:
             out["degradations"] = degradacoes
         return out
 
+    def follow_events(
+        self, task_id: str, after_id: int = 0, *, limit: int = 500
+    ) -> dict[str, Any]:
+        """Uma volta de acompanhamento: o que chegou de novo e se já terminou.
+
+        0.4.75 — o `task watch` é um laço fino em cima disto. A lógica mora aqui
+        porque é o que precisa de teste: o comando em si é `print` e `sleep`.
+
+        Devolve `cursor` para a próxima volta, e `terminal` para o laço saber
+        quando parar sem inventar heurística de "parece pronto".
+        """
+        eventos = self.repo.list_events_since(task_id, after_id, limit=limit)
+        task = self.get(task_id)
+        saida: dict[str, Any] = {
+            "task_id": task.id,
+            "status": task.status.value,
+            "iteration": task.iteration,
+            "events": eventos,
+            "cursor": eventos[-1]["id"] if eventos else int(after_id),
+            "terminal": task.status in TERMINAL_STATES,
+        }
+        if not saida["terminal"]:
+            saida.update(self._live_note(task_id))
+        return saida
+
     def _mark_plan_not_refined(self, task: TaskRecord, *, agent: str, detail: str) -> None:
         """Grava que o plano ficou só com o determinístico (bug-102).
 

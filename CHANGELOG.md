@@ -2,6 +2,49 @@
 
 ## Unreleased
 
+## 0.4.75 - 2026-08-10
+
+Pedido do dono: *"precisamos padronizar para as coisas não serem inventadas e sim
+planejadas"*. O gatilho foi concreto — no trustsafe apareceram **três** tarefas de
+segundo plano vigiando a **mesma** task (`c210252e2c58`), cada uma com um
+`until … sleep` escrito à mão e com intervalo diferente (120 s, 150 s, 150 s). Não
+era task duplicada: era o **vigia** duplicado. O `| grep -qE` engolia a saída, o
+painel ficava mudo entre os `sleep`, e a sessão recriava o vigia achando que a task
+tinha travado.
+
+### Added
+
+- **`orchestrator task watch <id>`** — acompanha ao vivo até terminar. Transmite
+  cada evento na hora (sem pipe, sem `sleep` do chamador), sai sozinho no estado
+  terminal e devolve código ≠ 0 se não terminou `COMPLETED`, mesmo contrato do
+  `run`. Uma tarefa de segundo plano precisa disparar isso **uma vez**
+- `--verbose` inclui cada batida de heartbeat; `--all` reproduz o histórico;
+  `--json` emite **JSONL** (uma linha por evento) para outro agente consumir;
+  `--timeout N` desiste de olhar e diz explicitamente que a task **não** foi
+  cancelada
+- `TaskService.follow_events()` e `TaskRepository.list_events_since()`: o cursor de
+  eventos que faltava. `list_events` devolvia a task inteira e sem id, então não
+  havia como pedir "só o que chegou depois" — e era essa falta que empurrava cada
+  sessão para o laço de shell
+- `watch.py` com a formatação testável (linha por evento, linha `[VIVO]`, filtro do
+  heartbeat repetitivo)
+
+### Changed
+
+- **As regras dos seis adaptadores** (claude, codex, gemini, kimi, opencode,
+  cursor) passam a mandar usar `task watch` e a **proibir** laço de shell para
+  acompanhar, citando o incidente. A padronização é o ponto: sem uma instrução
+  escrita onde o agente lê, cada sessão inventa a sua
+
+### Known
+
+- O heartbeat fica fora da saída por padrão: ele repete a mesma frase a cada
+  20-30 s e, sozinho, é o ruído que faz o dono parar de ler a tela. `--verbose`
+  traz tudo
+- `task watch` é **somente leitura**. Sair dele (Ctrl-C, `--timeout`) nunca toca na
+  task — as duas saídas dizem isso na tela, porque "desisti de olhar" e "cancelei"
+  são fáceis de confundir e a confusão custaria o trabalho
+
 ## 0.4.74 - 2026-08-10
 
 Pedido do dono: *"quero que o orquestrador execute mais de 1 tarefa no mesmo

@@ -14,10 +14,23 @@ alwaysApply: true
 ```bash
 orchestrator run --prompt "<atividade>"
 orchestrator task status <id>
+orchestrator task watch <id>            # ACOMPANHA ao vivo ate terminar
 orchestrator task list
 orchestrator task cancel <id>
 orchestrator task resume <id>
 ```
+
+## Acompanhar: use `task watch`, nao invente vigia
+
+`task status` e a foto pontual; `task watch` e o filme. Ele transmite cada evento
+na hora, sai sozinho no estado terminal e devolve codigo != 0 se nao terminou
+`COMPLETED`. Opcoes: `--verbose`, `--all`, `--json` (uma linha JSON por evento),
+`--timeout N` (desiste de olhar; **nao** cancela a task).
+
+**Nao escreva laco de shell para isso** — nada de `until ... sleep`, nada de
+canalizar em `grep -q`. No trustsafe tres vigias de shell ficaram olhando a MESMA
+task porque o pipe engolia a saida e o painel ficava mudo. Antes de criar um
+acompanhamento, veja se ja existe um rodando.
 
 ## Cursor
 
