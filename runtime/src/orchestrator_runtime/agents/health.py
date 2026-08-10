@@ -70,6 +70,30 @@ AUTH_MARKERS: tuple[str, ...] = (
     "insufficient_quota",
 )
 
+# bug-106 — CLI vivo e autenticado; quem falhou foi o SERVIÇO do outro lado.
+# Nem reinstalar nem logar resolve: só esperar ou trocar de agente.
+#
+# Medido em 09/08 nos três `opencode` da frota (printbee 1, trustsafe 2): exit=1
+# em ~2s com 165 bytes de `{"name":"UnknownError","message":"Unexpected server
+# error. Check server logs for details.","ref":"err_..."}`. Sem estes marcadores
+# a regra do fast-fail mudo classificava `install`, e o auto-reparo gastou uma
+# reinstalação COMPLETA — que terminou `repair_ok: true` — para o agente falhar
+# de novo, do mesmo jeito, na chamada seguinte.
+SERVICE_MARKERS: tuple[str, ...] = (
+    "unexpected server error",
+    "unknownerror",
+    "internal server error",
+    "service unavailable",
+    "bad gateway",
+    "gateway timeout",
+    "502 ",
+    "503 ",
+    "504 ",
+    "overloaded_error",
+    "server had an error",
+    "upstream connect error",
+)
+
 # Comando de login por agente. Genérico quando o agente não é conhecido: um
 # palpite errado de comando é pior que dizer "veja a doc do CLI".
 _AUTH_HINTS: dict[str, str] = {
@@ -92,7 +116,7 @@ def auth_hint(agent_id: str) -> str:
 def classify_agent_failure(
     result: Any, *, fast_fail_s: float = 90.0
 ) -> str | None:
-    """``"install"``, ``"auth"`` ou ``None`` (mérito/inconclusivo).
+    """``"install"``, ``"auth"``, ``"service"`` ou ``None`` (mérito/inconclusivo).
 
     Regras duras, todas pagas com sangue:
 
@@ -101,6 +125,10 @@ def classify_agent_failure(
       até o timeout é puro desperdício.
     - só classifica com ``status == "failed"`` — e é o **status**, não o
       ``exit_code`` cru: o profile do agente pode definir sucesso ≠ 0.
+    - ``service`` vence tudo: erro do servidor do provedor não se conserta nem
+      reinstalando nem logando, e a resposta certa é trocar de agente. Sem essa
+      categoria o `opencode` caía na regra do fast-fail mudo e virava ``install``
+      (bug-106).
     - ``auth`` vence ``install``: as saídas se sobrepõem ("npm error" aparece em
       log de login), e reinstalar por engano destrói a sessão do usuário.
     - marcador só vale em saída de até ``EVIDENCE_CAP_BYTES`` (bug-097): saída
@@ -120,6 +148,8 @@ def classify_agent_failure(
     # bug-097 — só confia em marcador quando a saída é pequena o bastante para
     # SER um diagnóstico. Saída grande é conteúdo produzido por um CLI que rodou.
     if len(blob) <= EVIDENCE_CAP_BYTES:
+        if any(marker in blob for marker in SERVICE_MARKERS):
+            return "service"
         if any(marker in blob for marker in AUTH_MARKERS):
             return "auth"
         if any(marker in blob for marker in INSTALL_MARKERS):

@@ -111,6 +111,14 @@ FEATURES: tuple[str, ...] = (
     # 0.4.69 — task nascida com o workspace ocupado entra na fila, não fica
     # esperando em RECEIVED fora dela
     "create_enqueues_when_busy",
+    # 0.4.70 — o teto da task cabe executar→julgar→corrigir→julgar; quem executa
+    # não leva o orçamento do veredito; sem orçamento a validação degrada em vez
+    # de estourar
+    "task_budget_fits_correction_round",
+    "verdict_time_reserved",
+    "validation_skipped_not_failed",
+    "reaper_names_the_clock",
+    "provider_outage_not_reinstall",
 )
 
 

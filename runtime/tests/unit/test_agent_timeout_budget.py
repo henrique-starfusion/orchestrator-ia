@@ -14,6 +14,7 @@ from orchestrator_runtime.agents.process import ProcessResult
 from orchestrator_runtime.config import load_config
 from orchestrator_runtime.execution.timeouts import (
     MIN_AGENT_TIMEOUT_S,
+    VERDICT_RESERVE_S,
     resolve_agent_timeout,
 )
 from orchestrator_runtime.tasks.models import TaskConstraints, TaskRecord
@@ -32,12 +33,20 @@ def test_resolve_executor_timeout_not_hardcapped_at_600():
 
 
 def test_resolve_timeout_caps_to_remaining():
+    """CONTRATO MUDADO em 0.4.70 (bug-104), não afrouxado.
+
+    Antes: `remaining_s=120` devolvia 120 — o executor levava o orçamento
+    INTEIRO e o validator chegava com `timeout_s=0`, matando a task com cara de
+    falha de mérito. Agora quem executa devolve `VERDICT_RESERVE_S` para o
+    veredito, então o teto continua sendo o `remaining` — menos a reserva.
+    """
     timeout = resolve_agent_timeout(
         "executor",
-        remaining_s=120,
+        remaining_s=1000,
         by_role={"executor": 2400},
     )
-    assert timeout == 120
+    assert timeout == 1000 - VERDICT_RESERVE_S
+    assert timeout < 2400, "o restante ainda manda quando é menor que o teto do papel"
 
 
 def test_resolve_timeout_exhausted_returns_remaining_below_min():

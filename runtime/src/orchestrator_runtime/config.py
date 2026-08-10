@@ -7,7 +7,9 @@ import os
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from orchestrator_runtime.execution.timeouts import minimum_task_budget_s
 
 
 class RuntimeLimits(BaseModel):
@@ -74,6 +76,30 @@ class RuntimeLimits(BaseModel):
     # agente por processo e reexecuta. Falta de credencial NAO reinstala.
     agent_auto_repair: bool = True
     agent_repair_timeout_s: int = 300
+    # bug-104 — preenchido quando o teto da task foi elevado ao piso do veredito.
+    # Guarda o valor pedido, para o dono saber que o número dele não valia.
+    duration_floor_raised_from: int | None = None
+
+    @model_validator(mode="after")
+    def _fit_minimum_path(self) -> "RuntimeLimits":
+        """O teto da task tem que caber executar → julgar → corrigir → julgar.
+
+        bug-104 — os defaults do runtime se contradiziam:
+        `maximum_duration_seconds=3600` contra papéis que somam 8700s para uma
+        volta com correção. Toda task que realmente usava o orçamento morria no
+        meio, sempre antes do validator, sempre com cara de falha de mérito.
+        Medido no printbee: foi assim que o PB-69 morreu, e o dono teve que subir
+        o teto para 10800 na mão.
+
+        Elevar é correção, não preferência: abaixo do piso o teto não reprova
+        nada, só interrompe. E teto é limite de paciência — subir não faz task
+        nenhuma demorar mais.
+        """
+        piso = minimum_task_budget_s(self.agent_timeout_by_role)
+        if self.maximum_duration_seconds < piso:
+            self.duration_floor_raised_from = self.maximum_duration_seconds
+            self.maximum_duration_seconds = piso
+        return self
 
 
 class ManagerModelConfig(BaseModel):

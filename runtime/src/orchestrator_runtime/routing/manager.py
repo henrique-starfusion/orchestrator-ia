@@ -25,7 +25,13 @@ class CapabilityScorer:
         base = {
             "claude": 0.9,
             "codex": 0.85,
-            "opencode": 0.6,
+            # 0.4.70 — 0.6 era um palpite, e a produção discordou: `opencode`
+            # fechou 0/3 (printbee 0/1, trustsafe 0/2) depois de o auto-reparo
+            # tê-lo REINSTALADO com sucesso. Reinstalar não é o remédio dele, e
+            # como fallback ele queimava uma rodada por task em que era chamado.
+            # Abaixo de 0.4 (o valor de agente desconhecido) de propósito:
+            # desconhecido ainda pode funcionar, este já provou que não.
+            "opencode": 0.3,
             "gemini": 0.55,
             "kimi": 0.5,
         }.get(agent_id, 0.4)

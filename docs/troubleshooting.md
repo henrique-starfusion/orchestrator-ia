@@ -63,6 +63,123 @@ Override de testes: `ORCHESTRATOR_PROJECTS_REGISTRY`.
 
 ---
 
+## 0.4.70 — Agente é reinstalado toda vez e continua falhando igual
+
+**Sintoma:** `task logs` mostra `agent_repair` com
+`CLI parece quebrado; tentando reinstalar` → `repair_ok: true`, e o mesmo agente
+falha de novo na chamada seguinte, do mesmo jeito. O CLI funciona quando você o
+roda à mão.
+
+**Causa (bug-106):** quem falhou foi o **serviço do provedor**, não o CLI. O
+classificador só tinha `install` e `auth`; erro de servidor não casa com marcador
+nenhum e caía na regra final (stdout vazio + morte rápida) como `install`.
+Assinatura típica — `exit=1` em ~2 s com poucas centenas de bytes:
+
+```
+Error: {"name":"UnknownError","data":{"message":"Unexpected server error.
+Check server logs for details.","ref":"err_da9ff4ff"}}
+```
+
+**Comportamento (0.4.70):** categoria `service`, avaliada antes de `auth` e
+`install`. O runtime **não reinstala**, registra o evento e sobe a degradação:
+
+```json
+{"kind": "agent_service_down",
+ "impact": "opencode não pôde trabalhar",
+ "action": "nada a instalar nem logar — tente de novo mais tarde ou troque o agente deste papel"}
+```
+
+As três categorias existem porque os remédios são **opostos**: reinstalar apaga
+a sessão de quem só precisava logar, e logar não conserta um servidor fora do ar.
+
+> **Limitação conhecida.** A quarentena de agente (bug-070) exige 3 falhas **por
+> projeto**, e o banco é por projeto. Uma queda de provedor que afeta a conta
+> inteira é redescoberta em cada repositório.
+
+---
+
+## 0.4.70 — Task cancelada pelo reaper, mas a validação já tinha aprovado
+
+**Sintoma:** `task status` mostra `CANCELLED` com
+`auto-cancel: ... sem sinal de vida há Ns`, e o `task logs` mostra o validator
+tendo respondido `{"status":"accepted","score":1.0}` **antes** disso, com
+`exit=0`.
+
+**Causa (bug-105):** duas coisas na mesma mensagem.
+
+1. O número da idade era escrito como se fosse tempo de fase. `VALIDATING há
+   4525s` na verdade dizia "a **task** tem 4525 s"; em `VALIDATING` ela estava
+   há 2963 s. Terceira reincidência (bug-093, bug-096).
+2. O reaper descartava a task **sem dizer o que ela já tinha conquistado**. O
+   veredito aprovado estava gravado em `validation_rounds` e o dono lia só
+   "cancelada" — e refazia do zero um trabalho já aceito.
+
+**Comportamento (0.4.70):** a mensagem nomeia o relógio e carrega o que se
+perdeu:
+
+```
+auto-cancel: em VALIDATING, criada há 4525s e sem sinal de vida há 2423s
+(> maximum_duration_seconds + 900s) | ATENÇÃO: a última validação já havia
+APROVADO (score=1.0) — o trabalho existe, só não foi consolidado
+```
+
+A **decisão** não muda: sem processo dono vivo não dá para consolidar a task com
+honestidade. O que muda é você saber que o diff está lá antes de mandar refazer.
+
+> **Limitação conhecida.** Entre um agente e outro o runtime não emite sinal de
+> vida — o heartbeat de 30 s existe só enquanto um CLI está rodando. Morte de
+> processo e fase longa sem agente são, hoje, indistinguíveis para o reaper.
+
+---
+
+## 0.4.70 — Só as tarefas GRANDES falham, sempre no validator
+
+**Sintoma:** `task status` mostra `FAILED` com
+
+```
+Orçamento de tempo insuficiente para validator (timeout_s=0)
+```
+
+Tarefas curtas passam; as longas morrem. Parece que o orquestrador "não aguenta"
+trabalho grande — e a mensagem parece falha de mérito.
+
+**Causa (bug-104):** aritmética, não azar. Uma volta com correção soma os tetos
+dos papéis:
+
+```
+planner 900 + executor 2400 + tester 600 + validator 1200
+             + corrector 2400 + validator 1200 = 8700s
+```
+
+contra um `maximum_duration_seconds` de **3600**. O orçamento era **conferido no
+topo da iteração** mas **gasto dentro dela**: executor e corrector consumiam o
+teto inteiro e o validator — o **último** a ser chamado — chegava com
+`timeout_s=0`. Por isso a morte caía sempre nele, e por isso só as tasks que
+realmente usavam o orçamento morriam. A incoerência estava documentada desde a
+0.4.60 (a nota "2400 + 2400 > 3600" logo abaixo) e nunca tinha sido corrigida.
+
+**Comportamento (0.4.70):** três defesas.
+
+1. **Piso derivado.** `maximum_duration_seconds` nunca fica abaixo da soma dos
+   `agent_timeout_by_role` naquele percurso. Vale ao **carregar** a configuração,
+   então projetos com 3600 no `policies.json` são corrigidos sem editar nada; o
+   valor pedido fica em `duration_floor_raised_from`.
+2. **Reserva do veredito.** `executor` e `corrector` devolvem 600 s do restante
+   para o julgamento — sem nunca cair abaixo do mínimo de invocação.
+3. **Degradação honesta.** Sem orçamento, o veredito determinístico assume e o
+   resultado registra `validation_not_independent` com o remédio certo, em vez de
+   estourar.
+
+Teto é limite de **paciência**, não de qualidade: subir não faz task nenhuma
+demorar mais, só para de matar as que ainda estavam trabalhando. Para dar mais
+de uma correção, suba explicitamente:
+
+```json
+{ "maximum_duration_seconds": 10800 }
+```
+
+---
+
 ## 0.4.63 — Task parada há horas e nenhum timeout dispara
 
 **Sintoma:** `task status` fica no mesmo estado (`PLANNING`, `EXECUTING`) por 40

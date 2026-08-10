@@ -509,6 +509,36 @@ Toda degradação aceita aparece em `orchestrator task status` e no
 Os campos antigos (`independent_validation`, `agent_auth_required`,
 `plan_refined`) continuam saindo — cliente que já os consome não quebra.
 
+Cada degradação carrega o **remédio certo para a causa**, não um genérico: a
+mesma `validation_not_independent` pede "reexecute com um validator vivo" quando
+um agente falhou, e "aumente `maximum_duration_seconds`" quando faltou relógio.
+Mandar caçar um defeito que não existe custa a mesma hora que não mandar nada.
+
+Pela mesma razão, falha de agente tem **três** categorias e não duas — os
+remédios são opostos:
+
+| Categoria | O que quebrou | Remédio |
+|---|---|---|
+| `install` | CLI ausente ou corrompido | reinstala sozinho, uma vez por processo |
+| `auth` | CLI vivo, sem credencial | só o dono resolve — reinstalar apagaria a sessão |
+| `service` | servidor do provedor | nada a digitar: esperar ou trocar de agente |
+
+Sem a terceira, erro de servidor caía em `install` e o runtime reinstalava um
+CLI intacto — 300 s por ocorrência, para o agente falhar igual em seguida.
+
+### O teto da task cabe o trabalho (0.4.70+)
+
+`maximum_duration_seconds` tem **piso derivado** dos tetos por papel: ele nunca
+fica abaixo do percurso `planejar → executar → testar → julgar → corrigir →
+julgar` (8700 s nos padrões). Antes os dois números se contradiziam — teto 3600
+contra papéis que somam 8700 — e toda task que realmente usava o orçamento
+morria antes do validator, que é o último a ser chamado. Só as tarefas grandes
+falhavam, e a mensagem parecia mérito.
+
+Teto é limite de **paciência**, não de qualidade: subi-lo não faz task nenhuma
+demorar mais, só para de matar as que ainda estavam trabalhando. `executor` e
+`corrector` também devolvem 600 s do restante para que o veredito sempre caiba.
+
 ### Integridade de teste (0.4.68+)
 
 O executor escreve o código **e** os testes, e o gate só verifica se a suíte

@@ -274,6 +274,32 @@ class TaskService:
         valid = [a for a in ages if a is not None]
         return min(valid) if valid else None
 
+    def _verdict_lost_note(self, task_id: str) -> str:
+        """O que a task JÁ tinha conquistado quando o reaper a pegou (bug-105).
+
+        No trustsafe a `529cc0476c4e` foi cancelada com o veredito na mão: o
+        validator tinha respondido `accepted score=1.0` 40 min antes, e o
+        resultado disse só "auto-cancel". O dono lê "cancelada" e refaz do zero
+        um trabalho que já tinha sido aprovado.
+
+        Não muda a decisão — sem processo vivo não dá para concluir a task com
+        honestidade. Muda o que o dono sabe ao decidir se reexecuta.
+        """
+        try:
+            last = self.repo.last_validation_round(task_id)
+        except Exception:  # noqa: BLE001
+            return ""
+        if not last:
+            return ""
+        status = str(last.get("status") or "")
+        if status not in {"approved", "accepted"}:
+            return ""
+        score = last.get("score")
+        return (
+            f" | ATENÇÃO: a última validação já havia APROVADO "
+            f"(score={score}) — o trabalho existe, só não foi consolidado"
+        )
+
     def _cancel_stale_execution(self) -> int:
         """Cancela task NÃO-TERMINAL que nenhum processo vivo está tocando.
 
@@ -308,19 +334,26 @@ class TaskService:
                 continue  # jovem demais para julgar (ou timestamp ilegível)
             total_s = self._age_seconds(task.created_at, now) or idle_s
             hard_limit = int(task.constraints.maximum_duration_seconds) + grace
+            # bug-105 — `total_s` conta desde `created_at`, NÃO desde a entrada no
+            # estado. Escrever "VALIDATING há 4525s" fez a mensagem afirmar tempo
+            # de fase com o número da idade da task (trustsafe `529cc0476c4e`:
+            # 4525s de vida, 2963s em VALIDATING). Terceira vez que uma mensagem
+            # deste reaper aponta o relógio errado — dizer QUAL relógio é o
+            # conserto que faltava.
             if total_s > hard_limit:
                 reason = (
-                    f"auto-cancel: {task.status.value} há {int(total_s)}s e sem "
-                    f"sinal de vida há {int(idle_s)}s "
+                    f"auto-cancel: em {task.status.value}, criada há "
+                    f"{int(total_s)}s e sem sinal de vida há {int(idle_s)}s "
                     f"(> maximum_duration_seconds + {grace}s)"
                 )
             elif not owner_alive:
                 reason = (
-                    f"auto-cancel: {task.status.value} sem processo dono vivo "
+                    f"auto-cancel: em {task.status.value} sem processo dono vivo "
                     f"e sem sinal de vida há {int(idle_s)}s"
                 )
             else:
                 continue
+            reason += self._verdict_lost_note(task.id)
             self.repo.transition(
                 task, TaskState.CANCELLED, reason=reason, agent="runtime", error=reason
             )
@@ -721,7 +754,10 @@ class TaskService:
                     "kind": "validation_not_independent",
                     "impact": "o score não reflete revisão de mérito",
                     "detail": str(nota.get("validation_warning") or ""),
-                    "action": "reexecute a validação com um validator vivo",
+                    "action": str(
+                        nota.get("action")
+                        or "reexecute a validação com um validator vivo"
+                    ),
                 }
             )
 
@@ -732,6 +768,22 @@ class TaskService:
                     "impact": f"{bloqueio['agent']} não pôde trabalhar",
                     "detail": f"CLI sem credencial (papel {bloqueio['role'] or '?'})",
                     "action": bloqueio["command"],
+                }
+            )
+
+        for parada in self.service_outages(task_id):
+            registro.append(
+                {
+                    "kind": "agent_service_down",
+                    "impact": f"{parada['agent']} não pôde trabalhar",
+                    "detail": (
+                        f"o serviço do provedor respondeu erro (papel "
+                        f"{parada['role'] or '?'})"
+                    ),
+                    "action": (
+                        "nada a instalar nem logar — tente de novo mais tarde "
+                        "ou troque o agente deste papel"
+                    ),
                 }
             )
 
@@ -746,6 +798,32 @@ class TaskService:
                 }
             )
         return registro
+
+    def service_outages(self, task_id: str) -> list[dict[str, str]]:
+        """Agentes que pararam porque o serviço do provedor caiu (bug-106).
+
+        Mesma forma de `auth_blockers`, categoria diferente — e é a diferença que
+        importa: aqui não há nada que o dono possa DIGITAR. Misturar com `auth`
+        mandaria fazer login num CLI já autenticado; misturar com `install`
+        mandaria reinstalar um CLI intacto, que foi exatamente o que a 0.4.63
+        fez três vezes.
+        """
+        try:
+            events = self.repo.list_events(task_id)
+        except Exception:  # noqa: BLE001
+            return []  # observabilidade nunca derruba quem chamou
+        paradas: dict[str, dict[str, str]] = {}
+        for event in events:
+            if event.get("type") != EventType.AGENT_REPAIR.value:
+                continue
+            if (event.get("data") or {}).get("failure_kind") != "service":
+                continue
+            agente = str(event.get("agent") or "?")
+            paradas[agente] = {
+                "agent": agente,
+                "role": str(event.get("role") or ""),
+            }
+        return list(paradas.values())
 
     def auth_blockers(self, task_id: str) -> list[dict[str, str]]:
         """Agentes que pararam por falta de credencial, prontos para o chat.
@@ -812,6 +890,22 @@ class TaskService:
         payload = last.get("payload") or {}
         if not payload.get("validator_infra_failure"):
             return {"independent_validation": True}
+        if payload.get("validation_skipped") == "budget":
+            # bug-104 — mesma degradação, remédio oposto: aqui nenhum agente
+            # falhou, faltou relógio. Mandar "reexecute com um validator vivo"
+            # manda o dono caçar um defeito que não existe.
+            return {
+                "independent_validation": False,
+                "validation_warning": (
+                    "o validator NÃO chegou a rodar — o orçamento da task "
+                    "acabou antes. O score é só o determinístico e NÃO reflete "
+                    "revisão de mérito."
+                ),
+                "action": (
+                    "aumente maximum_duration_seconds em "
+                    ".orchestrator/config/policies.json ou reduza o escopo"
+                ),
+            }
         return {
             "independent_validation": False,
             "validation_warning": (
@@ -819,6 +913,7 @@ class TaskService:
                 "independente respondeu (falha de infra). O score NÃO reflete "
                 "revisão de mérito."
             ),
+            "action": "reexecute a validação com um validator vivo",
         }
 
     @staticmethod
@@ -1856,9 +1951,32 @@ class TaskService:
                     for i, f in enumerate(integridade, start=1)
                 ]
             val_prompt = self._build_validator_prompt(task, det, test_results, changed_files)
-            val_result = await self._run_agent(val_agent, "validator", val_prompt, task)
-            last_validation = self.llm_validator.parse(val_result.stdout, det)
-            if last_validation is det and self._validator_infra_failure(val_result):
+            # bug-104 — sem orçamento para o veredito, NÃO estourar. `_run_agent`
+            # levantava RuntimeError("Orçamento de tempo insuficiente para
+            # validator (timeout_s=0)") e a task terminava FAILED: um trabalho
+            # possivelmente pronto reprovado por relógio, com texto que parecia
+            # mérito. O veredito determinístico já existe aqui — usar ele e
+            # DIZER que o julgamento independente não coube.
+            val_result = None
+            if self._remaining_duration_s(task) < MIN_AGENT_TIMEOUT_S:
+                last_validation = dict(det)
+                last_validation["validator_infra_failure"] = True
+                last_validation["validation_skipped"] = "budget"
+                last_validation["summary"] = (
+                    str(det.get("summary") or "")
+                    + " | validator NÃO rodou: orçamento da task esgotado"
+                    " (não é rejeição de mérito)"
+                )
+            else:
+                val_result = await self._run_agent(
+                    val_agent, "validator", val_prompt, task
+                )
+                last_validation = self.llm_validator.parse(val_result.stdout, det)
+            if (
+                val_result is not None
+                and last_validation is det
+                and self._validator_infra_failure(val_result)
+            ):
                 # Sem veredito LLM por falha de infra (ex.: sandbox Windows 740):
                 # tentar validator alternativo; nunca virar rejeição de mérito.
                 fb_agent = self._next_validator_fallback(task, plan_roles, val_agent)
@@ -2939,6 +3057,20 @@ class TaskService:
             self.bus.emit(event)
             self.repo.add_event(event)
 
+        if kind == "service":
+            # bug-106 — o servidor do provedor respondeu erro. Reinstalar é o
+            # remédio errado e caro: nos `opencode` de 09/08 o reparo rodou
+            # inteiro, terminou `repair_ok: true`, e o agente falhou igual na
+            # chamada seguinte. Registrar e deixar o fallback fazer o trabalho.
+            _report(
+                failure_kind="service",
+                summary=(
+                    f"{agent_id}: serviço do provedor respondeu erro "
+                    f"({result.duration_s:.0f}s). Reinstalar e login NÃO "
+                    f"resolvem — outro agente assume"
+                ),
+            )
+            return result
         if kind == "auth":
             _report(
                 failure_kind="auth",

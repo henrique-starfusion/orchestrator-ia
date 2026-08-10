@@ -2,6 +2,80 @@
 
 ## Unreleased
 
+## 0.4.70 - 2026-08-09
+
+### Fixed
+
+- **bug-104** — o teto da task **não cabia o trabalho que o runtime pretende
+  fazer**. Uma volta com correção soma
+  `planner 900 + executor 2400 + tester 600 + validator 1200 + corrector 2400 +
+  validator 1200 = 8700 s`, contra um `maximum_duration_seconds` de **3600**.
+  Os próprios números do runtime se contradiziam: toda task que realmente usasse
+  o orçamento dos papéis morria no meio — e sempre **antes do validator**, que é
+  o último a ser chamado. Não era azar, era aritmética: quanto maior a task,
+  mais certa a morte. O dono via
+  `FAILED — Orçamento de tempo insuficiente para validator (timeout_s=0)`
+  (printbee, `b259e8f0c168`), isto é, trabalho possivelmente pronto reprovado
+  por relógio com texto de falha de mérito. No printbee o teto teve de ser subido
+  para 10800 **na mão**. Três defesas, da raiz para a borda:
+  1. **piso derivado** — `maximum_duration_seconds` nunca fica abaixo da soma dos
+     tetos dos papéis nesse percurso (`minimum_task_budget_s`). Elevar é correção,
+     não preferência: abaixo do piso o teto não reprova nada, só interrompe — e
+     teto é limite de paciência, subir não faz task nenhuma demorar mais;
+  2. **reserva do veredito** — `executor` e `corrector` devolvem
+     `VERDICT_RESERVE_S` (600 s) do restante, para o julgamento sempre caber;
+  3. **degradação honesta** — sem orçamento, o veredito determinístico assume e
+     o resultado **diz** que ninguém julgou o mérito, com o remédio certo
+     (aumentar `maximum_duration_seconds`), em vez de estourar `RuntimeError`
+- **bug-105** — o reaper mentia sobre o relógio **e** jogava fora trabalho
+  aprovado sem dizer. A mensagem escrevia `VALIDATING há 4525s`, mas 4525 s era
+  a **idade da task**, não o tempo na fase (2963 s) — terceira vez que uma
+  mensagem deste reaper aponta o relógio errado (bug-093, bug-096), e custou uma
+  leitura errada na própria sessão que a corrigiu. Pior: no trustsafe
+  (`529cc0476c4e`) a task foi cancelada **com o veredito na mão** — o validator
+  respondera `accepted score=1.0` 40 min antes, gravado em `validation_rounds`,
+  e o dono lia só "auto-cancel". Agora a mensagem nomeia o relógio
+  (`em VALIDATING, criada há Ns e sem sinal de vida há Ms`) e anexa
+  `a última validação já havia APROVADO (score=X)`. A **decisão** não muda —
+  sem processo vivo não dá para consolidar com honestidade
+- **bug-106** — falha do **serviço do provedor** era tratada como CLI quebrado.
+  `classify_agent_failure` só tinha `install` e `auth`; erro de servidor não casa
+  com marcador nenhum e caía na regra final (stdout vazio + morte rápida) como
+  `install`. Os três `opencode` da frota em 09/08 saíram `exit=1` em **2 s** com
+  165 bytes de `{"name":"UnknownError","message":"Unexpected server error"}` —
+  CLI intacto, credencial intacta — e o auto-reparo gastou uma **reinstalação
+  completa** (`repair_ok: true`) para o agente falhar igual na chamada seguinte.
+  Nova categoria `service`, avaliada antes de `auth`/`install` e sujeita ao mesmo
+  teto de evidência do bug-097: registra, **não** reinstala, e sobe como
+  degradação `agent_service_down` com a única ação honesta — não há o que
+  digitar, espere ou troque o agente
+- Features de diagnóstico: `task_budget_fits_correction_round`,
+  `verdict_time_reserved`, `validation_skipped_not_failed`,
+  `reaper_names_the_clock`, `provider_outage_not_reinstall`
+
+### Changed
+
+- Prior do `opencode` no `CapabilityScorer`: **0.6 → 0.3**, abaixo do 0.4 de
+  agente desconhecido. Medição da frota: **0/3**, depois de o auto-reparo tê-lo
+  reinstalado com sucesso. Desconhecido ainda pode funcionar; este já provou que
+  não. Continua disponível quando escolhido explicitamente
+
+### Known
+
+- Entre um agente e outro o runtime **não emite sinal de vida** — o heartbeat de
+  30 s existe só enquanto um CLI roda. Morte de processo e fase longa sem agente
+  ficam indistinguíveis para o reaper. Foi o que deixou a `529cc0476c4e` 40 min
+  em silêncio depois de um validator que terminou `exit=0`
+
+### Changed
+
+- `maximum_duration_seconds` do template passa de **3600 → 8700**. Projetos já
+  instalados **não precisam editar nada**: o piso é aplicado ao carregar a
+  configuração, e o valor pedido fica registrado em `duration_floor_raised_from`
+- **Contrato de `resolve_agent_timeout` para `executor`/`corrector`**: com
+  `remaining_s=1000` devolvia 1000, agora devolve 400. Quem lê esse valor para
+  prever duração precisa contar a reserva
+
 ## 0.4.69 - 2026-08-09
 
 ### Fixed

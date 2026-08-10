@@ -40,7 +40,7 @@ Lido em `load_config` (`config.py:215`) e materializado em `RuntimeLimits`
 | `max_plan_continuations` | int | 5 | Quantas vezes o runtime manda CONTINUAR um plano incompleto. Continuação não consome iteração | `config.py:237`; `tasks/service.py:1274` |
 | `minimum_validation_score` | float | 0.9 | Nota mínima para `COMPLETED` | `config.py:238`; `CompletionGate` em `tasks/service.py:152` |
 | `minimum_score_improvement` | float | 0.03 | **Declarada e carregada, nunca consultada.** Nenhum módulo lê `limits.minimum_score_improvement` | só `config.py:239` |
-| `maximum_duration_seconds` | int | 3600 | Orçamento total da task; restante abaixo do mínimo de agente vira `INCOMPLETE` | `config.py:240`; `_remaining_duration_s` em `tasks/service.py:2286` |
+| `maximum_duration_seconds` | int | 8700 | Orçamento total da task; restante abaixo do mínimo de agente vira `INCOMPLETE`. **Tem piso** (0.4.70): valor abaixo da soma dos `agent_timeout_by_role` no percurso `planner→executor→tester→validator→corrector→validator` é elevado a ela, e o pedido fica em `duration_floor_raised_from`. Teto é limite de paciência — subir não faz task nenhuma demorar mais | `config.py` (`_fit_minimum_path`); `execution/timeouts.py:minimum_task_budget_s`; `_remaining_duration_s` em `tasks/service.py` |
 | `require_independent_validation` | bool | true | Proíbe validator igual ao executor; força rotação e, sem alternativa, bloqueia com `VAL-IND` | `config.py:247`; `routing/manager.py:65` e `tasks/service.py:1409` |
 | `require_deterministic_validation` | bool | true | **Declarada e carregada, nunca consultada.** O validador determinístico roda sempre | só `config.py:250` |
 | `require_documentation_review` | bool | true | **Declarada e carregada, nunca consultada.** O gate documental roda sempre; quem barra é `CompletionGate` | só `config.py:253` |
@@ -50,7 +50,7 @@ Lido em `load_config` (`config.py:215`) e materializado em `RuntimeLimits`
 | Chave | Tipo | Default | Efeito de mudar | Onde é lido |
 |---|---|---|---|---|
 | `agent_timeout_default_s` | int | 1800 | Timeout de papel sem entrada específica | `config.py:243`; `execution/timeouts.py` via `_resolve_agent_timeout` |
-| `agent_timeout_by_role` | objeto | planner 900, executor 2400, corrector 2400, validator 1200, tester 600, skill_selector 120 | Teto por papel; merge com os defaults, valor inválido é ignorado | `config.py:226-233` |
+| `agent_timeout_by_role` | objeto | planner 900, executor 2400, corrector 2400, validator 1200, tester 600, skill_selector 120 | Teto por papel; merge com os defaults, valor inválido é ignorado. **Mexer aqui move o piso de `maximum_duration_seconds`** (0.4.70). `executor` e `corrector` não recebem o teto cheio quando o restante da task é curto: 600 s ficam reservados para o veredito | `config.py:226-233`; `execution/timeouts.py` |
 | `agent_infra_fail_fast_count` | int | 3 | Quantos marcadores de falha de infra no stream matam o processo. 0 desliga | `config.py:266`; `agents/process.py:283-289` |
 | `agent_no_output_timeout_s` | int | 900 | Mata agente após esse tempo sem NENHUMA saída E sem tocar no workspace. 0 desliga | `config.py:272`; `agents/process.py:304-329` |
 | `stale_received_ttl_hours` | int | 6 | Idade a partir da qual task `RECEIVED` órfã é auto-cancelada | `config.py:269`; `tasks/service.py:171-202` |
