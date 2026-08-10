@@ -274,6 +274,15 @@ def task_status(
         _print_json(data)  # já traz agent_auth_required / action_required
     else:
         typer.echo(f"{data['id']} {data['status']}")
+        live = data.get("live") or {}
+        if live:
+            # 0.4.73 — a linha que responde "travou?": idade do sinal e PID.
+            vivo = {True: "vivo", False: "MORTO", None: "?"}[live.get("pid_alive")]
+            typer.echo(
+                f"[VIVO] {live.get('summary')} "
+                f"| sinal há {live.get('signal_age_s')}s "
+                f"| pid={live.get('pid')} {vivo}"
+            )
         if data.get("action_required"):
             typer.echo(f"[ACAO] {data['action_required']}")
 

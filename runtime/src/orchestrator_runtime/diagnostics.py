@@ -123,6 +123,12 @@ FEATURES: tuple[str, ...] = (
     # perfeito, e não apaga mais uma rejeição já gravada
     "premise_score_not_fabricated",
     "premise_never_overrides_rejection",
+    # 0.4.72 — processo que não nasceu não é CLI quebrado
+    "launch_failure_not_reinstall",
+    # 0.4.73 — o loop dá sinal de vida também onde nenhum agente roda, e o
+    # `status` diz se andou sem exigir leitura do log inteiro
+    "loop_heartbeat_between_agents",
+    "status_answers_is_it_alive",
 )
 
 

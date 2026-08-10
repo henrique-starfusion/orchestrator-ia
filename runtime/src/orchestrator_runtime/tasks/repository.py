@@ -327,20 +327,50 @@ class TaskRepository:
                 for r in rows
             ]
 
-    def last_event_at(self, task_id: str) -> str | None:
+    def last_event(
+        self,
+        task_id: str,
+        *,
+        types: tuple[str, ...] | None = None,
+        exclude_types: tuple[str, ...] | None = None,
+    ) -> dict[str, Any] | None:
+        """Evento mais recente da task, opcionalmente filtrado por tipo.
+
+        Existe para não fazer `list_events` (a task inteira) só para olhar o
+        último sinal: o `status` é o evento mais frequente da frota.
+        """
+        stmt = select(TaskEventRow).where(TaskEventRow.task_id == task_id)
+        if types:
+            stmt = stmt.where(TaskEventRow.type.in_(list(types)))
+        if exclude_types:
+            stmt = stmt.where(TaskEventRow.type.notin_(list(exclude_types)))
+        with self.session() as s:
+            row = s.scalars(stmt.order_by(TaskEventRow.id.desc()).limit(1)).first()
+            if row is None:
+                return None
+            return {
+                "timestamp": row.timestamp,
+                "type": row.type,
+                "role": row.role,
+                "agent": row.agent,
+                "data": loads(row.data_json, {}),
+            }
+
+    def last_event_at(
+        self, task_id: str, *, exclude_types: tuple[str, ...] | None = None
+    ) -> str | None:
         """Timestamp do evento mais recente da task (sinal de vida barato).
 
         bug-096 — `updated_at` só muda em transição de estado; o heartbeat de
         30s é EVENTO. Sem olhar aqui, o reaper enxerga uma task trabalhando há
         40 min como "parada".
+
+        `exclude_types` existe para o reaper: o heartbeat do loop (0.4.73) prova
+        que o PROCESSO vive, não que o trabalho anda — contá-lo como progresso
+        cegaria a detecção de silêncio.
         """
-        with self.session() as s:
-            return s.scalars(
-                select(TaskEventRow.timestamp)
-                .where(TaskEventRow.task_id == task_id)
-                .order_by(TaskEventRow.id.desc())
-                .limit(1)
-            ).first()
+        evt = self.last_event(task_id, exclude_types=exclude_types)
+        return None if evt is None else str(evt["timestamp"])
 
     def add_agent_run(self, **kwargs: Any) -> None:
         with self.session() as s:

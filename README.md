@@ -514,7 +514,7 @@ mesma `validation_not_independent` pede "reexecute com um validator vivo" quando
 um agente falhou, e "aumente `maximum_duration_seconds`" quando faltou relógio.
 Mandar caçar um defeito que não existe custa a mesma hora que não mandar nada.
 
-Pela mesma razão, falha de agente tem **três** categorias e não duas — os
+Pela mesma razão, falha de agente tem **quatro** categorias e não uma — os
 remédios são opostos:
 
 | Categoria | O que quebrou | Remédio |
@@ -522,9 +522,41 @@ remédios são opostos:
 | `install` | CLI ausente ou corrompido | reinstala sozinho, uma vez por processo |
 | `auth` | CLI vivo, sem credencial | só o dono resolve — reinstalar apagaria a sessão |
 | `service` | servidor do provedor | nada a digitar: esperar ou trocar de agente |
+| `launch` | o processo não nasceu | liberar recurso da máquina; não é o CLI |
 
-Sem a terceira, erro de servidor caía em `install` e o runtime reinstalava um
-CLI intacto — 300 s por ocorrência, para o agente falhar igual em seguida.
+As duas últimas existem porque `install` era o destino de tudo que o
+classificador não reconhecia — e era a categoria com o remédio mais caro. Erro de
+servidor reinstalava um CLI intacto (300 s por ocorrência, para falhar igual em
+seguida); e falta de recurso da máquina disparava uma reinstalação que **também
+não conseguia nascer**. Quando o remédio custa cinco minutos, "não foi o CLI"
+precisa ser uma resposta possível.
+
+### Dá para acompanhar o que está rodando (0.4.73+)
+
+Task longa parada no mesmo estado é indistinguível de task morta — e essa dúvida
+já custou trabalho cancelado por impaciência nesta frota. Duas coisas causavam
+isso: `updated_at` só muda em **transição de estado** (um executor legítimo passa
+25 min em `EXECUTING` sem tocá-lo), e o sinal de vida só existia **enquanto um
+CLI estava no ar**. Nos vãos — escolha de agentes, consolidação, gravação de
+memória, gate de documentação, troca de etapa — o runtime ficava mudo.
+
+Agora o **loop** bate a cada 20–30 s durante toda a execução, e o `status`
+responde "travou?" sem exigir leitura de log:
+
+```json
+"live": {"signal": "loop_progress", "signal_age_s": 8, "phase": "EXECUTING",
+         "phase_elapsed_s": 412, "agent_active": true, "agent": "codex",
+         "pid": 50764, "pid_alive": true}
+```
+
+`agent_active` distingue "esperando o codex" de "entre etapas"; `phase_elapsed_s`
+é a idade **da fase**, não da task; `pid_alive` é a resposta direta. No console,
+cada batida sai como `[loop_progress] <fase> há Ns — <quem está no ar>`.
+
+O reaper **ignora** essa batida de propósito: ela nasce de uma thread do processo
+dono e continuaria batendo com o loop travado num lock. Ela prova que o processo
+vive, não que o trabalho anda — a decisão de cancelar segue apoiada em progresso
+de verdade.
 
 ### Nenhum score é inventado (0.4.71+)
 

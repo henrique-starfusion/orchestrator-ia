@@ -20,6 +20,11 @@ class EventType(str, Enum):
     AGENT_COMPLETED = "agent_completed"
     # 0.4.28 — heartbeat do CLI: prova de vida durante EXECUTING
     AGENT_PROGRESS = "agent_progress"
+    # 0.4.73 — heartbeat do LOOP: prova de vida TAMBEM no vao entre agentes
+    # (consolidacao, memoria, gate de documentacao), onde nenhum CLI esta no ar
+    # e o `agent_progress` nao existe. Prova que o processo dono vive, NAO que o
+    # trabalho anda — por isso o reaper o ignora (ver `_idle_seconds`).
+    LOOP_PROGRESS = "loop_progress"
     # 0.4.63 — CLI do agente diagnosticado como quebrado (install) ou sem
     # credencial (auth), e o que o runtime fez a respeito
     AGENT_REPAIR = "agent_repair"

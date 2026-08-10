@@ -10,6 +10,7 @@ import os
 import re
 import threading
 import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -76,6 +77,11 @@ from orchestrator_runtime.validation.test_integrity import (
     is_test_path,
     summarize,
 )
+
+# 0.4.73 — piso da cadência do heartbeat do loop. A cadência sai do perfil do
+# chamador (20s bloqueante, 30s polling); o piso existe para um perfil futuro
+# com valor agressivo não transformar sinal de vida em enchente de eventos.
+LOOP_HEARTBEAT_MIN_S = 10
 from orchestrator_runtime.validation import (
     CompletionGate,
     DeterministicValidator,
@@ -180,6 +186,9 @@ class TaskService:
             config.orchestrator_root / "runtime" / "locks" / "workspace.write.lock"
         )
         self._loop_started_monotonic: float | None = None
+        # 0.4.73 — (role, agent_id) da última etapa despachada, para o heartbeat
+        # do loop dizer QUEM está no ar (ou quem acabou de sair).
+        self._current_agent: tuple[str, str] | None = None
         self._git_baseline: GitBaseline = GitBaseline()
         # Contexto do run corrente para o learning (locals do loop não
         # persistidos na task): changed_files, test_results, last_validation.
@@ -265,14 +274,144 @@ class TaskService:
         arquivo de lock. Lock apagado à mão viraria execução saudável cancelada.
 
         O sinal honesto é o mais RECENTE entre os dois.
+
+        O heartbeat do LOOP (0.4.73) fica FORA de propósito: ele nasce de uma
+        thread do processo dono e continuaria batendo com o loop travado num
+        lock — contá-lo aqui trocaria a fila parada de 11h do bug-090 por uma
+        eterna. Ele serve para o dono ver a fase, não para o reaper julgar.
         """
         ages = [self._age_seconds(task.updated_at, now)]
         try:
-            ages.append(self._age_seconds(self.repo.last_event_at(task.id), now))
+            ages.append(
+                self._age_seconds(
+                    self.repo.last_event_at(
+                        task.id, exclude_types=(EventType.LOOP_PROGRESS.value,)
+                    ),
+                    now,
+                )
+            )
         except Exception:  # noqa: BLE001
             pass
         valid = [a for a in ages if a is not None]
         return min(valid) if valid else None
+
+    def _emit_loop_progress(self, task_id: str, *, pid: int, elapsed_s: int) -> None:
+        """Uma batida do heartbeat do loop: fase, idade da fase e quem está no ar."""
+        fresh = self.get(task_id)
+        fase_s = self._age_seconds(fresh.updated_at, datetime.now(timezone.utc))
+        ativos = sorted(
+            getattr(getattr(self, "executor", None), "_active_pids", None) or ()
+        )
+        role, agent = self._current_agent or (None, None)
+        if ativos:
+            quem = f"{agent}/{role}" if agent else "agente"
+            onde = f"{quem} no ar (pid={ativos[0]})"
+        elif agent:
+            onde = f"entre etapas, nenhum agente no ar (última: {agent}/{role})"
+        else:
+            onde = "preparando a primeira etapa, nenhum agente no ar"
+        evento = RuntimeEvent(
+            task_id=task_id,
+            type=EventType.LOOP_PROGRESS,
+            role=role,
+            agent=agent,
+            data={
+                "phase": fresh.status.value,
+                "phase_elapsed_s": None if fase_s is None else int(fase_s),
+                "elapsed_s": elapsed_s,
+                "iteration": fresh.iteration,
+                "pid": pid,
+                "agent_active": bool(ativos),
+                "summary": (
+                    f"{fresh.status.value} há {int(fase_s or 0)}s — {onde}"
+                ),
+            },
+        )
+        self.bus.emit(evento)
+        self.repo.add_event(evento)
+
+    @contextmanager
+    def _loop_heartbeat(self, task: TaskRecord):
+        """Sinal de vida do PRÓPRIO loop, inclusive onde nenhum agente roda.
+
+        O `agent_progress` só existe enquanto um CLI está no ar. Consolidação,
+        gravação de memória, gate de documentação, escolha de agentes e a troca
+        de uma etapa para a seguinte não emitem nada — e quem olha o `status`
+        nesses vãos vê a mesma linha por minutos, sem como distinguir fase
+        legítima de processo morto. Foi o que fez printbee e trustsafe parecerem
+        travados enquanto trabalhavam.
+
+        Vem de uma THREAD daemon: se o processo dono morre, o sinal para junto.
+        Por isso o reaper o ignora (ver `_idle_seconds`) — prova que o processo
+        vive, não que o trabalho anda.
+        """
+        cadencia = max(
+            LOOP_HEARTBEAT_MIN_S, int(self.caller_profile.heartbeat_s or 30)
+        )
+        parar = threading.Event()
+        inicio = time.monotonic()
+        pid = os.getpid()
+
+        def _bater() -> None:
+            while not parar.wait(cadencia):
+                try:
+                    self._emit_loop_progress(
+                        task.id, pid=pid, elapsed_s=int(time.monotonic() - inicio)
+                    )
+                except Exception:  # noqa: BLE001
+                    pass  # sinal de vida nunca derruba a task
+
+        thread = threading.Thread(
+            target=_bater, daemon=True, name=f"loop-hb-{task.id[:8]}"
+        )
+        thread.start()
+        try:
+            yield
+        finally:
+            parar.set()
+            thread.join(timeout=2)
+
+    def _live_note(self, task_id: str) -> dict[str, Any]:
+        """"Está andando ou travou?" respondido no próprio `status` (0.4.73).
+
+        Sem isto a resposta exigia ler `task logs` inteiro e conferir o PID à
+        mão — foi o que a frota fez três vezes para concluir "não travou".
+        """
+        try:
+            evento = self.repo.last_event(
+                task_id,
+                types=(
+                    EventType.LOOP_PROGRESS.value,
+                    EventType.AGENT_PROGRESS.value,
+                ),
+            )
+        except Exception:  # noqa: BLE001
+            return {}
+        if not evento:
+            return {}
+        dados = evento.get("data") or {}
+        idade = self._age_seconds(evento.get("timestamp"), datetime.now(timezone.utc))
+        pid = dados.get("pid")
+        vivo: bool | None = None
+        if isinstance(pid, int):
+            try:
+                vivo = _pid_alive(pid)
+            except Exception:  # noqa: BLE001
+                vivo = None
+        return {
+            "live": {
+                "signal": evento.get("type"),
+                "signal_age_s": None if idade is None else int(idade),
+                "phase": dados.get("phase"),
+                "phase_elapsed_s": dados.get("phase_elapsed_s"),
+                "agent_active": dados.get("agent_active"),
+                "role": evento.get("role"),
+                "agent": evento.get("agent"),
+                "pid": pid,
+                "pid_alive": vivo,
+                "summary": dados.get("summary"),
+            }
+        }
 
     def _verdict_lost_note(self, task_id: str) -> str:
         """O que a task JÁ tinha conquistado quando o reaper a pegou (bug-105).
@@ -665,6 +804,9 @@ class TaskService:
         if task.status == TaskState.QUEUED:
             out["queue_position"] = self._queue_position(task.id, task.project_path)
             out["blocked_by"] = self._blocked_by_from_error(task.error)
+        # 0.4.73 — "está andando ou travou?" sem ler o log inteiro.
+        if task.status not in TERMINAL_STATES:
+            out.update(self._live_note(task.id))
         out.update(self._independence_note(task.id))
         # bug-095 — falta de credencial só o dono resolve; tem que chegar ao chat
         # a cada poll, não ficar enterrada no `task logs`.
@@ -787,6 +929,23 @@ class TaskService:
                 }
             )
 
+        for falha in self.launch_failures(task_id):
+            registro.append(
+                {
+                    "kind": "agent_launch_failed",
+                    "impact": f"{falha['agent']} não pôde trabalhar",
+                    "detail": (
+                        f"o processo não chegou a iniciar (exit="
+                        f"{falha['exit_code'] or '?'}, papel {falha['role'] or '?'})"
+                        " — falta de recurso da máquina, não do CLI"
+                    ),
+                    "action": (
+                        "libere memória/processos na máquina (ou reinicie) e "
+                        "reexecute; não há o que instalar nem logar"
+                    ),
+                }
+            )
+
         premissa = self._premise_note(task_id)
         if premissa:
             registro.append(
@@ -839,14 +998,13 @@ class TaskService:
             return {}
         return {"premise_mismatch": str(alegacao)}
 
-    def service_outages(self, task_id: str) -> list[dict[str, str]]:
-        """Agentes que pararam porque o serviço do provedor caiu (bug-106).
+    def _repair_events_by_kind(self, task_id: str, kind: str) -> list[dict[str, str]]:
+        """Agentes que pararam por `failure_kind`, deduplicados por agente.
 
-        Mesma forma de `auth_blockers`, categoria diferente — e é a diferença que
-        importa: aqui não há nada que o dono possa DIGITAR. Misturar com `auth`
-        mandaria fazer login num CLI já autenticado; misturar com `install`
-        mandaria reinstalar um CLI intacto, que foi exatamente o que a 0.4.63
-        fez três vezes.
+        Mesma forma de `auth_blockers`, categorias diferentes — e é a diferença
+        que importa: `auth` tem comando para digitar, `service` e `launch` não
+        têm nada. Misturar mandaria fazer login num CLI autenticado ou
+        reinstalar um CLI intacto, que foi exatamente o que a 0.4.63 fez.
         """
         try:
             events = self.repo.list_events(task_id)
@@ -856,14 +1014,24 @@ class TaskService:
         for event in events:
             if event.get("type") != EventType.AGENT_REPAIR.value:
                 continue
-            if (event.get("data") or {}).get("failure_kind") != "service":
+            data = event.get("data") or {}
+            if data.get("failure_kind") != kind:
                 continue
             agente = str(event.get("agent") or "?")
             paradas[agente] = {
                 "agent": agente,
                 "role": str(event.get("role") or ""),
+                "exit_code": str(data.get("exit_code") or ""),
             }
         return list(paradas.values())
+
+    def service_outages(self, task_id: str) -> list[dict[str, str]]:
+        """Agentes que pararam porque o serviço do provedor caiu (bug-106)."""
+        return self._repair_events_by_kind(task_id, "service")
+
+    def launch_failures(self, task_id: str) -> list[dict[str, str]]:
+        """Agentes cujo processo não chegou a nascer (bug-109)."""
+        return self._repair_events_by_kind(task_id, "launch")
 
     def auth_blockers(self, task_id: str) -> list[dict[str, str]]:
         """Agentes que pararam por falta de credencial, prontos para o chat.
@@ -1202,7 +1370,10 @@ class TaskService:
                 held_lock = True
                 self._running_tasks.add(task_id)
                 try:
-                    result = await self._execute_loop(task)
+                    # 0.4.73 — sinal de vida do loop cobre TODA a execução,
+                    # inclusive os vãos sem agente no ar.
+                    with self._loop_heartbeat(task):
+                        result = await self._execute_loop(task)
                 except CancelledError:
                     result = self.get(task_id)
                 finally:
@@ -3147,6 +3318,20 @@ class TaskService:
             self.bus.emit(event)
             self.repo.add_event(event)
 
+        if kind == "launch":
+            # bug-109 — o processo não nasceu (NTSTATUS de falta de recurso).
+            # Reinstalar não tem como funcionar: no trustsafe a própria
+            # reinstalação saiu com o MESMO exit code.
+            _report(
+                failure_kind="launch",
+                exit_code=result.exit_code,
+                summary=(
+                    f"{agent_id}: o processo não chegou a iniciar "
+                    f"(exit={result.exit_code}). Falta de recurso da máquina — "
+                    f"reinstalar não resolve"
+                ),
+            )
+            return result
         if kind == "service":
             # bug-106 — o servidor do provedor respondeu erro. Reinstalar é o
             # remédio errado e caro: nos `opencode` de 09/08 o reparo rodou
@@ -3495,6 +3680,8 @@ class TaskService:
         (o bus so imprime no console de quem chamou) e a cadencia vir do perfil
         do chamador — sessao bloqueante fica muda entre um sinal e outro.
         """
+        # 0.4.73 — quem o heartbeat do loop vai nomear como etapa corrente.
+        self._current_agent = (role, agent_id)
         if getattr(self, "executor", None) is None:
             return
 

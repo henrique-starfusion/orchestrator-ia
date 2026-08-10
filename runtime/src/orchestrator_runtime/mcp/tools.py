@@ -709,7 +709,19 @@ class OrchestratorMcpTools:
                 "terminal — retenha só o session_digest + learning_path "
                 "(descarte histórico de polls)"
             )
+        # 0.4.73 — quem consome esta superfície é um agente decidindo se espera
+        # ou cancela. A pergunta "travou?" tem que estar na mensagem, não só num
+        # campo que ele pode não ler.
+        live = {}
         if not terminal:
+            live = (service._live_note(task.id) or {}).get("live") or {}
+            if live.get("summary"):
+                vivo = {True: "pid vivo", False: "pid MORTO", None: "pid ?"}[
+                    live.get("pid_alive")
+                ]
+                message_parts.append(
+                    f"{live['summary']} (sinal há {live.get('signal_age_s')}s, {vivo})"
+                )
             message_parts.append("poll orchestrator_status / orchestrator_events")
 
         queue_position = None
@@ -740,6 +752,7 @@ class OrchestratorMcpTools:
             "started_at": task.created_at,
             "updated_at": task.updated_at,
             "requires_input": requires_input,
+            "live": live,
             "error": task.error,
             "queue_position": queue_position,
             "blocked_by": blocked_by,

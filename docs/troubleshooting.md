@@ -63,6 +63,104 @@ Override de testes: `ORCHESTRATOR_PROJECTS_REGISTRY`.
 
 ---
 
+## 0.4.73 — "A task travou?" — como responder em um comando
+
+**Sintoma:** `task status` mostra o mesmo estado há minutos, `updated_at` parece
+congelado, e não há como saber se o processo morreu ou se a fase é longa.
+
+**Causa:** duas coisas conspiram. `updated_at` **só muda em transição de
+estado** — um executor legítimo passa 25 min em `EXECUTING` sem tocá-lo (é o
+bug-096). E até a 0.4.72 o único sinal de vida era o `agent_progress`, que só
+existe **enquanto um CLI está no ar**: nos vãos (escolha de agentes,
+consolidação, gravação de memória, gate de documentação, troca de etapa) o
+runtime ficava mudo de verdade.
+
+**Comportamento (0.4.73):** o loop bate a cada 20–30 s durante toda a execução,
+e o `status` responde direto:
+
+```bash
+orchestrator task status <task_id> --text
+```
+
+```
+8e4329205f01 EXECUTING
+[VIVO] EXECUTING há 412s — codex/executor no ar (pid=50764) | sinal há 8s | pid=50764 vivo
+```
+
+No JSON é o bloco `live`:
+
+```json
+{"live": {"signal": "loop_progress", "signal_age_s": 8, "phase": "EXECUTING",
+          "phase_elapsed_s": 412, "agent_active": true, "agent": "codex",
+          "pid": 50764, "pid_alive": true}}
+```
+
+**Como ler:**
+
+| O que aparece | O que significa |
+|---|---|
+| `signal_age_s` menor que ~60 e `pid_alive: true` | trabalhando; **não cancele** |
+| `agent_active: true` | um CLI está rodando — `phase_elapsed_s` grande é normal |
+| `agent_active: false` | entre etapas (consolidação, memória, docs); o loop segue vivo |
+| `signal_age_s` grande **e** `pid_alive: false` | o processo dono morreu; o reaper vai cancelar |
+| `pid_alive: true` com sinal antigo | processo vivo e loop parado — caso raro, vale `task logs` |
+
+Para acompanhar ao vivo, `orchestrator run` já imprime cada batida no stderr:
+
+```
+[loop_progress] EXECUTING há 412s — codex/executor no ar (pid=50764)
+[loop_progress] CONSOLIDATING há 12s — entre etapas, nenhum agente no ar (última: claude/validator)
+```
+
+> **O reaper ignora essa batida de propósito.** Ela nasce de uma thread do
+> processo dono e continuaria batendo com o loop travado num lock — contá-la como
+> progresso trocaria a fila parada de 11 h do bug-090 por uma eterna. Ela prova
+> que o **processo** vive, não que o trabalho anda. Fase longa e legítima **sem
+> agente no ar** continua sujeita ao reaper como antes.
+
+---
+
+## 0.4.72 — Agente sai em 0 s com `exit=3221225794` e a reinstalação também falha
+
+**Sintoma:** `task logs` mostra o agente morrendo instantaneamente, sem escrever
+byte nenhum, e o reparo automático falhando com o mesmo código:
+
+```
+corrector/codex     exit=3221225794  0s  stdout=0  stderr=0
+agent_repair: codex: reinstalação falhou (exit=3221225794)  repair_ok: false
+```
+
+**Causa (bug-109):** `3221225794` é `0xC0000142` (**STATUS_DLL_INIT_FAILED**) — o
+processo não conseguiu nem inicializar. A máquina estava sem recurso para criar
+processos (memória, desktop heap, limite de handles). Como um processo que não
+nasce não imprime nada, o classificador caía na regra do fast-fail mudo e
+devolvia `install`, disparando uma reinstalação que **também não conseguia
+nascer**.
+
+O sinal decisivo é esse: **se o próprio reparo falha com o mesmo exit code, o
+problema não é o CLI.**
+
+**Comportamento (0.4.72):** categoria `launch`, avaliada antes de qualquer
+marcador. Não reinstala, e a degradação fala de máquina:
+
+```json
+{"kind": "agent_launch_failed",
+ "detail": "o processo não chegou a iniciar (exit=3221225794, papel corrector) — falta de recurso da máquina, não do CLI",
+ "action": "libere memória/processos na máquina (ou reinicie) e reexecute; não há o que instalar nem logar"}
+```
+
+**O que fazer:** feche o que estiver pesando na máquina (suítes de teste,
+builds, muitos agentes em paralelo) e reexecute. Se acontecer com a máquina
+ociosa, é sinal de esgotamento real de recurso do sistema — vale olhar memória
+livre e limites de processo.
+
+> **Escopo estreito.** Só a família de falta de recurso
+> (`0xC0000142`, `0xC0000017`, `0xC000012D`, `0xC0000018`) conta como `launch`.
+> Access violation (`0xC0000005`) e stack overrun (`0xC0000409`) ficam de fora
+> de propósito: são crash de binário, onde reinstalar pode de fato resolver.
+
+---
+
 ## 0.4.71 — `orchestrator run` recusa `--prompt`
 
 **Sintoma:**

@@ -94,6 +94,56 @@ SERVICE_MARKERS: tuple[str, ...] = (
     "upstream connect error",
 )
 
+# bug-109 — o processo NÃO NASCEU. NTSTATUS de falha de criação/inicialização:
+# não há CLI a consertar nem credencial a renovar, a máquina não conseguiu
+# spawnar. Reinstalar é pior que inútil aqui — a reinstalação também não nasce.
+#
+# Medido no trustsafe (task 22a07ed7e2de, 09/08 14:47): `corrector/codex` e
+# `corrector/opencode` sairam `exit=3221225794` (0xC0000142
+# STATUS_DLL_INIT_FAILED) em 0s com ZERO byte nos dois streams. O classificador
+# caiu na regra do fast-fail mudo, devolveu `install`, e o auto-reparo tentou
+# reinstalar os dois — e **a própria reinstalação falhou com o mesmo código**
+# (`repair_ok: false, exit=3221225794`). Quatro lançamentos de processo falharam
+# em ~1 segundo: o sinal era da máquina, não do CLI.
+#
+# Escopo estreito de propósito: só códigos de FALTA DE RECURSO/inicialização.
+# Access violation (0xC0000005) e stack overrun (0xC0000409) ficam FORA — esses
+# são crash de binário, onde reinstalar pode de fato resolver.
+LAUNCH_FAILURE_EXIT_CODES: frozenset[int] = frozenset(
+    {
+        0xC0000142,  # STATUS_DLL_INIT_FAILED — DLL não inicializou
+        0xC0000017,  # STATUS_NO_MEMORY
+        0xC000012D,  # STATUS_COMMITMENT_LIMIT — sem memória virtual
+        0xC0000018,  # STATUS_CONFLICTING_ADDRESSES
+    }
+)
+
+# Duração acima da qual um NTSTATUS desses já não prova falha de lançamento:
+# processo que trabalhou por minutos e só então morreu é outra história.
+LAUNCH_FAILURE_MAX_S = 15.0
+
+
+def is_launch_failure(exit_code: object, *, duration_s: float, produced: bool) -> bool:
+    """Exit code de processo que nunca chegou a rodar (bug-109).
+
+    Exige as três coisas juntas: código da família de recurso, morte
+    praticamente imediata e nenhuma saída. Só o código não basta — o mesmo
+    NTSTATUS pode aparecer num processo que já tinha trabalhado.
+    """
+    try:
+        codigo = int(exit_code)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return False
+    # Windows reporta como unsigned; Python pode trazer o complemento negativo.
+    if codigo < 0:
+        codigo += 1 << 32
+    return (
+        codigo in LAUNCH_FAILURE_EXIT_CODES
+        and duration_s <= LAUNCH_FAILURE_MAX_S
+        and not produced
+    )
+
+
 # Comando de login por agente. Genérico quando o agente não é conhecido: um
 # palpite errado de comando é pior que dizer "veja a doc do CLI".
 _AUTH_HINTS: dict[str, str] = {
@@ -116,7 +166,7 @@ def auth_hint(agent_id: str) -> str:
 def classify_agent_failure(
     result: Any, *, fast_fail_s: float = 90.0
 ) -> str | None:
-    """``"install"``, ``"auth"``, ``"service"`` ou ``None`` (mérito/inconclusivo).
+    """``"install"``, ``"auth"``, ``"service"``, ``"launch"`` ou ``None``.
 
     Regras duras, todas pagas com sangue:
 
@@ -145,6 +195,16 @@ def classify_agent_failure(
         return None
 
     blob = f"{getattr(result, 'stdout', '') or ''}\n{getattr(result, 'stderr', '') or ''}".lower()
+
+    # bug-109 — antes de qualquer marcador: se o processo NÃO NASCEU, nada do
+    # que está (ou não está) na saída diagnostica o CLI. Vem primeiro porque a
+    # ausência de saída é justamente o que empurrava isto para `install`.
+    if is_launch_failure(
+        getattr(result, "exit_code", None),
+        duration_s=float(getattr(result, "duration_s", 0.0) or 0.0),
+        produced=bool(blob.strip()),
+    ):
+        return "launch"
     # bug-097 — só confia em marcador quando a saída é pequena o bastante para
     # SER um diagnóstico. Saída grande é conteúdo produzido por um CLI que rodou.
     if len(blob) <= EVIDENCE_CAP_BYTES:

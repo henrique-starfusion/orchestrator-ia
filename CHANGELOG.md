@@ -2,6 +2,88 @@
 
 ## Unreleased
 
+## 0.4.73 - 2026-08-10
+
+Pedido do dono depois de três investigações manuais para concluir "não travou":
+*"quero poder saber o que está ocorrendo, acompanhar o processamento do agente"*.
+
+### Added
+
+- **Heartbeat do loop** (`loop_progress`). O `agent_progress` da 0.4.28 só existe
+  enquanto um CLI está no ar. Nos vãos — escolha de agentes, consolidação,
+  gravação de memória, gate de documentação, a troca de uma etapa para a seguinte
+  — **nada** era emitido, e `updated_at` só muda em transição de estado. Quem
+  olhava `task status` nesses vãos via a mesma linha por minutos, sem como
+  distinguir fase legítima de processo morto: printbee `8e4329205f01` e trustsafe
+  `e89063f15776` pareceram travadas enquanto trabalhavam, e a resposta exigiu ler
+  o log inteiro e conferir o PID à mão. Agora uma thread daemon bate durante toda
+  a execução com `phase`, `phase_elapsed_s`, `elapsed_s`, `iteration`, `pid` e
+  `agent_active` — e diz **quem** está no ar (ou quem acabou de sair)
+- Bloco `live` no `status` (e no `orchestrator_status`): sinal usado, idade do
+  sinal, fase, idade da fase, se há agente no ar e se o **PID dono está vivo**.
+  `task status --text` imprime a linha `[VIVO] ...`
+- `TaskRepository.last_event()`, com filtro por tipo — o `status` é o evento mais
+  frequente da frota e não pode ler a task inteira para olhar o último sinal
+- Features de diagnóstico: `loop_heartbeat_between_agents`,
+  `status_answers_is_it_alive`
+
+### Changed
+
+- Cadência do heartbeat do loop = a do perfil do chamador (20 s bloqueante, 30 s
+  polling), com piso de 10 s (`LOOP_HEARTBEAT_MIN_S`)
+
+### Known
+
+- **O reaper ignora `loop_progress` de propósito.** A batida nasce de uma thread
+  do processo dono e continuaria batendo com o loop travado num lock — contá-la
+  como progresso trocaria a fila parada de 11 h do bug-090 por uma eterna. Ela
+  prova que o **processo** vive, não que o trabalho anda. A decisão do reaper
+  fica exatamente como estava na 0.4.72
+- Corolário: uma fase longa e legítima **sem agente no ar** continua sujeita ao
+  reaper como antes. O ganho aqui é o dono ver o que está acontecendo, não o
+  runtime tolerar mais silêncio
+- `_current_agent` guarda a última etapa despachada, não a etapa ativa: quando
+  nenhum agente está no ar a batida diz "entre etapas (última: X)". Distinguir
+  isso de "X ainda rodando" vem de `agent_active`, que lê os PIDs vivos do
+  executor
+
+## 0.4.72 - 2026-08-10
+
+Achado observando a frota rodando, não lendo código.
+
+### Fixed
+
+- **bug-109** — processo que **não nasceu** era tratado como CLI quebrado. No
+  trustsafe (task `22a07ed7e2de`) `corrector/codex` e `corrector/opencode`
+  saíram `exit=3221225794` (`0xC0000142` STATUS_DLL_INIT_FAILED) em **0 s** com
+  zero byte nos dois streams. Sem saída nenhuma, o classificador caiu na regra
+  do fast-fail mudo e devolveu `install`; o auto-reparo tentou reinstalar os dois
+  — e **a própria reinstalação falhou com o mesmo exit code**
+  (`repair_ok: false`). Quatro lançamentos de processo falharam em ~1 s: o sinal
+  era da máquina, não do CLI. Quarta categoria `launch`, avaliada **antes de
+  qualquer marcador** (é justamente a ausência de saída que empurrava isto para
+  `install`), exigindo as três condições juntas: NTSTATUS da família de falta de
+  recurso, morte em ≤ 15 s e nenhuma saída. Não reinstala e sobe como degradação
+  `agent_launch_failed`, cuja ação fala de **máquina**, não de CLI
+- Feature de diagnóstico: `launch_failure_not_reinstall`
+
+### Changed
+
+- `failure_kind` do evento `agent_repair` ganha um quarto valor, `launch`, agora
+  acompanhado de `exit_code`
+- `service_outages()` e a nova `launch_failures()` passam a compartilhar
+  `_repair_events_by_kind()`; ambas devolvem também `exit_code`
+
+### Known
+
+- Escopo estreito de propósito: access violation (`0xC0000005`) e stack overrun
+  (`0xC0000409`) ficam **fora** de `LAUNCH_FAILURE_EXIT_CODES` — aqueles são
+  crash de binário, onde reinstalar pode de fato resolver
+- A exaustão de recurso observada foi provavelmente causada pela carga da própria
+  sessão (suítes completas + propagação + monitor em paralelo). A classificação
+  está errada independentemente da causa, mas o episódio **não** é evidência de
+  que a frota sofra disso em operação normal
+
 ## 0.4.71 - 2026-08-10
 
 Auditoria das tasks `COMPLETED` da frota. O modo de falha mais documentado de
