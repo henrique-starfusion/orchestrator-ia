@@ -526,6 +526,20 @@ remédios são opostos:
 Sem a terceira, erro de servidor caía em `install` e o runtime reinstalava um
 CLI intacto — 300 s por ocorrência, para o agente falhar igual em seguida.
 
+### Nenhum score é inventado (0.4.71+)
+
+O executor pode encerrar uma tarefa declarando que a **premissa está incorreta**
+— o arquivo não existe, o bug já foi corrigido, o campo já está lá. É um
+resultado legítimo: não há o que entregar. Mas é o executor julgando o próprio
+trabalho, então três regras valem:
+
+- o score fica **nulo**, nunca `1.0`. Ninguém validou nada, e um número
+  inventado contamina relatório, learnings e métricas de estratégia;
+- a alegação **não apaga** uma rejeição já gravada. Depois de um veredito
+  negativo em disco, a task encerra `INCOMPLETE` com os dois fatos;
+- o resultado sempre traz `premise_declared_unverified`, dizendo que nada foi
+  entregue e que ninguém julgou a alegação.
+
 ### O teto da task cabe o trabalho (0.4.70+)
 
 `maximum_duration_seconds` tem **piso derivado** dos tetos por papel: ele nunca

@@ -63,6 +63,38 @@ Override de testes: `ORCHESTRATOR_PROJECTS_REGISTRY`.
 
 ---
 
+## 0.4.71 — Task COMPLETED com score 1.0 e nada entregue
+
+**Sintoma:** `task status` mostra `COMPLETED` com `score=1.0`, mas nenhum arquivo
+mudou. Em alguns casos o `task logs` tem uma validação **rejeitada** antes disso,
+e `validation_rounds` guarda `rejected score=0.1`.
+
+**Causa (bug-107):** a task encerrou pelo outcome `premise_mismatch` — o executor
+declarou que a premissa estava incorreta. O outcome é legítimo, mas o runtime
+gravava `last_score = 1.0` e `success=True` **sem validator nenhum**, e honrava a
+alegação mesmo depois de uma rejeição registrada. Dá para reconhecer pela
+transição:
+
+```
+EXECUTING -> COMPLETED   reason: premise_mismatch
+```
+
+**Comportamento (0.4.71):**
+
+| situação | resultado |
+|---|---|
+| alegação na 1ª passada | `COMPLETED`, `last_score = null`, degradação `premise_declared_unverified` |
+| alegação após rejeição gravada | `INCOMPLETE`, motivo `premise_mismatch_after_rejection` |
+
+Para saber se a task entregou algo, leia as `degradations` — não o status
+sozinho. `premise_declared_unverified` significa **nada foi entregue**.
+
+> **Limitação conhecida.** O caminho legítimo continua marcado `COMPLETED`, que
+> em `task list` é indistinguível de entrega. Um estado terminal próprio mexeria
+> na state machine e em todos os clientes.
+
+---
+
 ## 0.4.70 — Agente é reinstalado toda vez e continua falhando igual
 
 **Sintoma:** `task logs` mostra `agent_repair` com

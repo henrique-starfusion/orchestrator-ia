@@ -89,7 +89,12 @@ def test_premise_mismatch_completa_sem_gates_e_persiste_sucesso(project) -> None
 
     assert done.status == TaskState.COMPLETED
     assert done.iteration == 1
-    assert done.last_score == 1.0
+    # CONTRATO MUDADO em 0.4.71 (bug-107): era `== 1.0`. Ninguém validou nada
+    # neste caminho — o 1.0 era fabricado, chegava ao dono e entrava em
+    # `strategy_performance` como sucesso perfeito. O campo é nullable e serve
+    # só para relatório: nulo é a informação honesta.
+    assert done.last_score is None
+    assert done.analysis["premise_verified"] is False
     assert done.analysis["premise_mismatch"] == (
         "o campo external_id já existe no HEAD com teste"
     )

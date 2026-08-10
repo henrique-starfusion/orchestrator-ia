@@ -2,6 +2,65 @@
 
 ## Unreleased
 
+## 0.4.71 - 2026-08-10
+
+Auditoria das tasks `COMPLETED` da frota. O modo de falha mais documentado de
+agente de código é **declarar sucesso independente do que aconteceu** — e o
+runtime tinha um caminho que fazia exatamente isso.
+
+### Fixed
+
+- **bug-108** — `orchestrator run` estava **quebrado em toda a frota** desde a
+  0.4.66. O helper `_drain_queue` (bug-098) foi inserido logo abaixo do
+  `@app.command("run")` e **engoliu o decorator**: o typer registrou o helper
+  como o comando `run` e o `run_cmd` real ficou órfão. O sintoma era
+  `Usage: run [OPTIONS] {service} {json_out}` / `No such option: --prompt`.
+  Duas releases saíram assim, e **nenhum dos 555 testes pegou** — a suíte
+  exercitava `TaskService` direto e nunca perguntava ao typer quais comandos
+  existem nem quais opções cada um aceita. O conserto que importa é
+  `test_0471_cli_commands_registered.py`, que faz essa pergunta (inclusive um
+  caso que falha se `service` voltar a aparecer como parâmetro do `run`)
+- **bug-107** — `premise_mismatch` **fabricava sucesso perfeito**. O executor
+  pode declarar que a premissa da tarefa está incorreta (0.4.53) e isso é um
+  outcome legítimo: não há o que entregar. Mas era o **executor declarando o
+  próprio resultado**, sem validator nenhum, com
+  `require_independent_validation` ligado em toda a frota — e o runtime gravava
+  `last_score = 1.0` e `_persist_episode(success=True)`. Dois danos medidos no
+  printbee:
+  1. o `1.0` era **inventado**. Chega ao dono (`task status`,
+     `orchestrator_result`, learnings) e entra em `strategy_performance`, cuja
+     tabela virou `19 runs / 19 successes / 0 failures / avg_score 0.9968` num
+     projeto com 4 `CANCELLED` e 1 `FAILED`;
+  2. a alegação era honrada **depois de uma rejeição gravada** — a
+     `efeaee6fd306` fechou `COMPLETED score=1.0` com `rejected score=0.1` e
+     issues bloqueantes em disco. O escape hatch **lavava** o veredito.
+
+  Agora o score fica **nulo** (o campo é nullable e serve só para relatório —
+  inventar 1.0 é pior que não ter), alegação que contradiz rejeição gravada
+  encerra em `INCOMPLETE` com os dois fatos no `error`, e o caminho legítimo
+  sobe a degradação `premise_declared_unverified` dizendo que **nada foi
+  entregue** e que ninguém julgou. Três `COMPLETED` do printbee eram este
+  caminho: `efeaee6fd306`, `d9f8383c7760`, `06d74af53ee0`
+- Features de diagnóstico: `premise_score_not_fabricated`,
+  `premise_never_overrides_rejection`
+
+### Changed
+
+- **Contrato**: no caminho `premise_mismatch`, `last_score` era `1.0` e agora é
+  `None`. Cliente que assume score numérico em task `COMPLETED` precisa tratar
+  nulo. `analysis.premise_verified` (`false`) passa a acompanhar
+  `analysis.premise_mismatch`
+
+### Known
+
+- `strategy_performance` é **write-only** — nenhum módulo a lê. Nenhuma decisão
+  de roteamento foi corrompida pelo score fabricado, mas a tabela ainda carrega
+  os números inflados das execuções anteriores à 0.4.71
+- O caminho legítimo continua fechando como `COMPLETED`, que para quem varre
+  `task list` é indistinguível de entrega. Um estado terminal próprio
+  (`DECLINED`/`NOT_APPLICABLE`) é decisão do dono: mexe na state machine e nos
+  clientes
+
 ## 0.4.70 - 2026-08-09
 
 ### Fixed

@@ -119,6 +119,10 @@ FEATURES: tuple[str, ...] = (
     "validation_skipped_not_failed",
     "reaper_names_the_clock",
     "provider_outage_not_reinstall",
+    # 0.4.71 — o outcome declarado pelo executor deixa de fabricar score
+    # perfeito, e não apaga mais uma rejeição já gravada
+    "premise_score_not_fabricated",
+    "premise_never_overrides_rejection",
 )
 
 

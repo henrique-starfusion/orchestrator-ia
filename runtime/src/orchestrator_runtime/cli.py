@@ -111,7 +111,6 @@ def agents_cmd(
             typer.echo(f"{item.get('id')}\t{status}\t{item.get('kind')}")
 
 
-@app.command("run")
 def _drain_queue(service, *, json_out: bool) -> None:
     """Espera as tasks que este processo tirou da fila (bug-098).
 
@@ -128,6 +127,7 @@ def _drain_queue(service, *, json_out: bool) -> None:
         typer.echo(f"[fila] {pendentes} task(s) desenfileirada(s) executada(s)")
 
 
+@app.command("run")
 def run_cmd(
     prompt: str = typer.Option(..., "--prompt", help="Atividade a executar"),
     project: Optional[Path] = typer.Option(None, "--project", help="Caminho do projeto"),

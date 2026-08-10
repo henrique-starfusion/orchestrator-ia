@@ -787,6 +787,25 @@ class TaskService:
                 }
             )
 
+        premissa = self._premise_note(task_id)
+        if premissa:
+            registro.append(
+                {
+                    "kind": "premise_declared_unverified",
+                    "impact": (
+                        "a task encerrou pela alegação do EXECUTOR, sem validator"
+                    ),
+                    "detail": (
+                        "nada foi entregue: o executor declarou que a premissa da "
+                        f"tarefa está incorreta — {premissa['premise_mismatch'][:200]}"
+                    ),
+                    "action": (
+                        "confira a alegação; se a premissa estava certa, reexecute "
+                        "com o contexto que falta"
+                    ),
+                }
+            )
+
         plano = self._plan_note(task_id)
         if plano.get("plan_refined") is False:
             registro.append(
@@ -798,6 +817,27 @@ class TaskService:
                 }
             )
         return registro
+
+    def _prior_rejection(self, task_id: str) -> dict[str, Any] | None:
+        """Última validação gravada, se ela REJEITOU (bug-107)."""
+        try:
+            last = self.repo.last_validation_round(task_id)
+        except Exception:  # noqa: BLE001
+            return None
+        if not last:
+            return None
+        return last if str(last.get("status")) == "rejected" else None
+
+    def _premise_note(self, task_id: str) -> dict[str, Any]:
+        """Outcome declarado pelo executor, sem juiz (bug-107)."""
+        try:
+            analysis = self.get(task_id).analysis or {}
+        except Exception:  # noqa: BLE001
+            return {}
+        alegacao = analysis.get("premise_mismatch")
+        if not alegacao or analysis.get("premise_verified"):
+            return {}
+        return {"premise_mismatch": str(alegacao)}
 
     def service_outages(self, task_id: str) -> list[dict[str, str]]:
         """Agentes que pararam porque o serviço do provedor caiu (bug-106).
@@ -1577,11 +1617,61 @@ class TaskService:
             if premise_mismatch:
                 # Outcome terminal honrado: não há mudança, teste ou documentação
                 # a exigir quando a própria premissa da tarefa está incorreta.
+                #
+                # bug-107 — mas é o EXECUTOR declarando o próprio resultado, sem
+                # validator nenhum, com `require_independent_validation` ligado
+                # em toda a frota. Duas coisas estavam erradas aqui:
+                #
+                # 1. `last_score = 1.0` era FABRICADO. Ninguém validou nada, e
+                #    esse número chega ao dono (`task status`, `orchestrator_result`)
+                #    e entra em `strategy_performance` como sucesso perfeito. No
+                #    printbee a tabela virou `19 runs / 19 successes / avg 0.997`
+                #    num projeto com 4 CANCELLED e 1 FAILED.
+                # 2. Depois de uma REJEIÇÃO gravada, honrar a alegação lavava o
+                #    veredito: a `efeaee6fd306` fechou COMPLETED score=1.0 com
+                #    `rejected score=0.1` e issues bloqueantes em disco.
+                #
+                # Agora: score fica NULO (o campo é nullable e só serve para
+                # relatório — inventar 1.0 é pior que não ter), e alegação que
+                # contradiz rejeição gravada NÃO fecha como sucesso.
+                rejeicao = self._prior_rejection(task.id)
                 analysis_d = dict(task.analysis or {})
                 analysis_d["premise_mismatch"] = premise_mismatch
+                analysis_d["premise_verified"] = False
                 task.analysis = analysis_d
-                task.last_score = 1.0
+                task.last_score = None
                 self.repo.save(task)
+                if rejeicao:
+                    motivo = (
+                        f"executor alegou premissa incorreta DEPOIS de validação "
+                        f"rejeitada (score={rejeicao.get('score')}): a alegação "
+                        f"contradiz o veredito em disco e não fecha como sucesso "
+                        f"— {premise_mismatch[:200]}"
+                    )
+                    self.repo.transition(
+                        task,
+                        TaskState.INCOMPLETE,
+                        reason="premise_mismatch_after_rejection",
+                        agent=plan_roles.executor,
+                        error=motivo,
+                    )
+                    self.bus.emit(
+                        RuntimeEvent(
+                            task_id=task.id,
+                            type=EventType.TASK_INCOMPLETE,
+                            role=role,
+                            agent=plan_roles.executor,
+                            data={
+                                "reason": "premise_mismatch_after_rejection",
+                                "summary": motivo,
+                            },
+                        )
+                    )
+                    self._persist_episode(
+                        task, success=False, strategy=plan_roles.strategy
+                    )
+                    self._export_memory_markdown(task)
+                    return task
                 self.repo.transition(
                     task,
                     TaskState.COMPLETED,
