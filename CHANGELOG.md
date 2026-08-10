@@ -2,6 +2,58 @@
 
 ## Unreleased
 
+## 0.4.76 - 2026-08-10
+
+Dois defeitos de runtime confirmados em produção na 0.4.75 — os dois matavam a
+task com um texto que **parece mérito** e era infra.
+
+### Fixed
+
+- **bug-110 — retomar uma task órfã deixa de matá-la.** No printbee (task
+  `e9803cf77a43`, 10/08 19:50) o processo dono morreu com a task em `VALIDATING`;
+  o resume terminou `FAILED` com
+  `Transição inválida: VALIDATING -> RETRIEVING_MEMORY`. `can_resume` aceita
+  qualquer estado não-terminal, mas o loop só transicionava para `ANALYZING`
+  vindo de `RECEIVED`/`WAITING_FOR_USER` — retomando do meio ele pulava a
+  re-entrada, seguia o fluxo e batia numa aresta que não existe. Agora retomar de
+  **qualquer** estado de meio de pipeline (`RETRIEVING_MEMORY`, `PLANNING`,
+  `SELECTING_AGENTS`, `EXECUTING`, `TESTING`, `VALIDATING`, `CORRECTING`,
+  `UPDATING_DOCUMENTATION`, `CONSOLIDATING`) **reinicia** o pipeline pelo
+  `ANALYZING`. Quem estava no meio não tem agente vivo para continuar de onde
+  parou — recomeçar é a única retomada honesta
+- **bug-111 — falha de lançamento de processo para de queimar iteração.** No
+  trustsafe, 5 tasks morreram `INCOMPLETE` em 10/08 (`86b3abcb5cfa`,
+  `517010995d91`, `22a07ed7e2de`, `c0e98dde9f27`, `e89063f15776`) com
+  `AGENT-FAILED-NO-OUTPUT: corrector/codex exit=3221225794 sem mudancas` — e uma
+  com `opencode`, **mesmo exit code**. `3221225794` = `0xC0000142`
+  (STATUS_DLL_INIT_FAILED): o processo **não nasceu**, com ~132 processos `node`
+  vivos na máquina. Desde a 0.4.72 isso já era classificado como `launch`, mas o
+  serviço só emitia o evento e devolvia a mesma falha: ela caía no guard
+  `failed_no_output`, **queimava uma iteração** e disparava fallback para outro
+  agente — que também não nascia, porque a falta de recurso era da **máquina**.
+  `same_issue_repeat_limit` estourava e a task morria sem nenhum julgamento de
+  mérito. Agora falha de lançamento **espera e reexecuta o MESMO agente** com
+  backoff (3 s, 8 s, 15 s), respeitando o orçamento restante da task
+
+### Changed
+
+- Cada tentativa de reexecução emite `AGENT_REPAIR` com `retry_attempt`,
+  `backoff_s` e o desfecho (`retry_ok`, `retry_exhausted` ou
+  `retry_skipped: budget`) — aparece em `task logs`, que é onde se investiga
+  depois que o processo morreu
+
+### Known
+
+- **Nada é reinstalado** no caminho de lançamento, de propósito: a reinstalação
+  já foi medida falhando com o **mesmo** exit code. Se o próprio reparo não
+  nasce, insistir é desperdício certo
+- Esgotadas as três tentativas, o resultado devolvido continua sendo a falha —
+  **infra, nunca mérito**. A task ainda termina `INCOMPLETE`, mas dizendo que foi
+  a máquina
+- Estado terminal segue **imutável**: `COMPLETED`/`INCOMPLETE`/`FAILED`/
+  `CANCELLED` continuam com conjunto de saída vazio. A re-entrada nova é só do
+  meio do pipeline para `ANALYZING`
+
 ## 0.4.75 - 2026-08-10
 
 Pedido do dono: *"precisamos padronizar para as coisas não serem inventadas e sim

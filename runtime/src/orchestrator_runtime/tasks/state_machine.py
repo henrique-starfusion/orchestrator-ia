@@ -74,6 +74,8 @@ ALLOWED_TRANSITIONS: dict[TaskState, set[TaskState]] = {
         TaskState.FAILED,
         TaskState.INCOMPLETE,
     },
+    # As arestas de RE-ENTRADA para ANALYZING são adicionadas logo abaixo, uma
+    # para cada estado de meio de pipeline (bug-110).
     TaskState.EXECUTING: {
         # Premissa factual incorreta encerra com sucesso sem gates artificiais.
         TaskState.COMPLETED,
@@ -131,6 +133,39 @@ ALLOWED_TRANSITIONS: dict[TaskState, set[TaskState]] = {
     TaskState.FAILED: set(),
     TaskState.CANCELLED: set(),
 }
+
+# bug-110 — task ÓRFÃ retomada reinicia o pipeline pelo ANALYZING.
+#
+# Medido no printbee (task e9803cf77a43, 10/08 19:50): o processo dono morreu
+# com a task em VALIDATING; `can_resume` aceita qualquer estado não-terminal,
+# então o resume entrou, mas o loop só transicionava para ANALYZING vindo de
+# RECEIVED/WAITING_FOR_USER. Pulou a re-entrada, seguiu o fluxo e bateu em
+# `VALIDATING -> RETRIEVING_MEMORY`, aresta que não existe:
+#
+#     status=FAILED  error='Transição inválida: VALIDATING -> RETRIEVING_MEMORY'
+#
+# Texto que parece mérito e é infra. Retomar de qualquer ponto do meio tem que
+# REINICIAR pelo começo — quem estava no meio não tem contexto de agente vivo
+# para continuar de onde parou.
+MID_PIPELINE_STATES: frozenset[TaskState] = frozenset(
+    {
+        TaskState.RETRIEVING_MEMORY,
+        TaskState.PLANNING,
+        TaskState.SELECTING_AGENTS,
+        TaskState.EXECUTING,
+        TaskState.TESTING,
+        TaskState.VALIDATING,
+        TaskState.CORRECTING,
+        TaskState.UPDATING_DOCUMENTATION,
+        TaskState.CONSOLIDATING,
+    }
+)
+
+for _mid in MID_PIPELINE_STATES:
+    # Só esta aresta. As demais continuam exatamente como estavam, e estado
+    # terminal segue com o conjunto VAZIO — daqui não sai nada.
+    ALLOWED_TRANSITIONS[_mid].add(TaskState.ANALYZING)
+del _mid
 
 
 def assert_transition(current: TaskState, new: TaskState) -> None:

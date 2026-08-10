@@ -120,6 +120,61 @@ Para acompanhar ao vivo, `orchestrator run` já imprime cada batida no stderr:
 
 ---
 
+## 0.4.76 — Task retomada morre com `Transição inválida: <estado> -> RETRIEVING_MEMORY`
+
+**Sintoma:** uma task que ficou parada (o processo dono morreu) é retomada e
+termina na hora:
+
+```
+status=FAILED  error='Transição inválida: VALIDATING -> RETRIEVING_MEMORY'
+```
+
+**Causa (bug-110):** `can_resume` aceita qualquer estado não-terminal, então o
+resume entrava — mas `_execute_loop` só transicionava para `ANALYZING` vindo de
+`RECEIVED` ou `WAITING_FOR_USER`. Retomando do meio do pipeline ele pulava a
+re-entrada, seguia o fluxo e batia no `transition(RETRIEVING_MEMORY)` partindo de
+`VALIDATING` — aresta que não existe.
+
+**Comportamento (0.4.76):** retomar de qualquer estado de meio de pipeline
+reinicia pelo `ANALYZING`, com `restart after orphan (VALIDATING)` no histórico.
+
+**O que fazer:** `orchestrator task resume <id>`. Se a task foi de fato
+abandonada, `task status --text` mostra a linha `[VIVO]` com a idade do sinal e
+se o PID dono ainda existe.
+
+---
+
+## 0.4.76 — Task morre `INCOMPLETE` com `AGENT-FAILED-NO-OUTPUT ... exit=3221225794`
+
+**Sintoma:** várias tasks seguidas terminam `INCOMPLETE` sem julgamento nenhum do
+trabalho, todas com o mesmo texto e o mesmo exit code — trocando de agente ou não:
+
+```
+error='AGENT-FAILED-NO-OUTPUT: corrector/codex exit=3221225794 sem mudancas'
+error='AGENT-FAILED-NO-OUTPUT: corrector/opencode exit=3221225794 sem mudancas'
+```
+
+**Causa (bug-111):** o processo não nasceu (ver `0.4.72` abaixo). A classificação
+`launch` existia desde a 0.4.72, mas o serviço só emitia o evento e devolvia a
+mesma falha: ela caía no guard `failed_no_output`, **queimava uma iteração** e
+disparava fallback para outro agente — que também não nascia, porque a falta de
+recurso é da **máquina**. `same_issue_repeat_limit` estourava e a task morria.
+
+**Comportamento (0.4.76):** falha de lançamento espera e reexecuta o **mesmo**
+agente, com backoff de 3 s, 8 s e 15 s, respeitando o orçamento restante da task
+e **sem reinstalar nada**. Cada tentativa aparece em `task logs`:
+
+```
+agent_repair: codex: tentativa 1 de 3 em 3s — mesmo agente, sem reinstalar
+agent_repair: codex: processo nasceu na tentativa 1
+```
+
+**O que fazer:** se as três tentativas se esgotam (`retry_exhausted`), a máquina
+está sem recurso de verdade — vale o mesmo remédio do `0.4.72`. O erro continua
+sendo infra, nunca mérito do trabalho.
+
+---
+
 ## 0.4.72 — Agente sai em 0 s com `exit=3221225794` e a reinstalação também falha
 
 **Sintoma:** `task logs` mostra o agente morrendo instantaneamente, sem escrever

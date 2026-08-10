@@ -71,6 +71,7 @@ from orchestrator_runtime.tasks.models import (
 )
 from orchestrator_runtime.tasks.repository import TaskRepository
 from orchestrator_runtime.tasks.state_machine import (
+    MID_PIPELINE_STATES,
     TERMINAL_STATES,
     TaskState,
     can_resume,
@@ -1767,12 +1768,25 @@ class TaskService:
             git_baseline=capture_baseline(self.config.project_path),
         )
 
-        # RECEIVED -> ANALYZING (WAITING_FOR_USER -> ANALYZING no resume)
+        # Toda entrada no loop começa em ANALYZING — inclusive o resume de uma
+        # task ÓRFÃ, parada no meio do pipeline porque o processo dono morreu.
+        #
+        # bug-110: até a 0.4.75 só RECEIVED e WAITING_FOR_USER transicionavam
+        # aqui. Retomar de VALIDATING pulava a re-entrada e batia adiante em
+        # `VALIDATING -> RETRIEVING_MEMORY` (task e9803cf77a43 do printbee).
+        # O motivo continua distinto por caso: quem lê `task logs` precisa
+        # saber se foi início, resposta de usuário ou recuperação de órfã.
         if task.status == TaskState.RECEIVED:
             self.repo.transition(task, TaskState.ANALYZING, reason="start analysis")
         elif task.status == TaskState.WAITING_FOR_USER:
             self.repo.transition(
                 task, TaskState.ANALYZING, reason="resume after user input"
+            )
+        elif task.status in MID_PIPELINE_STATES:
+            self.repo.transition(
+                task,
+                TaskState.ANALYZING,
+                reason=f"restart after orphan ({task.status.value})",
             )
         if task.error and (
             str(task.error).startswith("blocked_by_lock")
@@ -3599,6 +3613,101 @@ class TaskService:
         )
         return any(m in desc for m in markers)
 
+    # bug-111 — espera entre as reexecuções após falha de lançamento.
+    #
+    # Backoff crescente com teto pequeno (26s no total): a janela que o
+    # trustsafe mediu era de segundos — ~132 processos `node` vivos, e a
+    # próxima task já nascia. Esperar mais que isso seria queimar o orçamento
+    # da task por uma condição que ou passa rápido ou não passa.
+    _LAUNCH_RETRY_BACKOFF_S: tuple[float, ...] = (3.0, 8.0, 15.0)
+
+    async def _retry_launch_failure(
+        self,
+        adapter: Any,
+        request: AgentRequest,
+        result: AgentResult,
+        *,
+        task: TaskRecord,
+        agent_id: str,
+        report: Any,
+    ) -> AgentResult:
+        """Reexecuta o MESMO agente após falha de lançamento (bug-111).
+
+        0.4.76 — no trustsafe, 5 tasks morreram INCOMPLETE em 10/08 com
+        ``AGENT-FAILED-NO-OUTPUT: corrector/codex exit=3221225794 sem mudancas``
+        (0xC0000142 STATUS_DLL_INIT_FAILED). O ramo `launch` só emitia o evento
+        e devolvia a mesma falha: ela caía no guard `failed_no_output`, QUEIMAVA
+        uma iteração e disparava fallback para outro agente — que também não
+        nascia, porque a falta de recurso era da MÁQUINA. `same_issue_repeat_limit`
+        estourava e a task morria sem NENHUM julgamento de mérito.
+
+        Nada é reinstalado aqui de propósito: a reinstalação já foi medida
+        falhando com o mesmo exit code. Esgotadas as tentativas, o resultado
+        devolvido continua sendo o falho — infra, nunca mérito.
+        """
+        ultimo = result
+        for tentativa, espera in enumerate(self._LAUNCH_RETRY_BACKOFF_S, start=1):
+            restante = self._remaining_duration_s(task)
+            if restante <= espera + MIN_AGENT_TIMEOUT_S:
+                # Orçamento da task manda. Esperar aqui deixaria o agente sem
+                # tempo de trabalhar mesmo que ele nascesse.
+                report(
+                    failure_kind="launch",
+                    exit_code=ultimo.exit_code,
+                    retry_attempt=tentativa,
+                    retry_skipped="budget",
+                    remaining_s=restante,
+                    summary=(
+                        f"{agent_id}: sem orçamento para esperar o recurso "
+                        f"({restante}s restantes)"
+                    ),
+                )
+                break
+            report(
+                failure_kind="launch",
+                exit_code=ultimo.exit_code,
+                retry_attempt=tentativa,
+                backoff_s=espera,
+                summary=(
+                    f"{agent_id}: tentativa {tentativa} de "
+                    f"{len(self._LAUNCH_RETRY_BACKOFF_S)} em {espera:.0f}s — "
+                    f"mesmo agente, sem reinstalar"
+                ),
+            )
+            if espera > 0:
+                await asyncio.sleep(espera)
+            try:
+                ultimo = await adapter.run(request)
+            except Exception as exc:  # noqa: BLE001
+                # Reexecutar é conveniência; explodir aqui trocaria uma falha
+                # de agente por uma falha de runtime.
+                report(
+                    failure_kind="launch",
+                    retry_attempt=tentativa,
+                    retry_error=str(exc),
+                )
+                return ultimo
+            if classify_agent_failure(ultimo) != "launch":
+                report(
+                    failure_kind="launch",
+                    retry_attempt=tentativa,
+                    retry_ok=True,
+                    exit_code=ultimo.exit_code,
+                    summary=f"{agent_id}: processo nasceu na tentativa {tentativa}",
+                )
+                return ultimo
+        report(
+            failure_kind="launch",
+            exit_code=ultimo.exit_code,
+            retry_exhausted=True,
+            summary=(
+                f"{agent_id}: o processo não nasceu em nenhuma tentativa "
+                f"(exit={ultimo.exit_code}). Falta de recurso da máquina — "
+                f"infra, não mérito do trabalho"
+            ),
+        )
+        return ultimo
+
     async def _maybe_repair_and_retry(
         self,
         adapter: Any,
@@ -3635,19 +3744,27 @@ class TaskService:
             self.repo.add_event(event)
 
         if kind == "launch":
-            # bug-109 — o processo não nasceu (NTSTATUS de falta de recurso).
-            # Reinstalar não tem como funcionar: no trustsafe a própria
-            # reinstalação saiu com o MESMO exit code.
+            # bug-109/bug-111 — o processo não nasceu (NTSTATUS de falta de
+            # recurso). Reinstalar não tem como funcionar: no trustsafe a
+            # própria reinstalação saiu com o MESMO exit code. O remédio é
+            # ESPERAR o recurso voltar e tentar de novo o MESMO agente.
             _report(
                 failure_kind="launch",
                 exit_code=result.exit_code,
                 summary=(
                     f"{agent_id}: o processo não chegou a iniciar "
                     f"(exit={result.exit_code}). Falta de recurso da máquina — "
-                    f"reinstalar não resolve"
+                    f"reinstalar não resolve; esperando para tentar de novo"
                 ),
             )
-            return result
+            return await self._retry_launch_failure(
+                adapter,
+                request,
+                result,
+                task=task,
+                agent_id=agent_id,
+                report=_report,
+            )
         if kind == "service":
             # bug-106 — o servidor do provedor respondeu erro. Reinstalar é o
             # remédio errado e caro: nos `opencode` de 09/08 o reparo rodou

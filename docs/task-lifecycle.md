@@ -10,6 +10,30 @@ RECEIVED → ANALYZING → RETRIEVING_MEMORY → PLANNING → SELECTING_AGENTS
 
 Terminais: `COMPLETED`, `INCOMPLETE`, `FAILED`, `CANCELLED`, `WAITING_FOR_USER`.
 
+## Resume de task órfã (0.4.76+)
+
+`can_resume` aceita qualquer estado **não-terminal** — inclusive os do meio do
+pipeline, onde a task fica quando o processo dono morre. Retomar de qualquer um
+deles **reinicia** o pipeline pelo `ANALYZING`:
+
+```text
+RETRIEVING_MEMORY | PLANNING | SELECTING_AGENTS | EXECUTING | TESTING
+| VALIDATING | CORRECTING | UPDATING_DOCUMENTATION | CONSOLIDATING  →  ANALYZING
+```
+
+O motivo aparece no histórico como `restart after orphan (<estado>)`, distinto
+de `start analysis` (task nova) e `resume after user input` (voltou de
+`WAITING_FOR_USER`).
+
+Recomeçar, e não continuar de onde parou, é a única retomada honesta: quem estava
+no meio não tem sessão de agente viva para retomar.
+
+> **Estado terminal continua imutável.** `COMPLETED`, `INCOMPLETE`, `FAILED` e
+> `CANCELLED` têm conjunto de saída **vazio** — a re-entrada nova é só do meio do
+> pipeline. Até a 0.4.75 retomar de `VALIDATING` terminava
+> `FAILED: Transição inválida: VALIDATING -> RETRIEVING_MEMORY` (bug-110,
+> printbee `e9803cf77a43`).
+
 ## Completion
 
 COMPLETED somente se:
