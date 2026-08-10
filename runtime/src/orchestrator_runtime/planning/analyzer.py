@@ -187,6 +187,70 @@ _AUDIT_TASK_TYPES = frozenset(
     {"complex_analysis", "security_review", "architecture"}
 )
 
+_NON_CODE_TASK_TYPES = _AUDIT_TASK_TYPES | frozenset({"docs", "review"})
+_CODE_GATE_KINDS = frozenset(
+    {CriterionKind.WORKSPACE_CHANGES, CriterionKind.TESTS_PASS}
+)
+
+
+def _loop_is_compatible(loop: Any, task_type: str) -> bool:
+    """Loop de implementação não governa task classificada como não-código."""
+    return not (
+        task_type in _NON_CODE_TASK_TYPES and loop.task_type == "implementation"
+    )
+
+
+def _safe_loop_criteria(loop: Any, task_type: str) -> list[AcceptanceCriterion]:
+    """Remove gates determinísticos de código herdados por tasks não-código."""
+    criteria = loop.to_criteria()
+    if task_type not in _NON_CODE_TASK_TYPES:
+        return criteria
+
+    if not _loop_is_compatible(loop, task_type):
+        return [
+            AcceptanceCriterion(
+                id="AC-001",
+                description=(
+                    "Entregável solicitado apresentado com evidência verificável"
+                ),
+                kind=CriterionKind.EVIDENCE,
+                check=CriterionCheck(kind=CriterionKind.EVIDENCE, params={}),
+                required=True,
+            )
+        ]
+
+    safe: list[AcceptanceCriterion] = []
+    for criterion in criteria:
+        if criterion.kind not in _CODE_GATE_KINDS:
+            safe.append(criterion)
+            continue
+        if criterion.kind == CriterionKind.TESTS_PASS:
+            continue
+        criterion = criterion.model_copy(
+            update={
+                "kind": CriterionKind.EVIDENCE,
+                "check": CriterionCheck(
+                    kind=CriterionKind.EVIDENCE, params={}
+                ),
+            }
+        )
+        safe.append(criterion)
+    return safe
+
+
+def _criteria_are_raw_loop_criteria(
+    criteria: list[AcceptanceCriterion], loop: Any
+) -> bool:
+    """Reconhece critérios copiados do loop sem confundir ACs do usuário."""
+    raw = loop.to_criteria()
+    if len(criteria) != len(raw):
+        return False
+    return all(
+        (current.id, current.description, current.kind)
+        == (expected.id, expected.description, expected.kind)
+        for current, expected in zip(criteria, raw)
+    )
+
 # Qualquer citação a segurança — usada só para elevar o RISCO, nunca para
 # classificar a tarefa.
 _SECURITY_MENTION_RE = re.compile(
@@ -350,7 +414,7 @@ class CriteriaBuilder:
 
         loop = get_loop(getattr(analysis, "loop", None))
         if loop is not None:
-            return loop.to_criteria()
+            return _safe_loop_criteria(loop, analysis.task_type)
 
         criteria: list[AcceptanceCriterion] = []
         idx = 1
@@ -447,8 +511,14 @@ class Planner:
         self, task: TaskRecord, analysis: TaskAnalysis, roles: OrchestrationPlan
     ) -> dict:
         loop = get_loop(getattr(analysis, "loop", None))
+        plan_criteria = list(task.acceptance_criteria)
+        if (
+            loop is not None
+            and _criteria_are_raw_loop_criteria(plan_criteria, loop)
+        ):
+            plan_criteria = _safe_loop_criteria(loop, analysis.task_type)
         loop_block: dict = {}
-        if loop is not None:
+        if loop is not None and _loop_is_compatible(loop, analysis.task_type):
             loop_block = {
                 "loop": loop.id,
                 "loop_title": loop.title,
@@ -466,7 +536,7 @@ class Planner:
                 {"role": "documentation", "agent": "runtime", "action": "update_docs"},
             ],
             "acceptance_criteria": [
-                c.model_dump(mode="json") for c in task.acceptance_criteria
+                c.model_dump(mode="json") for c in plan_criteria
             ],
             "maximum_iterations": roles.maximum_iterations,
             "fallbacks": roles.fallbacks,

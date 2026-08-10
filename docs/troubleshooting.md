@@ -6,6 +6,32 @@ Quickstart: [`quickstart-oneliner.md`](quickstart-oneliner.md)
 
 ---
 
+## 0.4.77 — Revisão/documentação recebe critérios de correção de bug
+
+**Sintoma (até 0.4.76):** uma task de revisão independente ou documentação
+termina duas rodadas em `score=0.8`, repete `VAL-001` como `Causa raiz
+identificada e corrigida no código` ou `Alterações solicitadas ... presentes no
+workspace` e encerra por `same_issue_repeat_limit`, mesmo quando o relatório está
+correto. O plano mostra `analysis.task_type=docs|complex_analysis`, mas
+`plan.loop=bug` e critérios `workspace_changes`/`tests_pass`.
+
+**Causa:** `detect_loop()` contava o prompt cru. Frases como `NÃO é correção de
+bug` contavam como intenção positiva, e um review naturalmente cita `bug`,
+`erro` e `falha` para dizer o que procurar. A maior contagem bruta escolhia
+`bug`. Depois, o planner copiava os critérios do loop sem conferir se o tipo da
+task produzia código.
+
+**Comportamento (0.4.77):** cláusulas negadas deixam de pontuar; review só perde
+para bug quando existe verbo explícito de correção ligado ao defeito. Como
+defesa adicional, task não-código não recebe gates de alteração/testes de loop
+de código, e loop incompatível não é serializado no plano. Critérios declarados
+explicitamente pelo usuário continuam soberanos.
+
+`same_issue_repeat_limit` e `maximum_iterations` não precisam ser aumentados:
+eles apenas expunham a repetição do critério impossível.
+
+---
+
 ## Diagnóstico rápido
 
 ```bash

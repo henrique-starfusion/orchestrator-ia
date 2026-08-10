@@ -413,6 +413,15 @@ _CONDITIONAL_CLAUSE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# BUG C — negação não é intenção. Recorte deliberadamente estreito, paralelo à
+# regra condicional: remove só a cláusula iniciada por "não/nao/not" até o
+# próximo separador. Cobre "não é", "não se trata de", "this is not" e
+# meta-instruções como "não reescreva", sem tentar interpretar linguagem livre.
+_NEGATED_CLAUSE_RE = re.compile(
+    r"(?<![\w-])(?:n[aã]o|not)\b[^.!?;:\n—–]{0,160}",
+    re.IGNORECASE,
+)
+
 # bug-045 — 1 hit incidental num prompt longo (specs de 1500+ chars citando
 # "erros"/"mvp" de passagem) não define o roteiro da task inteira. Em prompt
 # curto, a palavra-chave É o assunto.
@@ -448,6 +457,7 @@ def detect_loop(prompt: str) -> str | None:
         return explicit.group(1)
 
     scan = _CONDITIONAL_CLAUSE_RE.sub(" ", text)
+    scan = _NEGATED_CLAUSE_RE.sub(" ", scan)
     scores: dict[str, int] = {}
     for loop_id, patterns in _KEYWORD_RES.items():
         hits = sum(1 for pat in patterns if pat.search(scan))
@@ -467,12 +477,12 @@ def detect_loop(prompt: str) -> str | None:
 
     # Um review pode repetir várias keywords do próprio roteiro. Quando há
     # intenção inequívoca de corrigir um defeito, o loop-bug ainda prevalece.
-    if (
-        "bug" in scores
-        and "review" in scores
-        and _BUG_FIX_INTENT_RE.search(scan)
-    ):
-        return "bug"
+    if "bug" in scores and "review" in scores:
+        if _BUG_FIX_INTENT_RE.search(scan):
+            return "bug"
+        # Revisão descreve bugs/erros/falhas que deve procurar. Sem verbo de
+        # correção ligado ao defeito, esse vocabulário não muda a intenção.
+        scores.pop("bug")
 
     # bug vence mvp: "corrigir o app" é defeito, não projeto novo.
     best = max(scores.values())

@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+## 0.4.77 - 2026-08-10
+
+Dez tasks de revisão/documentação morreram `INCOMPLETE` em produção porque
+vocabulário negado ou descritivo de defeito impôs o loop de bug e seus gates de
+código a entregas que não alteravam código.
+
+### Fixed
+
+- **bug-112 — detecção de loop respeita negação.** A pontuação ignora cláusulas
+  estreitas iniciadas por `não`/`nao`/`not`, incluindo `não é`, `não se trata
+  de`, `this is not` e `não reescreva`, no mesmo estágio que já ignora
+  condicionais desde o bug-045
+- **Review não vira bug por vocabulário adversarial.** Quando `review` e `bug`
+  coexistem, `bug` só prevalece com intenção explícita verbo+defeito, como
+  `corrigir os dois defeitos que a revisão apontou`; citar `erro` e `falha` no
+  que deve ser conferido preserva o loop `review`
+- **Rede de segurança loop×task type.** Tasks `docs`, `complex_analysis`,
+  `security_review`, `architecture` e `review` não recebem gates bloqueantes
+  `workspace_changes`/`tests_pass` herdados de loop de código. Loop incompatível
+  não entra no plano; o entregável real fica sob critério `evidence`. Critérios
+  declarados pelo usuário continuam com precedência
+
+### Unchanged
+
+- `same_issue_repeat_limit` e `maximum_iterations` não mudaram: encerravam a
+  repetição corretamente; o defeito era o critério impossível que se repetia
+
 ## 0.4.76 - 2026-08-10
 
 Dois defeitos de runtime confirmados em produção na 0.4.75 — os dois matavam a
