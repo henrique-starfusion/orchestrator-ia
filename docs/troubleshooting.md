@@ -63,6 +63,46 @@ Override de testes: `ORCHESTRATOR_PROJECTS_REGISTRY`.
 
 ---
 
+## 0.4.71 — `orchestrator run` recusa `--prompt`
+
+**Sintoma:**
+
+```
+$ orchestrator run --prompt "..."
+Usage: run [OPTIONS] {service} {json_out}
+Error: No such option: --prompt
+```
+
+**Causa (bug-108):** entre a 0.4.66 e a 0.4.70, o helper interno `_drain_queue`
+ficou logo abaixo do `@app.command("run")` e **engoliu o decorator**. O `typer`
+registrou o helper como o comando `run` — daí os parâmetros internos `service` e
+`json_out` no `Usage` — e o `run_cmd` real ficou órfão.
+
+**Correção:** atualizar para 0.4.71.
+
+**Como verificar** — e aqui há uma pegadinha. Não use `version --json`:
+
+```bash
+orchestrator run --help
+```
+
+Tem que aparecer `Usage: ... run [OPTIONS]` com `--prompt ... [required]`. Se
+aparecer `{service} {json_out}`, o processo ainda está com o módulo antigo.
+
+> **O `code_fingerprint` não cobre o CLI.** `_FINGERPRINT_FILES` lista os
+> arquivos que mudam o comportamento observável do **MCP** — `cli.py` não está
+> lá, de propósito: incluí-lo faria o MCP se declarar `modules_stale` a cada
+> mexida no CLI e o gate de `mcp_stale_run_reject` (0.4.24) passaria a recusar
+> execuções sem motivo. Então `sha256_16 == disk_sha256_16` **não** prova que o
+> CLI está atualizado. Para o MCP, `version --json` continua sendo a checagem
+> certa; para a superfície do CLI, é `--help`.
+
+**Depois de atualizar, recarregue o servidor MCP.** Um processo longo-lived
+mantém os módulos antigos em memória e segue se comportando como a versão velha,
+mesmo com o disco correto.
+
+---
+
 ## 0.4.71 — Task COMPLETED com score 1.0 e nada entregue
 
 **Sintoma:** `task status` mostra `COMPLETED` com `score=1.0`, mas nenhum arquivo

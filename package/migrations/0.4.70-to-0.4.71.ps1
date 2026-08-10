@@ -5,9 +5,14 @@
 #   `No such option: --prompt`. O helper `_drain_queue` engoliu o
 #   `@app.command("run")` e o comando real ficou orfao. Corrigido.
 #   APOS ESTE UPDATE: recarregue o servidor MCP (ou reinicie o cliente). Um MCP
-#   longo-lived mantem o modulo antigo em memoria e continua recusando o `run`.
-#   Confira com `orchestrator version --json` (compare `sha256_16` do CLI com o
-#   do MCP: diferentes = MCP stale).
+#   longo-lived mantem o modulo antigo em memoria e continua se comportando como
+#   a versao velha, mesmo com o disco correto.
+#   Confira o CLI com `orchestrator run --help` (tem que mostrar
+#   `--prompt ... [required]`, nao `{service} {json_out}`). NAO use
+#   `version --json` para isso: `cli.py` fica FORA de `_FINGERPRINT_FILES` de
+#   proposito — inclui-lo faria o MCP se declarar stale a cada mexida no CLI e o
+#   gate `mcp_stale_run_reject` recusaria execucoes sem motivo. Para o MCP,
+#   `version --json` continua sendo a checagem certa.
 # - bug-107: o outcome `premise_mismatch` (executor declara que a premissa da
 #   tarefa esta incorreta) FABRICAVA sucesso perfeito: `last_score = 1.0` e
 #   episodio com `success=True`, sem validator nenhum, com
