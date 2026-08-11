@@ -491,6 +491,7 @@ Divisão de responsabilidade:
 - Timeout por invocação de agente (não confundir com a duração da tarefa):
   - `agent_timeout_default_s`: **1800**
   - `agent_timeout_by_role`: planner **900**, executor/corrector **2400**, validator **1200**, tester **600**
+  - **Dois eixos por papel (0.4.79):** o número acima é o `run_timeout` (teto de relógio, nunca renovado por sinal). `executor` e `corrector` também declaram `idle_timeout` **1200** — tempo máximo sem progresso observável, renovado pelo sinal. Papel sem `idle_timeout` usa o `agent_no_output_timeout_s` global (**900**). Ver `docs/configuracao.md`
   - Cada CLI recebe `min(timeout_do_role, tempo_restante_da_tarefa)` (mínimo útil **60s**); abaixo disso a tarefa encerra com `maximum_duration_seconds`
   - O `TaskService` passa `timeout_s` no request; o profile `timeout_default_s` só é fallback se o request vier sem valor
 - Validação independente + determinística

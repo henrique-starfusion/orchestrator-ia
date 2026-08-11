@@ -50,15 +50,50 @@ Lido em `load_config` (`config.py:215`) e materializado em `RuntimeLimits`
 | Chave | Tipo | Default | Efeito de mudar | Onde é lido |
 |---|---|---|---|---|
 | `agent_timeout_default_s` | int | 1800 | Timeout de papel sem entrada específica | `config.py:243`; `execution/timeouts.py` via `_resolve_agent_timeout` |
-| `agent_timeout_by_role` | objeto | planner 900, executor 2400, corrector 2400, validator 1200, tester 600, skill_selector 120 | Teto por papel; merge com os defaults, valor inválido é ignorado. **Mexer aqui move o piso de `maximum_duration_seconds`** (0.4.70). `executor` e `corrector` não recebem o teto cheio quando o restante da task é curto: 600 s ficam reservados para o veredito | `config.py:226-233`; `execution/timeouts.py` |
+| `agent_timeout_by_role` | objeto | planner 900, executor `{run 2400, idle 1200}`, corrector `{run 2400, idle 1200}`, validator 1200, tester 600, skill_selector 120 | **Dois eixos por papel** (0.4.79) — ver abaixo. Merge com os defaults, valor inválido é ignorado. **Mexer no eixo duro move o piso de `maximum_duration_seconds`** (0.4.70). `executor` e `corrector` não recebem o teto cheio quando o restante da task é curto: 600 s ficam reservados para o veredito | `config.py`; `execution/timeouts.py` |
 | `agent_infra_fail_fast_count` | int | 3 | Quantos marcadores de falha de infra no stream matam o processo. 0 desliga | `config.py:266`; `agents/process.py:283-289` |
-| `agent_no_output_timeout_s` | int | 900 | Mata agente após esse tempo sem NENHUMA saída E sem tocar no workspace. 0 desliga | `config.py:272`; `agents/process.py:304-329` |
+| `agent_no_output_timeout_s` | int | 900 | Eixo ocioso **global**: mata agente após esse tempo sem NENHUMA saída E sem tocar no workspace. Vale para todo papel que não declara `idle_timeout` próprio. 0 desliga | `config.py`; `agents/process.py` |
 | `stale_received_ttl_hours` | int | 6 | Idade a partir da qual task `RECEIVED` órfã é auto-cancelada | `config.py:269`; `tasks/service.py:171-202` |
 | `orphan_received_adopt_after_s` | int | 120 | Espera antes de outro processo adotar uma `RECEIVED` sem dono. Curto demais rouba a task de quem acabou de criá-la | `config.py`; `_adopt_orphan_received` em `tasks/service.py` |
 | `orphan_queued_adopt_after_s` | int | 120 | Lease mínima antes de um poll adotar a cabeça `QUEUED` órfã. `0` desliga. Não ignora dono vivo, teto, escopo nem FIFO | `config.py`; `_adopt_orphan_queued` em `tasks/service.py` |
 | `stale_execution_grace_s` | int | 900 | Folga mínima antes de a task **não-terminal** (`PLANNING`/`EXECUTING`) sequer ser julgada: parada há menos que isso é ignorada, mesmo sem dono vivo no lock. Passada a folga, é cancelada quando `updated_at` excede `maximum_duration_seconds` + esta folga **ou** quando nenhum processo vivo segura o lock do workspace — nunca imediatamente por lock órfão. Sem isso, uma task presa barra a fila inteira. `0` desliga | `config.py:289-291`; `_cancel_stale_execution` em `tasks/service.py:237-297` |
 | `agent_auto_repair` | bool | true | Ao detectar CLI de agente quebrado, reinstala **uma vez por agente por processo** via `scripts/Update-Agents.ps1 -Only <agente>` e reexecuta o agente. `false` desliga o caminho inteiro: falha `install` volta como está, sem tentativa e **sem** evento `agent_repair` (o evento também não sai quando o agente já foi reparado neste processo). Falta de credencial nunca reinstala — sempre emite evento com o comando de login | `config.py:292`; `tasks/service.py:2640-2670` |
 | `agent_repair_timeout_s` | int | 300 | Teto do processo de reinstalação do CLI. Estourado, o reparo é abandonado e a task segue | `config.py:293`; `tasks/service.py:2651-2655`; `agents/repair.py` |
+
+#### Os dois eixos de `agent_timeout_by_role` (0.4.79)
+
+Até a 0.4.78 havia **um** número por papel, teto de relógio puro — e por isso um
+agente que morreu mudo no segundo 5 e um agente que produz saída sem parar
+morriam os dois no mesmo lugar: no teto. Cada papel aceita agora duas formas:
+
+```json
+"agent_timeout_by_role": {
+  "planner": 900,
+  "executor": { "run_timeout": 2400, "idle_timeout": 1200 }
+}
+```
+
+| Eixo | O que é | Renovado por sinal? |
+|---|---|---|
+| `run_timeout` | Teto de relógio da tentativa. Alimenta o `proc.wait` do CLI | **Nunca** |
+| `idle_timeout` | Tempo máximo sem progresso observável. Alimenta o watchdog de silêncio (bug-086) | Sim — byte lido no stream ou mudança no workspace |
+
+- **Inteiro puro** (formato antigo) = `run_timeout`, com `idle_timeout` **nulo**.
+- `idle_timeout` **nulo** ou `0` = o papel não tem eixo ocioso próprio e cai no
+  `agent_no_output_timeout_s` global. É exatamente o comportamento 0.4.78, e é o
+  que um `policies.json` não migrado continua fazendo (o merge do template é
+  aditivo e não reescreve papel já declarado).
+- Só o eixo **duro** entra no piso de `maximum_duration_seconds`: ociosidade não
+  gasta orçamento, apenas interrompe mais cedo quem parou de dar sinal.
+- Agente morto pelo eixo ocioso sobe como **infra** (`AGENT-NO-OUTPUT-HANG` →
+  `_reject_iteration_infra`), nunca como rejeição de mérito, e o erro diz
+  *sem sinal de vida (idle_timeout=Ns)*.
+- Escolher o número: **folgado**. O erro caro é matar quem estava trabalhando,
+  não demorar para enterrar quem morreu. O padrão de 1200 s em
+  `executor`/`corrector` é o global de 900 s medido em produção mais 300 s de
+  margem, porque são os papéis que passam trechos longos lendo sem imprimir.
+
+Ponto único de decisão: `execution/timeouts.resolve_agent_timeout_policy`.
 
 ### Paralelismo
 

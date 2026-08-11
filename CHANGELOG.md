@@ -2,6 +2,63 @@
 
 ## Unreleased
 
+## 0.4.79 - 2026-08-11
+
+Duas mudanças na mesma área — o controle de execução do agente —, ambas
+adotadas do LangGraph depois de ler o código (`libs/langgraph/langgraph/types.py`:
+`TimeoutPolicy` e `RetryPolicy`).
+
+O orçamento do agente era um número só por papel, teto de relógio puro: um
+agente que morreu mudo no segundo 5 e um agente que produz saída sem parar eram
+tratados igual. E o backoff do retry de lançamento tinha intervalos fixos, o que
+faz processos que falharam juntos voltarem juntos, contra o mesmo recurso
+escasso.
+
+### Fixed
+
+- **bug-114 — política de execução em DOIS EIXOS por papel.**
+  `agent_timeout_by_role` aceita agora `{"run_timeout": N, "idle_timeout": M}`
+  além do inteiro de sempre. `run_timeout` é o teto de relógio da tentativa e
+  **nunca** é renovado por sinal nenhum; `idle_timeout` é o tempo máximo sem
+  progresso observável, renovado pelo sinal que o runtime já emite (byte lido no
+  stream, ou mudança no workspace pela sonda). Ponto único de decisão em
+  `execution/timeouts.resolve_agent_timeout_policy`; o eixo duro alimenta o
+  `proc.wait` do CLI e o ocioso alimenta o watchdog de silêncio (bug-086)
+- Encerramento por ociosidade entra no fluxo de **infra** que já existia
+  (`AGENT-NO-OUTPUT-HANG` → `_reject_iteration_infra`), nunca como rejeição de
+  mérito, e o texto passa a dizer *sem sinal de vida (idle_timeout=Ns) … falta de
+  sinal — infra, não qualidade do trabalho*
+- **bug-115 — jitter no backoff do retry de lançamento.** `_LAUNCH_RETRY_BACKOFF_S`
+  continua `(3, 8, 15)`, mas a espera final é `base × (1 + 0,5 × sorteio)` — fica
+  em `[base, base×1,5)`, nunca encurta e nunca estica sem teto (26 s no total
+  viram no máximo 39 s). A fonte de aleatoriedade é injetável
+  (`_launch_retry_rand`) para o teste ser determinístico. A guarda de orçamento
+  compara contra a espera **já com jitter**: comparar contra a base e dormir o
+  sorteado furaria o `maximum_duration_seconds` da task
+
+### Changed
+
+- `policies.json` (template) passa a declarar `executor` e `corrector` com
+  `idle_timeout: 1200`. O número é folgado de propósito: a referência é o
+  `agent_no_output_timeout_s` global de 900 s (bug-086), o único valor desta
+  frota medido em produção sem matar trabalho legítimo, e estes são os dois
+  únicos papéis com teto duro de 2400 s que passam trechos longos lendo sem
+  imprimir. Enterrar um agente morto 300 s depois custa 12 % do teto dele; matar
+  um agente vivo custa a task inteira
+
+### Unchanged
+
+- **Retrocompatível.** Papel declarado como inteiro puro vira `run_timeout` com
+  `idle_timeout` nulo, e nulo cai no `agent_no_output_timeout_s` global —
+  comportamento idêntico ao da 0.4.78. O merge do template é aditivo, então
+  `policies.json` já existente não é reescrito
+- `minimum_task_budget_s` e a aritmética do bug-104 seguem derivados dos tetos
+  **duros**: o eixo ocioso não gasta orçamento, só interrompe mais cedo quem
+  parou de dar sinal
+- Nada mudou no laço de validação, em `same_issue_repeat_limit`, em
+  `maximum_iterations` nem na detecção de loop. Nenhum daemon, thread de poll
+  periódico ou processo de background novo
+
 ## 0.4.78 - 2026-08-10
 
 Uma task podia permanecer `QUEUED` para sempre quando o processo que a

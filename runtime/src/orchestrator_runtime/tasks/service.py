@@ -7,6 +7,7 @@ import copy
 import json
 import logging
 import os
+import random
 import re
 import threading
 import time
@@ -14,7 +15,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 _log = logging.getLogger(__name__)
 
@@ -57,7 +58,8 @@ from orchestrator_runtime.execution.worktrees import (
 )
 from orchestrator_runtime.execution.timeouts import (
     MIN_AGENT_TIMEOUT_S,
-    resolve_agent_timeout,
+    AgentTimeoutPolicy,
+    resolve_agent_timeout_policy,
 )
 from orchestrator_runtime.manager_model import build_manager
 from orchestrator_runtime.memory.database import dumps
@@ -3494,12 +3496,22 @@ class TaskService:
         budget_over = self._remaining_duration_s(task) <= self._BUDGET_FLOOR_S
         secs = f"{result.duration_s:.0f}s"
         if hung:
+            # 0.4.79 — o eixo OCIOSO do papel é que matou, não o teto duro nem a
+            # qualidade do trabalho: o texto tem que dizer FALTA DE SINAL, senão
+            # quem lê o `task logs` procura o defeito na entrega.
+            try:
+                idle = self._resolve_idle_timeout(role, task)
+            except Exception:  # noqa: BLE001
+                idle = 0
+            janela = f" (idle_timeout={idle}s)" if idle else ""
             return (
                 "AGENT-NO-OUTPUT-HANG",
-                f"{role}/{agent_id} pendurado: {secs} sem NENHUMA saída e sem "
-                "tocar no workspace; morto pelo watchdog antes de consumir o "
-                "orçamento da task",
-                f"AGENT-NO-OUTPUT-HANG: {role}/{agent_id} pendurado sem saída",
+                f"{role}/{agent_id} sem sinal de vida{janela}: {secs} sem "
+                "NENHUMA saída e sem tocar no workspace; morto pelo eixo ocioso "
+                "antes de consumir o teto duro da tentativa. Falta de sinal — "
+                "infra, não qualidade do trabalho",
+                f"AGENT-NO-OUTPUT-HANG: {role}/{agent_id} sem sinal de vida"
+                f"{janela}",
             )
         if budget_over:
             return (
@@ -3533,13 +3545,37 @@ class TaskService:
         elapsed = time.monotonic() - started
         return max(0, int(task.constraints.maximum_duration_seconds - elapsed))
 
-    def _resolve_agent_timeout(self, role: str, task: TaskRecord) -> int:
-        return resolve_agent_timeout(
+    def _resolve_agent_timeout_policy(
+        self, role: str, task: TaskRecord
+    ) -> AgentTimeoutPolicy:
+        """Orçamento da invocação nos DOIS eixos (0.4.79).
+
+        Ponto único de decisão: o eixo duro vai para ``AgentRequest.timeout_s``
+        (o `proc.wait` do CLI) e o eixo ocioso vai para o watchdog de silêncio
+        em ``_register_heartbeat``.
+        """
+        return resolve_agent_timeout_policy(
             role,
             remaining_s=self._remaining_duration_s(task),
             by_role=self.config.limits.agent_timeout_by_role,
+            idle_by_role=self.config.limits.agent_idle_timeout_by_role,
             default_s=self.config.limits.agent_timeout_default_s,
         )
+
+    def _resolve_agent_timeout(self, role: str, task: TaskRecord) -> int:
+        return self._resolve_agent_timeout_policy(role, task).run_timeout_s
+
+    def _resolve_idle_timeout(self, role: str, task: TaskRecord) -> int:
+        """Eixo ocioso efetivo do papel, em segundos (0 = desligado).
+
+        Papel sem eixo próprio cai no ``agent_no_output_timeout_s`` global —
+        é isso que preserva o comportamento 0.4.78 para quem não migrou o
+        `policies.json`.
+        """
+        idle = self._resolve_agent_timeout_policy(role, task).idle_timeout_s
+        if idle is None:
+            return int(self.config.limits.agent_no_output_timeout_s or 0)
+        return int(idle)
 
     # Marcadores de falha de infra do validator (sandbox Windows sem elevação).
     _VALIDATOR_INFRA_MARKERS = (
@@ -3720,6 +3756,35 @@ class TaskService:
     # da task por uma condição que ou passa rápido ou não passa.
     _LAUNCH_RETRY_BACKOFF_S: tuple[float, ...] = (3.0, 8.0, 15.0)
 
+    # 0.4.79 — JITTER. O modo de falha que este retry atende (0xC0000142
+    # STATUS_DLL_INIT_FAILED) é exaustão de recurso DA MÁQUINA, não do CLI:
+    # vários agentes falham no MESMO instante. No trustsafe, 10/08,
+    # corrector/codex e corrector/opencode saíram com o mesmo exit code e quatro
+    # lançamentos falharam em ~1s. Com intervalo FIXO todos esperam 3s, depois
+    # 8s, depois 15s — e colidem de novo, contra o mesmo recurso escasso. O
+    # backoff sozinho baixa a frequência; ele não quebra a SINCRONIA, que é a
+    # causa. (O `RetryPolicy` do LangGraph usa `jitter=True` por padrão pela
+    # mesma razão.)
+    #
+    # Multiplicativo e só para CIMA: a espera fica em [base, base*1.5). Nunca
+    # encurta — retentativa imediata é o oposto do remédio — e o teto continua
+    # conhecido: 3+8+15=26s viram no máximo 4,5+12+22,5=39s no pior caso.
+    _LAUNCH_RETRY_JITTER_RATIO: float = 0.5
+
+    # Fonte de aleatoriedade INJETÁVEL: teste determinístico troca por uma
+    # sequência conhecida no objeto (atributo de instância — atribuir na CLASSE
+    # uma função comum a transformaria em método ligado).
+    _launch_retry_rand: Callable[[], float] = staticmethod(random.random)
+
+    def _launch_backoff_s(self, base: float) -> float:
+        """Espera final da tentativa: base + jitter limitado, nunca menor."""
+        try:
+            sorteio = float(self._launch_retry_rand())
+        except Exception:  # noqa: BLE001
+            sorteio = 0.0  # sem sorteio, o backoff antigo — nunca uma exceção
+        sorteio = min(1.0, max(0.0, sorteio))
+        return float(base) * (1.0 + self._LAUNCH_RETRY_JITTER_RATIO * sorteio)
+
     async def _retry_launch_failure(
         self,
         adapter: Any,
@@ -3745,7 +3810,10 @@ class TaskService:
         devolvido continua sendo o falho — infra, nunca mérito.
         """
         ultimo = result
-        for tentativa, espera in enumerate(self._LAUNCH_RETRY_BACKOFF_S, start=1):
+        for tentativa, base in enumerate(self._LAUNCH_RETRY_BACKOFF_S, start=1):
+            # O jitter entra ANTES da guarda de orçamento: comparar o orçamento
+            # contra a base e dormir o valor sorteado furaria o teto da task.
+            espera = self._launch_backoff_s(base)
             restante = self._remaining_duration_s(task)
             if restante <= espera + MIN_AGENT_TIMEOUT_S:
                 # Orçamento da task manda. Esperar aqui deixaria o agente sem
@@ -3767,10 +3835,11 @@ class TaskService:
                 exit_code=ultimo.exit_code,
                 retry_attempt=tentativa,
                 backoff_s=espera,
+                backoff_base_s=base,
                 summary=(
                     f"{agent_id}: tentativa {tentativa} de "
-                    f"{len(self._LAUNCH_RETRY_BACKOFF_S)} em {espera:.0f}s — "
-                    f"mesmo agente, sem reinstalar"
+                    f"{len(self._LAUNCH_RETRY_BACKOFF_S)} em {espera:.1f}s "
+                    f"(base {base:.0f}s + jitter) — mesmo agente, sem reinstalar"
                 ),
             )
             if espera > 0:
@@ -4343,10 +4412,12 @@ class TaskService:
                 # Git indisponivel/lento: sem prova de morte, nao mata.
                 return True
 
+        # 0.4.79 — o eixo OCIOSO agora é por PAPEL. Até a 0.4.78 havia um número
+        # global para todo mundo: o mesmo silêncio que condena um `tester` de
+        # 600s condenava um `executor` de 2400s que só imprime no fim. Papel sem
+        # eixo próprio continua no global — nada muda para quem não migrou.
         try:
-            executor.no_output_timeout_s = (
-                self.config.limits.agent_no_output_timeout_s
-            )
+            executor.no_output_timeout_s = self._resolve_idle_timeout(role, task)
             executor.progress_probe = _workspace_progress
         except Exception:  # noqa: BLE001
             pass

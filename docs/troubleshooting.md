@@ -212,10 +212,20 @@ recurso é da **máquina**. `same_issue_repeat_limit` estourava e a task morria.
 
 **Comportamento (0.4.76):** falha de lançamento espera e reexecuta o **mesmo**
 agente, com backoff de 3 s, 8 s e 15 s, respeitando o orçamento restante da task
-e **sem reinstalar nada**. Cada tentativa aparece em `task logs`:
+e **sem reinstalar nada**.
+
+**Comportamento (0.4.79) — jitter:** os intervalos fixos resolviam a frequência
+e **não** a sincronia, que é a causa. A falta de recurso é da máquina, então
+vários agentes falham no mesmo instante (medido no trustsafe: quatro lançamentos
+em ~1 s) e, esperando exatamente 3 s, colidiriam de novo contra o mesmo recurso
+escasso. A espera final agora é `base × (1 + 0,5 × sorteio)` — fica em
+`[base, base×1,5)`, nunca encurta (retentativa imediata é o oposto do remédio) e
+nunca estica sem teto (26 s no total viram no máximo 39 s). A guarda de
+orçamento compara contra a espera **já com jitter**. Cada tentativa aparece em
+`task logs`:
 
 ```
-agent_repair: codex: tentativa 1 de 3 em 3s — mesmo agente, sem reinstalar
+agent_repair: codex: tentativa 1 de 3 em 3.9s (base 3s + jitter) — mesmo agente, sem reinstalar
 agent_repair: codex: processo nasceu na tentativa 1
 ```
 
@@ -643,6 +653,20 @@ silêncio sozinho não prova travamento.
 
 `0` desliga. Se o seu executor legitimamente fica >15 min mudo **e** sem
 escrever arquivo, aumente — não desligue.
+
+**Comportamento (0.4.79) — o eixo ocioso é por PAPEL.** O número acima virou o
+*fallback global*: cada papel pode declarar o seu em `agent_timeout_by_role`,
+separando o teto duro do tempo tolerado sem sinal.
+
+```json
+"agent_timeout_by_role": {
+  "executor": { "run_timeout": 2400, "idle_timeout": 1200 }
+}
+```
+
+O template já traz 1200 s em `executor` e `corrector`. Papel declarado como
+inteiro puro continua sem eixo próprio e usa o global — quem não migrar o
+`policies.json` não muda de comportamento. Detalhes em `docs/configuracao.md`.
 
 **Rótulos (bug-087):** o erro agora diz qual morte foi, e cada uma tem remédio
 diferente:

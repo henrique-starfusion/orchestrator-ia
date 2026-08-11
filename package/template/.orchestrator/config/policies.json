@@ -15,8 +15,14 @@
   "agent_timeout_default_s": 1800,
   "agent_timeout_by_role": {
     "planner": 900,
-    "executor": 2400,
-    "corrector": 2400,
+    "executor": {
+      "run_timeout": 2400,
+      "idle_timeout": 1200
+    },
+    "corrector": {
+      "run_timeout": 2400,
+      "idle_timeout": 1200
+    },
     "validator": 1200,
     "tester": 600,
     "skill_selector": 120

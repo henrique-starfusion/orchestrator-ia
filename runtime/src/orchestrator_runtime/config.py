@@ -9,7 +9,11 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
-from orchestrator_runtime.execution.timeouts import minimum_task_budget_s
+from orchestrator_runtime.execution.timeouts import (
+    DEFAULT_IDLE_TIMEOUT_BY_ROLE,
+    minimum_task_budget_s,
+    split_timeout_axes,
+)
 
 
 class RuntimeLimits(BaseModel):
@@ -21,6 +25,11 @@ class RuntimeLimits(BaseModel):
     minimum_score_improvement: float = 0.03
     maximum_duration_seconds: int = 3600
     agent_timeout_default_s: int = 1800
+    # 0.4.79 — EIXO DURO por papel: teto de relógio da tentativa, nunca renovado.
+    # Continua sendo um inteiro por papel; o eixo ocioso mora ao lado, em
+    # `agent_idle_timeout_by_role`. O `policies.json` aceita os dois formatos
+    # (inteiro puro ou `{"run_timeout": N, "idle_timeout": M}`) e `load_config`
+    # separa os eixos — ver `execution/timeouts.split_timeout_axes`.
     agent_timeout_by_role: dict[str, int] = Field(
         default_factory=lambda: {
             "planner": 900,
@@ -30,6 +39,12 @@ class RuntimeLimits(BaseModel):
             "tester": 600,
             "skill_selector": 120,
         }
+    )
+    # 0.4.79 — EIXO OCIOSO por papel: tempo máximo SEM progresso observável.
+    # Papel ausente daqui não tem eixo próprio e cai no `agent_no_output_timeout_s`
+    # global — que é exatamente o comportamento 0.4.78.
+    agent_idle_timeout_by_role: dict[str, int] = Field(
+        default_factory=lambda: dict(DEFAULT_IDLE_TIMEOUT_BY_ROLE)
     )
     require_independent_validation: bool = True
     require_deterministic_validation: bool = True
@@ -277,12 +292,15 @@ def load_config(
     }
     raw_by_role = policies.get("agent_timeout_by_role") or {}
     by_role: dict[str, int] = dict(default_by_role)
-    if isinstance(raw_by_role, dict):
-        for key, value in raw_by_role.items():
-            try:
-                by_role[str(key)] = int(value)
-            except (TypeError, ValueError):
-                continue
+    idle_by_role: dict[str, int] = dict(DEFAULT_IDLE_TIMEOUT_BY_ROLE)
+    # 0.4.79 — o mesmo bloco carrega os dois eixos. Papel declarado no formato
+    # ANTIGO (inteiro puro) perde o eixo ocioso padrão de propósito: é assim que
+    # um `policies.json` não migrado reproduz exatamente a 0.4.78.
+    declared_run, declared_idle = split_timeout_axes(raw_by_role)
+    by_role.update(declared_run)
+    for papel in declared_run:
+        idle_by_role.pop(papel, None)
+    idle_by_role.update(declared_idle)
     limits = RuntimeLimits(
         maximum_iterations=int(policies.get("maximum_iterations", 3)),
         same_issue_repeat_limit=int(policies.get("same_issue_repeat_limit", 2)),
@@ -296,6 +314,7 @@ def load_config(
             policies.get("agent_timeout_default_s", 1800)
         ),
         agent_timeout_by_role=by_role,
+        agent_idle_timeout_by_role=idle_by_role,
         require_independent_validation=bool(
             policies.get("require_independent_validation", True)
         ),

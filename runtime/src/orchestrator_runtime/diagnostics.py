@@ -20,6 +20,8 @@ _FINGERPRINT_FILES = (
     "agents/process.py",
     # 0.4.14 — learn-then-compact context
     "memory/learnings.py",
+    # 0.4.79 — política de execução em dois eixos (teto duro + ocioso)
+    "execution/timeouts.py",
 )
 
 # Capabilities estáveis para o cliente IDE checar sem depender só de VERSION.
@@ -137,6 +139,10 @@ FEATURES: tuple[str, ...] = (
     "sqlite_wal_multi_writer",
     # 0.4.75 — um jeito padrão de acompanhar, para ninguém inventar laço de shell
     "task_watch_streams_events",
+    # 0.4.79 — orçamento do agente em dois eixos (teto duro + ocioso por papel)
+    "agent_timeout_two_axis",
+    # 0.4.79 — jitter no backoff do retry de lançamento (quebra a sincronia)
+    "launch_retry_jitter",
 )
 
 

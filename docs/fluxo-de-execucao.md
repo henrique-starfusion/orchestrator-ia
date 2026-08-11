@@ -356,7 +356,20 @@ chamador (20 s para sessão bloqueante, 30 s para MCP/Cursor —
 `callers.py:52-61`), e o serviço **persiste** cada batida como evento
 `agent_progress` (`_register_heartbeat`, linha 2754).
 
-O watchdog de silêncio mata o agente que passa `agent_no_output_timeout_s` sem
+O watchdog de silêncio mata o agente que passa o **eixo ocioso** do papel sem
 escrever um byte **e** sem tocar no workspace (`agents/process.py:304-329`); a
 sonda de progresso consulta o git (linha 2791). Sonda quebrada nunca mata o
 agente (`agents/process.py:321-324`).
+
+Desde a 0.4.79 o orçamento do agente tem **dois eixos por papel**
+(`execution/timeouts.resolve_agent_timeout_policy`):
+
+- `run_timeout` — teto de relógio da tentativa, alimenta o `proc.wait` do CLI e
+  **nunca** é renovado por sinal nenhum;
+- `idle_timeout` — tempo máximo sem progresso observável, alimenta o watchdog
+  acima e é renovado por cada byte lido ou mudança no workspace.
+
+Papel que não declara `idle_timeout` cai no `agent_no_output_timeout_s` global —
+comportamento idêntico ao da 0.4.78. Morte pelo eixo ocioso é **infra**
+(`AGENT-NO-OUTPUT-HANG` → `_reject_iteration_infra`), nunca mérito. Ver
+`docs/configuracao.md` para o formato e a escolha dos números.
