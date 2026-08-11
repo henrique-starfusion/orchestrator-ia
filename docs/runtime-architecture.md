@@ -25,6 +25,9 @@ Ver [`task-lifecycle.md`](task-lifecycle.md).
 
 `execution/git_workspace.py` captura o porcelain no início do loop e usa
 `changed_files_since` como fallback quando o agente não informa arquivos. O
+baseline é `GitBaseline`: `content_hashes` guarda SHA-256 da raiz e
+`nested_content_hashes` guarda os hashes dos repositórios Git filhos imediatos
+(`runtime/src/orchestrator_runtime/execution/git_workspace.py:18-37`). O
 comparador combina dois sinais:
 
 - mudança do código XY detecta paths limpos no baseline que foram criados,
@@ -32,10 +35,13 @@ comparador combina dois sinais:
 - SHA-256 detecta conteúdo novo nos paths que **já estavam sujos**, mesmo quando
   o XY não muda ou quando uma restauração faz o path sair do porcelain.
 
-O hash é restrito às entradas sujas do baseline. Essa restrição evita varrer a
-árvore inteira no início de toda task e basta porque qualquer path limpo que
-muda passa a aparecer no porcelain. Raiz e repos Git filhos imediatos usam os
-mesmos helpers de snapshot e comparação.
+O hash é restrito às entradas sujas do baseline por `_dirty_content_hashes`
+(`runtime/src/orchestrator_runtime/execution/git_workspace.py:153-159`). Essa
+restrição evita varrer a árvore inteira no início de toda task e basta porque
+qualquer path limpo que muda passa a aparecer no porcelain. Raiz e repos Git
+filhos imediatos usam `_capture_repo_snapshot` e `_changed_paths_in_repo`; a
+comparação de conteúdo acontece em
+`runtime/src/orchestrator_runtime/execution/git_workspace.py:172-190`.
 
 ## Pacote
 

@@ -1,11 +1,11 @@
 # Documentação do @starfusion/orchestrator
 
 Índice mestre da documentação deste repositório (`bootstrap-agents`, pacote npm
-`@starfusion/orchestrator`, versão `0.4.61` em `VERSION:1` e `package.json:3`).
+`@starfusion/orchestrator`, versão `0.4.81` em `VERSION:1` e `package.json:3`).
 
 Esta pasta tem dois tipos de documento:
 
-- **Documentos-base desta rodada** (os dez listados abaixo): escritos a partir
+- **Documentos-base desta rodada** (listados abaixo): escritos a partir
   da leitura do código, cada afirmação não-óbvia com evidência `arquivo:linha`
   ou nome de símbolo.
 - **Documentos anteriores** (`orquestrador.md`, `cli-reference.md`,
@@ -15,7 +15,7 @@ Esta pasta tem dois tipos de documento:
   Divergências encontradas entre eles e o código estão registradas em
   `limitacoes.md`.
 
-## Os dez documentos-base
+## Documentos-base
 
 | Documento | O que responde |
 |---|---|
@@ -28,15 +28,19 @@ Esta pasta tem dois tipos de documento:
 | `dados.md` | Schema real do SQLite, tabela a tabela, com quem escreve em cada uma |
 | `testes.md` | Organização da suíte (pytest do runtime + suíte PowerShell), o que cada grupo cobre, como rodar |
 | `limitacoes.md` | Limites conhecidos, pendências e hipóteses levantadas durante esta documentação |
+| `regras-de-negocio.md` | Invariantes que governam uma execução, com a razão operacional e a evidência de cada regra |
+| `catalogo-de-funcionalidades.md` | Funcionalidades implementadas por camada, ponto de entrada, exposição e evidência no código |
 
 ## Por onde começar, segundo o perfil
 
 ### Quem vai usar (pede tarefas ao orquestrador, de um chat ou do terminal)
 
 1. `visao-geral.md` — entender o que é uma *task*, uma *iteração* e um *loop*.
-2. `operacao.md` — seções "Acompanhar uma task", "Cancelar", "Retomar" e
+2. `catalogo-de-funcionalidades.md` — localizar a superfície disponível e seu
+   ponto de entrada.
+3. `operacao.md` — seções "Acompanhar uma task", "Cancelar", "Retomar" e
    "Parece travado".
-3. `integracao-agentes.md` — a seção "Anti-recursão: agente filho", que explica
+4. `integracao-agentes.md` — a seção "Anti-recursão: agente filho", que explica
    por que um agente delegado não pode delegar de novo.
 
 ### Quem vai operar (instala, atualiza e mantém a frota de projetos)
@@ -51,14 +55,16 @@ Esta pasta tem dois tipos de documento:
 ### Quem vai contribuir (mexe no código do runtime ou do instalador)
 
 1. `arquitetura.md` — mapa dos módulos e das fronteiras.
-2. `fluxo-de-execucao.md` — o loop principal é `TaskService._execute_loop`
+2. `regras-de-negocio.md` — invariantes que não podem ser removidas numa
+   refatoração sem reabrir os incidentes que as motivaram.
+3. `fluxo-de-execucao.md` — o loop principal é `TaskService._execute_loop`
    (`runtime/src/orchestrator_runtime/tasks/service.py:767`); ler antes de tocar
    em qualquer estado.
-3. `dados.md` — todo acesso ao banco passa por
+4. `dados.md` — todo acesso ao banco passa por
    `runtime/src/orchestrator_runtime/tasks/repository.py`; nenhum outro módulo
    instancia as classes `*Row`.
-4. `testes.md` — como rodar as duas suítes antes de abrir mudança.
-5. `limitacoes.md` — dívidas já identificadas, para não redescobri-las.
+5. `testes.md` — como rodar as duas suítes antes de abrir mudança.
+6. `limitacoes.md` — dívidas já identificadas, para não redescobri-las.
 
 ## Convenção de evidência
 

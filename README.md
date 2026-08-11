@@ -1,14 +1,16 @@
 # Orquestrador IA Multiagente
 
-Projeto desenvolvido e mantido pela **StarFusion**.
+Projeto desenvolvido e mantido pela **[StarFusion](https://www.starfusion.com.br)**.
 
-- **Desenvolvedor:** Henrique Rodrigues
+- **Desenvolvedor:** [StarFusion](https://www.starfusion.com.br)
+- **Responsável técnico:** Henrique Rodrigues
 - **Licença:** [MIT](LICENSE) — uso comercial e não comercial permitido
 - **Copyright © 2026** StarFusion Consultoria, Tecnologia e Soluções em Informática LTDA.
 
 Pacote portátil para instalar, validar e manter um **ambiente multiagente genérico** e um **runtime persistente** em qualquer repositório. O orquestrador não pertence a uma aplicação específica: projetos-alvo são workspaces de execução.
 
-**Versão atual:** 0.4.7 — ver [`CHANGELOG.md`](CHANGELOG.md).
+**Versão atual:** 0.4.81 — fonte canônica: [`VERSION`](VERSION); histórico em
+[`CHANGELOG.md`](CHANGELOG.md).
 
 ---
 
