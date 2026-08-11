@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.4.83 - 2026-08-11
+
+### Added
+
+- **Issue #12 — regra de desenvolvimento "nunca supor".** Afirmações técnicas
+  passam a exigir verificação no código, medição ou consulta à fonte oficial,
+  com evidência citada junto da conclusão e números no lugar de adjetivos
+- A regra canônica `.orchestrator/rules/nunca-supor.md` é selecionada por termos
+  distintivos da `description`; o template e o manifest a propagam como arquivo
+  `managed` para projetos novos e existentes
+
+### Tests
+
+- `runtime/tests/unit/test_0483_never_assume_rule.py` prova descoberta,
+  frontmatter distintivo e seleção por pedido que exige evidência
+
 ## 0.4.82 - 2026-08-11
 
 ### Fixed

@@ -147,6 +147,10 @@
             "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         },
         {
+            "path": "template/.orchestrator/rules/nunca-supor.md",
+            "sha256": "448feecfb6bc1d982f180c3e09b12db5bf7a9d899c81d2ccd2a7a95c549bd225"
+        },
+        {
             "path": "template/.orchestrator/runtime/locks/.gitkeep",
             "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         },

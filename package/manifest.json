@@ -224,6 +224,11 @@
       "mode": "managed"
     },
     {
+      "source": "template/.orchestrator/rules/nunca-supor.md",
+      "destination": ".orchestrator/rules/nunca-supor.md",
+      "mode": "managed"
+    },
+    {
       "source": "template/.orchestrator/runtime/locks/.gitkeep",
       "destination": ".orchestrator/runtime/locks/.gitkeep",
       "mode": "managed"
