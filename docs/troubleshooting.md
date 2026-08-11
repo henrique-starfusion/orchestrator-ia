@@ -1178,6 +1178,23 @@ primeiro nível de aninhamento é observado. Em 0.4.36 a descoberta de testes
 reportava `<none>/skipped` na raiz e o validador reprovava `tests_pass` por
 falta de evidência.
 
+## `changed=[]` quando a task editou arquivo que já estava ` M` (bug-116, 0.4.80+)
+
+Sintoma: árvore já estava suja antes da task; executor altera de novo o mesmo
+arquivo, mas `changed_files` fica vazio. Também ocorria ao restaurar o arquivo ao
+conteúdo do commit: o path sumia do porcelain e a restauração ficava invisível.
+Os guards podiam emitir `AGENT-EMPTY-OUTPUT` ou `AGENT-FAILED-NO-OUTPUT`, e o gate
+`workspace_changes` reprovava trabalho real.
+
+Causa até 0.4.79: baseline guardava só `path -> código XY`. Duas versões
+diferentes de um arquivo modificado compartilham ` M`; restauração não aparece
+no mapa atual. Comparar rótulo de status não prova igualdade de conteúdo.
+
+A partir de 0.4.80, cada path já sujo recebe SHA-256 no baseline. O comparador
+comum de raiz e repos aninhados combina diferença de XY com diferença de hash.
+Arquivo sujo intocado mantém o mesmo hash e não é atribuído à task. O custo fica
+restrito aos paths sujos; paths limpos continuam detectados pelo porcelain.
+
 ## Prompt gravado com "Ã" no lugar de acentos (bug-049, 0.4.36+)
 
 Sintoma: prompt aparece no DB/status como "exigÃªncia", "coleÃ§Ã£o".

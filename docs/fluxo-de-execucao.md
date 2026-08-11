@@ -228,7 +228,10 @@ fallback não em quarentena antes da próxima volta (linhas 2432-2447).
 
 Quando o executor não reporta arquivos, o runtime pergunta ao git:
 `_enrich_changed_files` (linha 2472) usa `changed_files_since` contra a baseline
-capturada no início do loop (linha 773).
+capturada no início do loop (linha 773). Desde a 0.4.80, paths já sujos carregam
+também SHA-256 do conteúdo: nova edição com o mesmo código XY e restauração que
+remove o path do porcelain continuam visíveis. Só entradas sujas recebem hash;
+paths limpos seguem cobertos pela mudança do status, sem varrer a árvore inteira.
 
 ## 8. TESTING (linhas 1351-1391)
 

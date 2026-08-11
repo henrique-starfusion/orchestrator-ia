@@ -21,6 +21,22 @@ Manager Model (Rules default | LLM opcional)
 
 Ver [`task-lifecycle.md`](task-lifecycle.md).
 
+## Baseline Git em árvore suja (0.4.80)
+
+`execution/git_workspace.py` captura o porcelain no início do loop e usa
+`changed_files_since` como fallback quando o agente não informa arquivos. O
+comparador combina dois sinais:
+
+- mudança do código XY detecta paths limpos no baseline que foram criados,
+  modificados ou removidos;
+- SHA-256 detecta conteúdo novo nos paths que **já estavam sujos**, mesmo quando
+  o XY não muda ou quando uma restauração faz o path sair do porcelain.
+
+O hash é restrito às entradas sujas do baseline. Essa restrição evita varrer a
+árvore inteira no início de toda task e basta porque qualquer path limpo que
+muda passa a aparecer no porcelain. Raiz e repos Git filhos imediatos usam os
+mesmos helpers de snapshot e comparação.
+
 ## Pacote
 
 Código em `runtime/src/orchestrator_runtime/`. CLI Node encaminha `run`/`task` via `python -m orchestrator_runtime`.

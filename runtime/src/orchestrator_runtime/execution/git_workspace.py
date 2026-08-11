@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import subprocess
 import tempfile
@@ -17,6 +18,10 @@ GIT_TIMEOUT_S = 30
 class GitBaseline:
     """Snapshot de ``git status --porcelain`` no início da task.
 
+    ``content_hashes`` guarda SHA-256 somente das entradas já sujas. Isso
+    distingue nova edição com o mesmo XY e restauração que sai do porcelain sem
+    pagar uma varredura da árvore inteira no início de toda task.
+
     ``nested`` guarda o porcelain de cada repo git FILHO imediato do workspace
     (bug-047): em projetos que agrupam vários repos numa pasta-mãe (ex.:
     GuardLine.BR contém travelex-api/, onp-api/ — cada um com .git próprio),
@@ -26,8 +31,10 @@ class GitBaseline:
     """
 
     porcelain: dict[str, str] = field(default_factory=dict)
+    content_hashes: dict[str, str] = field(default_factory=dict)
     available: bool = False
     nested: dict[str, dict[str, str]] = field(default_factory=dict)
+    nested_content_hashes: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 def _run_git(
@@ -123,6 +130,67 @@ def _parse_porcelain(stdout: str) -> dict[str, str]:
     return mapping
 
 
+def _content_hash(path: Path) -> str:
+    """Hash estável do conteúdo atual, incluindo ausência e symlink."""
+    try:
+        if path.is_symlink():
+            return "symlink:" + hashlib.sha256(
+                os.readlink(path).encode("utf-8", errors="surrogatepass")
+            ).hexdigest()
+        if not path.exists():
+            return "missing"
+        if not path.is_file():
+            return "non-file"
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return "file:" + digest.hexdigest()
+    except OSError as exc:
+        return f"unreadable:{type(exc).__name__}"
+
+
+def _dirty_content_hashes(
+    repo_path: Path, porcelain: dict[str, str]
+) -> dict[str, str]:
+    # Hasheia SOMENTE entradas já sujas no baseline. Paths limpos continuam
+    # detectados pela diferença do porcelain; hasheá-los exigiria varrer a árvore
+    # inteira no início de toda task, custo desnecessário em repos grandes.
+    return {path: _content_hash(repo_path / path) for path in porcelain}
+
+
+def _capture_repo_snapshot(
+    repo_path: Path,
+) -> tuple[dict[str, str], dict[str, str]] | None:
+    status = _run_git(repo_path, "status", "--porcelain")
+    if status.returncode != 0:
+        return None
+    porcelain = _parse_porcelain(status.stdout or "")
+    return porcelain, _dirty_content_hashes(repo_path, porcelain)
+
+
+def _changed_paths_in_repo(
+    repo_path: Path,
+    baseline_porcelain: dict[str, str],
+    baseline_content_hashes: dict[str, str],
+) -> set[str]:
+    status = _run_git(repo_path, "status", "--porcelain")
+    if status.returncode != 0:
+        return set()
+    current = _parse_porcelain(status.stdout or "")
+    changed = {
+        path
+        for path, code in current.items()
+        if baseline_porcelain.get(path) != code
+    }
+    changed.update(
+        path
+        for path, old_hash in baseline_content_hashes.items()
+        if _content_hash(repo_path / path) != old_hash
+    )
+    return changed
+
+
 def _nested_repo_dirs(project_path: Path) -> list[str]:
     """Filhos imediatos com .git próprio (dir ou arquivo de worktree).
 
@@ -150,14 +218,17 @@ def capture_baseline(project_path: Path) -> GitBaseline:
     baseline = GitBaseline()
     probe = _run_git(project_path, "rev-parse", "--is-inside-work-tree")
     if probe.returncode == 0 and (probe.stdout or "").strip() == "true":
-        status = _run_git(project_path, "status", "--porcelain")
-        if status.returncode == 0:
-            baseline.porcelain = _parse_porcelain(status.stdout or "")
+        snapshot = _capture_repo_snapshot(project_path)
+        if snapshot is not None:
+            baseline.porcelain, baseline.content_hashes = snapshot
             baseline.available = True
     for name in _nested_repo_dirs(project_path):
-        status = _run_git(project_path / name, "status", "--porcelain")
-        if status.returncode == 0:
-            baseline.nested[name] = _parse_porcelain(status.stdout or "")
+        snapshot = _capture_repo_snapshot(project_path / name)
+        if snapshot is not None:
+            (
+                baseline.nested[name],
+                baseline.nested_content_hashes[name],
+            ) = snapshot
     return baseline
 
 
@@ -165,22 +236,22 @@ def changed_files_since(project_path: Path, baseline: GitBaseline) -> list[str]:
     """Paths cujo status porcelain mudou (ou são novos) desde o baseline.
 
     Inclui repos aninhados capturados no baseline, com o path prefixado pelo
-    diretório do repo filho ("travelex-api/main.go").
+    diretório do repo filho ("travelex-api/main.go"). Para paths que já estavam
+    sujos, compara também o hash capturado: assim uma nova edição com o mesmo XY
+    e uma restauração que remove o path do porcelain continuam visíveis.
     """
     out: set[str] = set()
     if baseline.available:
-        status = _run_git(project_path, "status", "--porcelain")
-        if status.returncode == 0:
-            current = _parse_porcelain(status.stdout or "")
-            for path, code in current.items():
-                if baseline.porcelain.get(path) != code:
-                    out.add(path)
+        out.update(
+            _changed_paths_in_repo(
+                project_path, baseline.porcelain, baseline.content_hashes
+            )
+        )
     for name, base_map in baseline.nested.items():
-        status = _run_git(project_path / name, "status", "--porcelain")
-        if status.returncode != 0:
-            continue
-        current = _parse_porcelain(status.stdout or "")
-        for path, code in current.items():
-            if base_map.get(path) != code:
-                out.add(f"{name}/{path}")
+        nested_changes = _changed_paths_in_repo(
+            project_path / name,
+            base_map,
+            baseline.nested_content_hashes.get(name, {}),
+        )
+        out.update(f"{name}/{path}" for path in nested_changes)
     return sorted(out)

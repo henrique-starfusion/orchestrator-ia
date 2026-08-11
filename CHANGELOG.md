@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+## 0.4.80 - 2026-08-11
+
+### Fixed
+
+- **bug-116 — entregável invisível em árvore já suja.** `GitBaseline` guardava
+  apenas `path -> código XY` do `git status --porcelain`. Se o arquivo já estava
+  ` M` e a task o editava de novo, o rótulo continuava ` M`; se a task restaurava
+  o conteúdo original, o path sumia do status. Os dois casos devolviam
+  `changed_files=[]`, alimentando falsos `AGENT-EMPTY-OUTPUT`,
+  `AGENT-FAILED-NO-OUTPUT` e reprovação de `workspace_changes`
+- O baseline agora guarda SHA-256 **somente dos paths já sujos** e o comparador
+  comum combina mudança de XY com mudança de conteúdo. O mesmo helper atende
+  raiz e repos aninhados; path sujo intocado não é creditado à task
+
+### Performance
+
+- Nenhuma árvore inteira é hasheada. Paths limpos no baseline continuam
+  detectados pelo porcelain; só entradas que já aparecem sujas recebem hash,
+  inclusive dentro de repos filhos imediatos
+
+### Tests
+
+- Nove regressões cobrem segunda edição, restauração e arquivo intocado em raiz
+  e repo aninhado, além de preservar criação, modificação e exclusão após
+  baseline limpo
+
 ## 0.4.79 - 2026-08-11
 
 Duas mudanças na mesma área — o controle de execução do agente —, ambas

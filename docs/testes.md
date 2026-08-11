@@ -60,7 +60,7 @@ Os arquivos em `runtime/tests/unit/` seguem duas convenções de nome.
 | `test_context_compaction.py` | Learn-then-compact e o digest |
 | `test_diagnostics.py` | Fingerprint de código e lista de features |
 | `test_documentation_gate.py` | Gate documental e validação de links |
-| `test_git_changed_files.py` | Baseline git e enriquecimento de arquivos alterados |
+| `test_git_changed_files.py` | Baseline git, hashes seletivos em árvore suja, repos aninhados e enriquecimento de arquivos alterados |
 | `test_global_tooling_always_on.py` | Bloco de ferramentas obrigatórias no prompt |
 | `test_locks.py` | `WriteLock`, reentrância e reivindicação de lock órfão |
 | `test_mcp_tools.py`, `test_mcp_tool_docstrings.py` | Tools MCP e o texto que orienta o agente de chat |
