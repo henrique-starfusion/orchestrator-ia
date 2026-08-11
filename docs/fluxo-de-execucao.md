@@ -112,9 +112,19 @@ thread periódica nova.
   (`planning/analyzer.py:127-132`).
 - `detect_loop` escolhe o loop; o loop só refina o `task_type` quando não há
   intenção de implementação (`planning/analyzer.py:139-145`).
+- Antes de pontuar palavras-chave, `detect_loop` remove cláusulas condicionais e
+  negadas; portanto "não é correção de bug" não ativa o loop `bug`
+  (`planning/loops.py:405-423`, `detect_loop:448-469`). Prefixo explícito como
+  `/loop-bug` continua soberano (`planning/loops.py:454-457`).
 - `CriteriaBuilder.build` (`planning/analyzer.py:338`) monta os ACs com
   precedência: ACs declarados no prompt (`AC-001:` ou seção "Critérios:") vencem
   os critérios do loop, que vencem a heurística (linhas 339-348).
+- Se a classificação final é não-código (`docs`, `review`, `complex_analysis`,
+  `security_review` ou `architecture`), loop de implementação não pode impor
+  `workspace_changes`/`tests_pass`: `_safe_loop_criteria` troca o entregável por
+  evidência ou remove o gate de teste. A defesa existe em `CriteriaBuilder` e de
+  novo em `Planner.plan`, para cobrir callers diretos e planos persistidos
+  (`planning/analyzer.py:186-238`, `406-417`, `509-527`).
 
 O resultado é salvo em `task.analysis`, preservando o contexto de
 `requires_input`/resume (linhas 803-818) e registrando quem chamou
@@ -229,9 +239,12 @@ fallback não em quarentena antes da próxima volta (linhas 2432-2447).
 Quando o executor não reporta arquivos, o runtime pergunta ao git:
 `_enrich_changed_files` (linha 2472) usa `changed_files_since` contra a baseline
 capturada no início do loop (linha 773). Desde a 0.4.80, paths já sujos carregam
-também SHA-256 do conteúdo: nova edição com o mesmo código XY e restauração que
-remove o path do porcelain continuam visíveis. Só entradas sujas recebem hash;
-paths limpos seguem cobertos pela mudança do status, sem varrer a árvore inteira.
+também SHA-256 do conteúdo nos campos `GitBaseline.content_hashes` e
+`GitBaseline.nested_content_hashes`: nova edição com o mesmo código XY e
+restauração que remove o path do porcelain continuam visíveis. Só entradas sujas
+recebem hash por `_dirty_content_hashes`; paths limpos seguem cobertos pela
+mudança do status, sem varrer a árvore inteira
+(`execution/git_workspace.py:18-37`, `153-190`, `235-260`).
 
 ## 8. TESTING (linhas 1351-1391)
 
@@ -376,3 +389,11 @@ Papel que não declara `idle_timeout` cai no `agent_no_output_timeout_s` global 
 comportamento idêntico ao da 0.4.78. Morte pelo eixo ocioso é **infra**
 (`AGENT-NO-OUTPUT-HANG` → `_reject_iteration_infra`), nunca mérito. Ver
 `docs/configuracao.md` para o formato e a escolha dos números.
+
+Falha de **lançamento** classificada como falta de recurso da máquina usa três
+retries do mesmo agente, com bases 3 s, 8 s e 15 s. `_launch_backoff_s` soma
+jitter somente para cima, deixando cada espera em `[base, base × 1,5)`; o valor
+já sorteado é comparado com o orçamento antes do `sleep`. Isso quebra a
+sincronia de processos que falharam juntos sem permitir que a espera fure o teto
+da task (`tasks/service.py:3751-3786`, `TaskService._retry_launch_failure` em
+`tasks/service.py:3788-3875`).

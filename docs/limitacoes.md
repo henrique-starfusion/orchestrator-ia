@@ -14,12 +14,15 @@ Classificação:
 
 ## Divergências entre documentação e código
 
-### DIV-001 — README anuncia versão 0.4.7; o pacote está em 0.4.61
+Itens marcados como **resolvidos** permanecem aqui para preservar o histórico da
+rodada; não descrevem uma limitação atual.
 
-`README.md:11` diz "Versão atual: 0.4.7". `VERSION:1`, `package.json:3`,
-`runtime/pyproject.toml` e `.orchestrator/VERSION` dizem `0.4.61`. Como o
-`CHANGELOG.md` tem 95 KB e cobre até a 0.4.61, a linha do README simplesmente
-ficou para trás. Conferir: `VERSION` e `package.json`.
+### DIV-001 — Resolvida: README alinhado à versão 0.4.81
+
+`README.md:11` e o cabeçalho de `docs/README.md` agora declaram `0.4.81`, o mesmo
+valor de `VERSION:1` e `package.json:3`. A causa da divergência era a repetição
+manual do número sem checagem de sincronismo; `VERSION` fica explícito como
+fonte canônica no README.
 
 ### DIV-002 — `docs/task-lifecycle.md` lista `WAITING_FOR_USER` como terminal
 
@@ -110,13 +113,14 @@ pontos do serviço emitem sem persistir (por exemplo os eventos de fan-out em
 `tasks/service.py:2612-2625` e `2701-2717`). Quem audita pelo banco vê menos do
 que quem estava olhando o console.
 
-### LIM-008 — redação de segredo é por padrão textual
+### LIM-008 — redação de segredo continua dependente do formato da atribuição
 
-`redact` (`agents/process.py:68-77`) marca `[REDACTED]` só em linhas que contêm
-`API_KEY`, `TOKEN`, `SECRET`, `PASSWORD` ou `AUTHORIZATION` **e** um `=` ou `:`.
-Segredo em outro formato — valor solto, JSON com chave diferente, base64 — passa
-para `agent_runs.stdout` e para os `.txt` de `runtime/results/`. É mitigação,
-não garantia.
+`redact` preserva a linha e substitui somente o valor de uma atribuição cuja
+chave contenha `API_KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `PASSWD` ou
+`AUTHORIZATION` (`agents/process.py:89-134`). Isso corrigiu o comportamento que
+apagava prosa inteira, mas um segredo solto, sob chave fora desse vocabulário ou
+em formato não reconhecido ainda pode chegar a `agent_runs.stdout` e aos `.txt`
+de `runtime/results/`. É mitigação textual, não garantia de detecção de segredo.
 
 ### LIM-009 — busca de memória é ranqueamento por contagem de termos
 
@@ -189,7 +193,8 @@ pode chegar cortado ao validador.
 
 ### PEND-001 — a documentação antiga desta pasta não foi reconferida
 
-Só os dez documentos-base desta rodada foram escritos a partir do código.
+Só os documentos-base listados em `docs/README.md` foram escritos ou atualizados
+a partir do código.
 `docs/orquestrador.md` (26 KB), `docs/cli-reference.md` (14 KB),
 `docs/troubleshooting.md` (25 KB), `docs/installer-architecture.md` (10 KB),
 `docs/model-routing.md`, `docs/legacy-migration.md` e os subdiretórios

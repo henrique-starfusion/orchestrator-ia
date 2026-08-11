@@ -487,12 +487,18 @@ Divisão de responsabilidade:
 - Limite de repetir o mesmo issue: **2**
 - Score mínimo: **0.9**
 - Melhoria mínima: **0.03**
-- Duração máxima da tarefa: **3600s** (`maximum_duration_seconds`) — orçamento total do loop
+- Duração configurada da tarefa: **3600s** (`maximum_duration_seconds`), elevada
+  no carregamento para o piso derivado dos tetos duros dos papéis; com os
+  defaults, o orçamento efetivo mínimo é **8700s**
+  (`execution/timeouts.minimum_task_budget_s`; `RuntimeLimits.fit_task_budget`)
 - Timeout por invocação de agente (não confundir com a duração da tarefa):
   - `agent_timeout_default_s`: **1800**
   - `agent_timeout_by_role`: planner **900**, executor/corrector **2400**, validator **1200**, tester **600**
   - **Dois eixos por papel (0.4.79):** o número acima é o `run_timeout` (teto de relógio, nunca renovado por sinal). `executor` e `corrector` também declaram `idle_timeout` **1200** — tempo máximo sem progresso observável, renovado pelo sinal. Papel sem `idle_timeout` usa o `agent_no_output_timeout_s` global (**900**). Ver `docs/configuracao.md`
-  - Cada CLI recebe `min(timeout_do_role, tempo_restante_da_tarefa)` (mínimo útil **60s**); abaixo disso a tarefa encerra com `maximum_duration_seconds`
+  - Cada CLI recebe o teto do papel limitado pelo restante da task; para
+    `executor`/`corrector`, **600s** são reservados antes para o veredito. Com
+    menos de **60s** restantes, a task encerra por `maximum_duration_seconds`
+    (`execution/timeouts.resolve_agent_timeout_policy`)
   - O `TaskService` passa `timeout_s` no request; o profile `timeout_default_s` só é fallback se o request vier sem valor
 - Validação independente + determinística
 - Parallel read-only: permitido; parallel writes: **não**
