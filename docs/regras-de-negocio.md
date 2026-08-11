@@ -321,6 +321,87 @@ derrubar trabalho já julgado.
 `compact_result_artifacts` em
 `runtime/src/orchestrator_runtime/memory/learnings.py:308-328`.
 
+## Processos de agente
+
+### RN-021 — Processo lançado é registrado de forma recuperável
+
+**Regra.** Todo CLI de agente lançado pelo runtime tem sua identidade
+persistida no instante do spawn, na tabela `agent_processes`: `pid`, `image` e
+`create_time` lidos do sistema operacional, mais `owner_pid` (o processo do
+runtime que lançou), `task_id` e `started_at`. A saída do processo fecha o
+registro com `finished_at`.
+
+**Razão.** O único rastreador anterior era um set em memória
+(`CliExecutor._active_pids`), consumido só por `kill_active()` no cancelamento
+ordenado. Ele desaparece junto com o processo que o criou — ou seja, cobre
+exatamente o caso em que o runtime está vivo, e órfão é por definição o caso em
+que ele já não está. `agent_runs` não serve para isso: a linha só nasce quando o
+processo termina e a tabela não tem coluna de PID. Sem registro durável, nenhum
+outro processo consegue nem saber que aquele CLI existe.
+
+O registro vale para **todo** ponto que fabrica executor de CLI, não só o do
+despacho comum: o fan-out cria um `CliExecutor` NOVO por subtarefa (executor
+compartilhado quebraria o heartbeat e a sonda de silêncio, que olham a árvore
+principal enquanto a subtarefa escreve no worktree), e executor novo nasce sem
+`on_launch`. Sem ligar o rastreamento também lá, justamente os CLIs mais
+numerosos — N subtarefas em paralelo — ficariam invisíveis para a ceifa.
+
+**Evidência.** `AgentProcessRow` em
+`runtime/src/orchestrator_runtime/memory/database.py:113-140`;
+`CliExecutor.on_launch`/`_notify_launch`/`_notify_exit` em
+`runtime/src/orchestrator_runtime/agents/process.py:189-197,329,474-499`;
+`TaskService._register_process_tracking` em
+`runtime/src/orchestrator_runtime/tasks/service.py:1675-1723`, ligado no despacho
+comum em `runtime/src/orchestrator_runtime/tasks/service.py:4569` e no fan-out em
+`runtime/src/orchestrator_runtime/tasks/service.py:4242-4270`;
+`TaskRepository.add_agent_process` e `finish_agent_process` em
+`runtime/src/orchestrator_runtime/tasks/repository.py:427-441`.
+
+### RN-022 — Nenhum processo é morto sem identidade conferida
+
+**Regra.** Antes de qualquer kill, a identidade ATUAL do PID é lida do próprio
+sistema operacional (Windows: `GetProcessTimes` + `QueryFullProcessImageNameW`;
+Linux: `/proc/<pid>/stat`) e precisa conferir com a registrada nos **dois**
+campos: nome da imagem e instante de criação. Identidade divergente — ou
+ilegível — encerra o assunto sem kill.
+
+**Razão.** O Windows recicla número de processo. Matar por número mataria o
+programa alheio que herdou o número, e o custo do erro é assimétrico: deixar um
+órfão vivo custa recurso de máquina, matar o processo errado custa o trabalho de
+outra pessoa. Por isso a falha é sempre para o lado de não matar.
+
+**Evidência.** `ProcessIdentity`, `process_identity` e `identity_matches` em
+`runtime/src/orchestrator_runtime/agents/reaper.py:43-81`; leitores do S.O. em
+`runtime/src/orchestrator_runtime/agents/reaper.py:84-159`.
+
+### RN-023 — Ceifa de órfão exige as quatro condições juntas
+
+**Regra.** Um CLI só é ceifado quando satisfaz tudo ao mesmo tempo: (1) o PID
+foi registrado pelo próprio orquestrador ao lançar o agente; (2) a identidade
+atual confere (RN-022); (3) a task dona está em estado terminal **ou** o
+processo do runtime que o lançou está morto; (4) passou
+`orphan_agent_reap_after_s` desde o lançamento. A ceifa roda nos pontos de poll
+que já existem (`status`, `list_tasks`, `follow_events`, `create_task`) — sem
+daemon, processo novo ou thread de poll periódico — e a reivindicação de cada
+linha (`reaped_at`, sob gate de thread e lock de arquivo) a torna idempotente
+entre pollers concorrentes. `kill_active()` no cancelamento permanece intacto.
+
+**Razão.** Cada condição barra um estrago distinto: sem (1) o runtime mataria
+processo que não lançou; sem (2) mataria o herdeiro do número; sem (3) mataria
+agente que está trabalhando agora; sem (4) mataria no vão entre o spawn e o
+primeiro sinal de vida. O acionamento por poll é o mesmo padrão da adoção de
+task órfã (RN-008): a frota já faz poll com frequência, e um vigia próprio seria
+mais um processo para ficar órfão.
+
+**Evidência.** `TaskService._reap_orphan_agents`, `_agent_process_orphan` e
+`_reap_orphan_agents_safe` em
+`runtime/src/orchestrator_runtime/tasks/service.py:1725-1820`; gancho nos polls
+em `runtime/src/orchestrator_runtime/tasks/service.py:882-891`;
+`TaskRepository.claim_agent_process` em
+`runtime/src/orchestrator_runtime/tasks/repository.py:474-488`;
+`RuntimeLimits.orphan_agent_reap_after_s` em
+`runtime/src/orchestrator_runtime/config.py:103,359-361`.
+
 ## Como alterar uma regra
 
 Mudança numa RN exige reconferir o símbolo citado, o motivo registrado nos

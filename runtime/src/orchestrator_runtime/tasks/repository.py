@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from orchestrator_runtime.events import EventType, RuntimeEvent
 from orchestrator_runtime.memory.database import (
     AgentPerformanceRow,
+    AgentProcessRow,
     AgentRunRow,
     ArtifactRow,
     DocumentationUpdateRow,
@@ -419,6 +420,72 @@ class TaskRepository:
         with self.session() as s:
             s.add(AgentRunRow(**kwargs))
             s.commit()
+
+    # bug-119 — registro DURAVEL do CLI lancado. `agent_runs` so existe depois
+    # que o processo termina; enquanto ele vive, isto e a unica coisa que outro
+    # processo consegue ler.
+    def add_agent_process(self, **kwargs: Any) -> int:
+        with self.session() as s:
+            row = AgentProcessRow(**kwargs)
+            s.add(row)
+            s.commit()
+            return int(row.id)
+
+    def finish_agent_process(self, row_id: int, finished_at: str) -> None:
+        """Fecha o registro na saida do processo: fechado nunca vira candidato."""
+        with self.session() as s:
+            row = s.get(AgentProcessRow, int(row_id))
+            if row is None or row.finished_at:
+                return
+            row.finished_at = finished_at
+            s.commit()
+
+    def list_agent_processes(
+        self, project_path: str, *, only_open: bool = False
+    ) -> list[dict[str, Any]]:
+        with self.session() as s:
+            stmt = select(AgentProcessRow).where(
+                AgentProcessRow.project_path == project_path
+            )
+            if only_open:
+                stmt = stmt.where(
+                    AgentProcessRow.finished_at.is_(None),
+                    AgentProcessRow.reaped_at.is_(None),
+                )
+            rows = s.scalars(stmt.order_by(AgentProcessRow.id.asc())).all()
+            return [
+                {
+                    "id": int(r.id),
+                    "task_id": r.task_id,
+                    "project_path": r.project_path,
+                    "role": r.role,
+                    "agent": r.agent,
+                    "pid": int(r.pid or 0),
+                    "image": r.image,
+                    "create_time": float(r.create_time or 0.0),
+                    "owner_pid": int(r.owner_pid or 0),
+                    "started_at": r.started_at,
+                    "finished_at": r.finished_at,
+                    "reaped_at": r.reaped_at,
+                }
+                for r in rows
+            ]
+
+    def claim_agent_process(self, row_id: int, reaped_at: str) -> bool:
+        """Reivindica a linha para ceifa. ``False`` = outro poller chegou antes.
+
+        A checagem e a escrita acontecem na MESMA transacao; com WAL +
+        `busy_timeout` (0.4.74) o segundo escritor espera e le o `reaped_at` ja
+        gravado. E isso que faz a ceifa ser idempotente entre pollers.
+        """
+        with self.session() as s:
+            row = s.get(AgentProcessRow, int(row_id))
+            if row is None or row.reaped_at or row.finished_at:
+                return False
+            row.reaped_at = reaped_at
+            row.finished_at = reaped_at
+            s.commit()
+            return True
 
     def changed_files_reported(self, task_id: str) -> list[str]:
         """Arquivos que os agentes DESTA task relataram ter mudado (0.4.74).

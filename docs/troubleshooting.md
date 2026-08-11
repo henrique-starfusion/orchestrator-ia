@@ -6,6 +6,40 @@ Quickstart: [`quickstart-oneliner.md`](quickstart-oneliner.md)
 
 ---
 
+## 0.4.82 — CLI de agente continua vivo depois que o runtime morreu
+
+**Sintoma (até 0.4.81):** o runtime é interrompido de forma não ordenada —
+crash, `taskkill`, restart do editor, fechamento do terminal — e os processos de
+agente (`codex`, `claude`, `node`, `cmd`, `conhost`) continuam rodando. A máquina
+acumula processos até bater no teto de recurso, e a partir daí qualquer novo
+lançamento falha com `exit=-1073741502` (`0xC0000142`) antes da primeira linha.
+
+**Causa (bug-119):** os PIDs viviam num set em memória
+(`CliExecutor._active_pids`) cujo único consumidor era `kill_active()`, chamado
+só de `TaskService.cancel`. O rastreador morria junto com o processo que o criou,
+então cobria exatamente o caso em que o runtime está vivo. Órfão é o outro caso.
+
+**Comportamento (0.4.82):** cada CLI lançado grava `pid`, nome da imagem,
+instante de criação e o PID do runtime dono na tabela `agent_processes`. Os polls
+que já existiam (`task status`, `task list`, `task watch`, criação de task)
+ceifam o que sobrou. Não há daemon, processo novo nem thread de poll.
+
+Só morre o que satisfaz tudo junto: PID registrado pelo orquestrador, identidade
+atual conferindo nos dois campos (nome da imagem **e** instante de criação, lidos
+do sistema operacional), task dona terminal **ou** runtime dono morto, e
+`orphan_agent_reap_after_s` (120s) vencido. **PID reciclado por outro programa
+nunca é morto** — divergência de identidade encerra o assunto.
+
+Para desligar a ceifa, em `.orchestrator/config/policies.json`:
+
+```json
+{ "orphan_agent_reap_after_s": -1 }
+```
+
+Para ver o que foi ceifado, procure `reaped_orphan` em `orchestrator task logs`.
+
+---
+
 ## 0.4.81 — `orchestrator update` deixa o clone com um commit
 
 **Sintoma (até 0.4.80):** depois de `orchestrator update` ou `npm test`,

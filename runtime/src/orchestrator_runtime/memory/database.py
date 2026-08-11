@@ -110,6 +110,36 @@ class AgentRunRow(Base):
     changed_files_json = Column(Text, default="[]")
 
 
+class AgentProcessRow(Base):
+    """CLI de agente LANCADO — identidade recuperavel apos a morte do runtime.
+
+    bug-119 — `agent_runs` so nasce quando o processo TERMINA e nunca teve
+    coluna de PID; o unico rastreador de processo vivo era um set em memoria
+    (`CliExecutor._active_pids`), que morre junto com o runtime. Sem esta linha
+    nao ha como saber, de outro processo, que aquele CLI existe.
+
+    `image` + `create_time` sao a identidade lida do S.O. no lancamento: sem os
+    dois conferindo, o PID nao autoriza kill nenhum (Windows recicla numero).
+    `owner_pid` e o processo do runtime que lancou — dono morto e uma das duas
+    evidencias de orfandade (a outra e a task ter chegado a estado terminal).
+    """
+
+    __tablename__ = "agent_processes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(String(32), index=True, nullable=False)
+    project_path = Column(Text, nullable=False)
+    role = Column(String(64), nullable=True)
+    agent = Column(String(64), nullable=True)
+    pid = Column(Integer, nullable=False)
+    image = Column(Text, nullable=True)
+    create_time = Column(Float, nullable=True)
+    owner_pid = Column(Integer, nullable=False)
+    started_at = Column(String(64), nullable=True)
+    finished_at = Column(String(64), nullable=True)
+    reaped_at = Column(String(64), nullable=True)
+
+
 class RoutingDecisionRow(Base):
     __tablename__ = "routing_decisions"
 

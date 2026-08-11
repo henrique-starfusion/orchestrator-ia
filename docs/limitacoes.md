@@ -17,9 +17,9 @@ Classificação:
 Itens marcados como **resolvidos** permanecem aqui para preservar o histórico da
 rodada; não descrevem uma limitação atual.
 
-### DIV-001 — Resolvida: README alinhado à versão 0.4.81
+### DIV-001 — Resolvida: README alinhado à versão 0.4.82
 
-`README.md:11` e o cabeçalho de `docs/README.md` agora declaram `0.4.81`, o mesmo
+`README.md:11` e o cabeçalho de `docs/README.md` agora declaram `0.4.82`, o mesmo
 valor de `VERSION:1` e `package.json:3`. A causa da divergência era a repetição
 manual do número sem checagem de sincronismo; `VERSION` fica explícito como
 fonte canônica no README.
