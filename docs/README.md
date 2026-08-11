@@ -1,7 +1,7 @@
 # Documentação do @starfusion/orchestrator
 
 Índice mestre da documentação deste repositório (`bootstrap-agents`, pacote npm
-`@starfusion/orchestrator`, versão `0.4.83` em `VERSION:1` e `package.json:3`).
+`@starfusion/orchestrator`, versão `0.4.84` em `VERSION:1` e `package.json:3`).
 
 Esta pasta tem dois tipos de documento:
 
