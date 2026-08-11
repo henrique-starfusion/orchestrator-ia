@@ -23,6 +23,7 @@ from orchestrator_runtime.agents import AgentRegistry
 from orchestrator_runtime.agents.base import AgentRequest, AgentResult
 from orchestrator_runtime.agents.health import auth_hint, classify_agent_failure
 from orchestrator_runtime.agents.process import NO_OUTPUT_MARKER, CliExecutor
+from orchestrator_runtime.agents.reaper import identity_matches, process_identity
 from orchestrator_runtime.agents.repair import repair_agent
 from orchestrator_runtime.callers import caller_profile, detect_caller
 from orchestrator_runtime.config import RuntimeConfig, load_config
@@ -226,6 +227,15 @@ class TaskService:
         self._queue_adoption_gate = threading.Lock()
         self._queue_adoption_lock = WriteLock(
             config.orchestrator_root / "runtime" / "locks" / "queue.adopt.lock",
+            timeout_s=1,
+        )
+        # bug-119 - a ceifa de CLI orfao roda nos MESMOS polls da adocao de task
+        # orfa. Gate de thread para os polls concorrentes deste processo; lock de
+        # arquivo (curto) para os outros processos. A reivindicacao final e uma
+        # transacao no SQLite, entao o lock e a primeira barreira, nao a unica.
+        self._reap_gate = threading.Lock()
+        self._reap_lock = WriteLock(
+            config.orchestrator_root / "runtime" / "locks" / "agent.reap.lock",
             timeout_s=1,
         )
         self.docs = DocumentationUpdater()
@@ -872,6 +882,10 @@ class TaskService:
     def _adopt_orphan_received_safe(self, project_path: str | None = None) -> None:
         """Adoção nunca derruba leitura: observar é read-only para o chamador."""
         path = project_path or str(self.config.project_path)
+        # bug-119 - CLI de agente órfão é ceifado ANTES de qualquer adoção e fora
+        # do `try` da adoção: o `return` que a adoção QUEUED faz não pode pular a
+        # ceifa, e processo órfão consome recurso da máquina enquanto existe.
+        self._reap_orphan_agents_safe(path)
         try:
             # QUEUED vem primeiro: e fila explicita e sua cabeca nao pode ser
             # furada por uma RECEIVED encontrada na varredura legada.
@@ -1657,6 +1671,176 @@ class TaskService:
         self.bus.emit(event)
         self.repo.add_event(event)
         return True
+
+    def _register_process_tracking(
+        self, executor: Any, task_id: str, *, role: str, agent: str
+    ) -> None:
+        """Liga o registro DURÁVEL dos CLIs que este executor lançar (bug-119).
+
+        O único rastreador que existia era `CliExecutor._active_pids` — um set em
+        memória, lido só por `kill_active()` no cancelamento ordenado. Ele cobre
+        exatamente o caso em que o runtime ainda está vivo; órfão é o caso em que
+        ele já não está. A linha em `agent_processes` sobrevive ao crash, ao
+        `taskkill` e ao fim do terminal, e carrega a identidade lida do S.O.
+        (`image` + `create_time`) sem a qual nenhum kill é autorizado.
+        """
+        if executor is None:
+            return
+        registros: dict[int, int] = {}
+
+        def _on_launch(pid: int, image: str | None, create_time: float | None) -> None:
+            try:
+                row_id = self.repo.add_agent_process(
+                    task_id=task_id,
+                    project_path=str(self.config.project_path),
+                    role=role,
+                    agent=agent,
+                    pid=int(pid),
+                    image=image,
+                    create_time=create_time,
+                    owner_pid=os.getpid(),
+                    started_at=datetime.now(timezone.utc).isoformat(),
+                )
+                registros[int(pid)] = row_id
+            except Exception:  # noqa: BLE001
+                pass  # registro nunca derruba a execução
+
+        def _on_exit(pid: int) -> None:
+            row_id = registros.pop(int(pid), None)
+            if row_id is None:
+                return
+            try:
+                self.repo.finish_agent_process(
+                    row_id, datetime.now(timezone.utc).isoformat()
+                )
+            except Exception:  # noqa: BLE001
+                pass
+
+        try:
+            executor.on_launch = _on_launch
+            executor.on_exit = _on_exit
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _reap_orphan_agents_safe(self, project_path: str) -> None:
+        """Ceifar nunca derruba leitura: observar é read-only para o chamador."""
+        try:
+            self._reap_orphan_agents(project_path)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _agent_process_orphan(self, linha: dict[str, Any]) -> bool:
+        """Evidência de orfandade: dono morto OU task já em estado terminal.
+
+        As duas são suficientes sozinhas e por motivos diferentes. Dono morto
+        significa que ninguém mais lê a saída daquele CLI nem o mataria no
+        cancelamento — é órfão mesmo com a task em EXECUTING (aliás, é
+        exatamente assim que ela ficaria presa lá). Task terminal significa que o
+        trabalho acabou: qualquer CLI ainda vivo dela é sobra.
+        """
+        if not _pid_alive(int(linha.get("owner_pid") or 0)):
+            return True
+        task = self.repo.get(str(linha.get("task_id") or ""))
+        return bool(task and task.status in TERMINAL_STATES)
+
+    def _reap_orphan_agents(self, project_path: str) -> list[int]:
+        """Mata os CLIs de agente que sobraram. Devolve os PIDs ceifados (bug-119).
+
+        Acionada pelos pontos de poll que já existiam (`status`, `list_tasks`,
+        `follow_events`, `create_task`), como a adoção de task órfã do bug-085 e
+        do bug-113: sem daemon, sem processo novo, sem thread de poll periódico.
+
+        Só é ceifado o que satisfaz TUDO junto:
+
+        1. o PID foi registrado por nós ao lançar o agente (a linha existe);
+        2. a identidade ATUAL do PID confere com a registrada — nome da imagem
+           E instante de criação, lidos do S.O.;
+        3. a task dona está terminal OU o processo do runtime que o lançou
+           morreu;
+        4. passou `orphan_agent_reap_after_s` desde o lançamento.
+
+        O item 2 é o que separa ceifa de estrago. O Windows recicla PID: matar
+        por número mataria o programa alheio que herdou o número. Sem identidade
+        conferida — inclusive quando não dá para lê-la — ninguém morre.
+        """
+        after_s = int(self.config.limits.orphan_agent_reap_after_s or 0)
+        if after_s < 0:
+            return []
+        abertos = self.repo.list_agent_processes(project_path, only_open=True)
+        if not abertos:
+            return []
+
+        agora = datetime.now(timezone.utc)
+        candidatos: list[dict[str, Any]] = []
+        for linha in abertos:
+            idade = self._age_seconds(linha.get("started_at"), agora)
+            if idade is None or idade < after_s:
+                continue
+            pid = int(linha.get("pid") or 0)
+            atual = process_identity(pid)
+            if atual is None:
+                # Sem identidade legível não se mata. Se o PID nem existe mais,
+                # o registro cumpriu o papel dele e é fechado; se existe mas não
+                # se deixa ler, a linha fica aberta para o próximo poll.
+                if not _pid_alive(pid):
+                    self.repo.finish_agent_process(linha["id"], agora.isoformat())
+                continue
+            if not identity_matches(linha.get("image"), linha.get("create_time"), atual):
+                # PID reciclado por outro programa. O nosso processo já morreu —
+                # fecha o registro — e o intruso NÃO é tocado.
+                self.repo.finish_agent_process(linha["id"], agora.isoformat())
+                continue
+            if not self._agent_process_orphan(linha):
+                continue
+            candidatos.append(linha)
+
+        if not candidatos:
+            return []
+
+        # A reivindicação é o ponto de idempotência entre pollers concorrentes:
+        # quem grava `reaped_at` mata; quem chegou depois não vê mais a linha.
+        ceifados: list[int] = []
+        with self._reap_gate:
+            try:
+                self._reap_lock.acquire()
+            except TimeoutError:
+                return []  # outro processo está ceifando agora
+            try:
+                for linha in candidatos:
+                    if not self.repo.claim_agent_process(
+                        linha["id"], datetime.now(timezone.utc).isoformat()
+                    ):
+                        continue
+                    pid = int(linha["pid"])
+                    CliExecutor._kill_tree(pid)
+                    ceifados.append(pid)
+                    self._emit_reaped(linha)
+            finally:
+                self._reap_lock.release()
+        return ceifados
+
+    def _emit_reaped(self, linha: dict[str, Any]) -> None:
+        evento = RuntimeEvent(
+            task_id=str(linha.get("task_id") or ""),
+            type=EventType.AGENT_COMPLETED,
+            role=linha.get("role"),
+            agent=linha.get("agent"),
+            data={
+                "status": "reaped_orphan",
+                "pid": linha.get("pid"),
+                "image": linha.get("image"),
+                "owner_pid": linha.get("owner_pid"),
+                "summary": (
+                    "CLI de agente orfao ceifado: identidade conferida "
+                    "(imagem + instante de criacao) e sem dono vivo"
+                ),
+            },
+        )
+        try:
+            self.bus.emit(evento)
+            self.repo.add_event(evento)
+        except Exception:  # noqa: BLE001
+            pass  # registro nunca derruba o poll
 
     def _adopt_orphan_received(self, project_path: str) -> None:
         """Assume task RECEIVED que ficou sem dono (bug-085).
@@ -4365,6 +4549,10 @@ class TaskService:
             return
         # 0.4.74 — daqui para baixo tudo vai no executor DESTA task.
         executor = self._task_executor(task)
+        # bug-119 — o registro durável dos PIDs lançados nasce aqui pelo mesmo
+        # motivo do heartbeat: este é o ponto por onde TODO despacho passa, e
+        # papel/agente/task só são conhecidos aqui.
+        self._register_process_tracking(executor, task.id, role=role, agent=agent_id)
 
         def _emit_heartbeat(elapsed: int, pid: int, _t=task, _r=role, _a=agent_id):
             evt = RuntimeEvent(

@@ -2,6 +2,52 @@
 
 ## Unreleased
 
+## 0.4.82 - 2026-08-11
+
+### Fixed
+
+- **bug-119 — CLI de agente órfão sobrevivia ao runtime que o lançou.** Os PIDs
+  dos CLIs ficavam num set em memória (`CliExecutor._active_pids`), lido por um
+  único consumidor: `kill_active()`, chamado só de `TaskService.cancel`. O
+  rastreador existia enquanto existisse o processo que o criou — então ele cobria
+  exatamente o caso em que o runtime está vivo, e órfão é por definição o caso em
+  que ele já não está. Crash, `taskkill`, restart do editor ou fim abrupto do
+  terminal deixavam os CLIs vivos sem que nenhum código do orquestrador soubesse
+  que existiam. `agent_runs` não ajudava: a linha só nasce quando o processo
+  termina e a tabela nunca teve coluna de PID
+- Nova tabela `agent_processes` registra, no instante do lançamento, a
+  identidade recuperável de cada CLI: `pid`, `image`, `create_time`, `owner_pid`,
+  `task_id` e `started_at`. A linha sobrevive à morte do runtime, que é o ponto
+  todo
+- `TaskService._reap_orphan_agents` ceifa a sobra a partir dos pontos de poll que
+  já existiam (`status`, `list_tasks`, `follow_events`, `create_task`) — o mesmo
+  padrão da adoção de task órfã do bug-085 e do bug-113. **Sem daemon, sem
+  processo novo, sem thread de poll periódico**
+- **Proteção contra reuso de PID.** Windows recicla número de processo, então
+  matar por número é destrutivo. Antes de qualquer kill a identidade ATUAL do PID
+  é lida do próprio sistema operacional (Windows: `GetProcessTimes` +
+  `QueryFullProcessImageNameW`; Linux: `/proc/<pid>/stat`) e precisa conferir nos
+  DOIS campos — nome da imagem e instante de criação. Identidade divergente, ou
+  ilegível, encerra o assunto: ninguém morre
+- Só é ceifado o que satisfaz tudo junto: PID registrado pelo orquestrador,
+  identidade conferida, task dona terminal **ou** runtime dono morto, e
+  `orphan_agent_reap_after_s` (120s, negativo desliga) vencido desde o lançamento
+- A ceifa é idempotente entre pollers concorrentes: a reivindicação grava
+  `reaped_at` numa transação única, sob gate de thread e lock de arquivo curto
+- `kill_active()` no cancelamento segue exatamente como estava — a ceifa é
+  adição, e cobre o caminho que ele nunca pôde cobrir
+
+### Tests
+
+- `runtime/tests/unit/test_0482_orphan_agent_reaper.py` — 14 casos com
+  **processos reais**: órfão de runtime morto é ceifado; PID reciclado por outro
+  programa **não** é morto (divergência de instante de criação e, em teste
+  separado, de nome de imagem); agente de task em execução com dono vivo é
+  intocado; limiar de tempo protege lançamento recente; a ceifa é idempotente
+  entre dois serviços sobre o mesmo banco; o poll de `status` dispara a ceifa; o
+  lançamento persiste identidade e a saída fecha o registro; `kill_active()` sem
+  regressão
+
 ## 0.4.81 - 2026-08-11
 
 ### Fixed

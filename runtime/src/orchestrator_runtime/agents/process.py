@@ -178,6 +178,16 @@ class CliExecutor:
         self.infra_fail_fast_count = infra_fail_fast_count
         # PIDs de CLIs em execução — alvo do cancel (kill de filhos).
         self._active_pids: set[int] = set()
+        # bug-119 — o set acima só existe enquanto ESTE processo existe, e órfão
+        # é justamente o caso em que ele já se foi. Estes dois callbacks são a
+        # ponte para o registro DURÁVEL: `on_launch(pid, image, create_time)`
+        # recebe a identidade lida do S.O. no instante do spawn (é lá que ela
+        # ainda pode ser lida), `on_exit(pid)` fecha o registro. Atributos e não
+        # parâmetros de `run()` pelo mesmo motivo do `on_heartbeat`: os adapters
+        # chamam `run()` e não precisam saber que isto existe. Sem callback, o
+        # comportamento é exatamente o anterior.
+        self.on_launch = None
+        self.on_exit = None
         # 0.4.28 — callback de progresso: sem isto o heartbeat so existia no
         # console do processo que chamou, entao quem observa por MCP/DB via a
         # task parada em EXECUTING por 10-30min e concluia que travou.
@@ -316,6 +326,7 @@ class CliExecutor:
             raise
 
         self._active_pids.add(proc.pid)
+        self._notify_launch(proc.pid)
         stop_heartbeat = threading.Event()
 
         def _reader(stream, chunks: list[str], prefix: str) -> None:
@@ -421,6 +432,7 @@ class CliExecutor:
                 proc.kill()
         finally:
             self._active_pids.discard(proc.pid)
+            self._notify_exit(proc.pid)
             stop_heartbeat.set()
             t_out.join(timeout=2)
             t_err.join(timeout=2)
@@ -458,6 +470,32 @@ class CliExecutor:
             command=resolved_command,
             cwd=str(workdir),
         )
+
+    def _notify_launch(self, pid: int) -> None:
+        """Publica a identidade do recém-nascido. Falha aqui nunca mata o run."""
+        callback = self.on_launch
+        if callback is None:
+            return
+        try:
+            from orchestrator_runtime.agents.reaper import process_identity
+
+            identity = process_identity(pid)
+            callback(
+                pid,
+                identity.image if identity else None,
+                identity.create_time if identity else None,
+            )
+        except Exception:  # noqa: BLE001
+            pass  # registro é rede de segurança, não pré-requisito da execução
+
+    def _notify_exit(self, pid: int) -> None:
+        callback = self.on_exit
+        if callback is None:
+            return
+        try:
+            callback(pid)
+        except Exception:  # noqa: BLE001
+            pass
 
     def kill_active(self) -> list[int]:
         """Mata as árvores de processos CLI ativos (propagação de cancel).

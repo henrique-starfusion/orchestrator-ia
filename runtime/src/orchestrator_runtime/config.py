@@ -95,6 +95,12 @@ class RuntimeLimits(BaseModel):
     # morreu. A task renova `updated_at` ao ser reclamada; a mesma janela vira
     # lease entre processos e impede duas threads para a mesma task.
     orphan_queued_adopt_after_s: int = 120
+    # bug-119 - ceifa o CLI de agente que sobrou depois deste tempo desde o
+    # lancamento. Mesma convencao dos dois acima. Curto demais mataria agente
+    # legitimo no vao entre o spawn e o primeiro sinal; a janela so existe para
+    # esse vao, porque as outras tres condicoes (identidade conferida, dono
+    # morto ou task terminal) ja sao exigidas juntas. Negativo desliga.
+    orphan_agent_reap_after_s: int = 120
     # bug-090 — reaper de task NAO-TERMINAL. `stale_received_ttl_hours` so varre
     # RECEIVED; task presa em EXECUTING/PLANNING ficava para sempre e
     # `_busy_task_id` seguia devolvendo ela, entao toda task nova entrava em
@@ -349,6 +355,9 @@ def load_config(
         ),
         orphan_queued_adopt_after_s=int(
             policies.get("orphan_queued_adopt_after_s", 120)
+        ),
+        orphan_agent_reap_after_s=int(
+            policies.get("orphan_agent_reap_after_s", 120)
         ),
         stale_execution_grace_s=int(
             policies.get("stale_execution_grace_s", 900)
