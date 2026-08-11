@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+## 0.4.78 - 2026-08-10
+
+Uma task podia permanecer `QUEUED` para sempre quando o processo que a
+enfileirou saía e o dono do workspace morria antes de executar o handoff. Não
+havia recuperação: `_maybe_start_next` dependia do `finally` de outro
+`run_task`, enquanto a adoção do bug-085 examinava somente `RECEIVED`.
+
+### Fixed
+
+- **bug-113 — adoção de órfã cobre `QUEUED`.** `status`, `list_tasks`,
+  `follow_events` (`task watch`) e `create_task` tentam recuperar a cabeça FIFO
+  depois de `orphan_queued_adopt_after_s` (padrão 120 s)
+- A recuperação exige, em conjunto: bloqueador registrado terminal ou nenhuma
+  task ativa; admissão normal por `_blocking_task_id` (teto + escopo); e a
+  candidata ser a primeira da fila. Cabeça bloqueada nunca é pulada pelo
+  adotador, ainda que uma task posterior tenha escopo disjunto
+- Uma lease em `updated_at`, gravada sob `queue.adopt.lock`, e o set local
+  `_adopted` tornam polls concorrentes idempotentes. O estado continua `QUEUED`
+  até a thread existente entrar em `run_task`; se o processo morrer antes, a
+  lease expira e outro poll pode tentar novamente
+
+### Unchanged
+
+- Nenhum daemon, processo ou thread periódica foi criado. A execução reutiliza
+  `_start_background`; o contrato de código de saída de `orchestrator run` não
+  mudou. A adoção de `RECEIVED` do bug-085 permanece ativa
+
 ## 0.4.77 - 2026-08-10
 
 Dez tasks de revisão/documentação morreram `INCOMPLETE` em produção porque

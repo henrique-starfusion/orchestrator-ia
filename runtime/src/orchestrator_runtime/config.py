@@ -76,6 +76,10 @@ class RuntimeLimits(BaseModel):
     # de rodar o loop) depois deste tempo. Curto demais rouba a task de quem
     # acabou de criá-la e vai rodá-la em seguida.
     orphan_received_adopt_after_s: int = 120
+    # bug-113 - adota a cabeca QUEUED quando o processo que faria o dequeue
+    # morreu. A task renova `updated_at` ao ser reclamada; a mesma janela vira
+    # lease entre processos e impede duas threads para a mesma task.
+    orphan_queued_adopt_after_s: int = 120
     # bug-090 — reaper de task NAO-TERMINAL. `stale_received_ttl_hours` so varre
     # RECEIVED; task presa em EXECUTING/PLANNING ficava para sempre e
     # `_busy_task_id` seguia devolvendo ela, entao toda task nova entrava em
@@ -323,6 +327,9 @@ def load_config(
         ),
         orphan_received_adopt_after_s=int(
             policies.get("orphan_received_adopt_after_s", 120)
+        ),
+        orphan_queued_adopt_after_s=int(
+            policies.get("orphan_queued_adopt_after_s", 120)
         ),
         stale_execution_grace_s=int(
             policies.get("stale_execution_grace_s", 900)

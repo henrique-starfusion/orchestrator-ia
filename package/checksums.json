@@ -8,7 +8,7 @@
         },
         {
             "path": "template/.orchestrator/VERSION",
-            "sha256": "9748cf1672a2834799dec8ef08ab4ddaafa0d784b857a2d04aac199839a40e9f"
+            "sha256": "c4c4f3f35bc5b64f00b2307ee5a52d6d563539ac8a8e671f9e44926a290cbf88"
         },
         {
             "path": "template/.orchestrator/agents/capabilities.json",
@@ -40,7 +40,7 @@
         },
         {
             "path": "template/.orchestrator/config/policies.json",
-            "sha256": "5a94f3459c8a8d036e3572c489a8c558d56c60cb7d52ba8516dafa5a0d2d072f"
+            "sha256": "b1cbfb829f0be11f3e374c544264b2d11706bfb2f377f3f012f06980e7de03be"
         },
         {
             "path": "template/.orchestrator/config/routing.json",

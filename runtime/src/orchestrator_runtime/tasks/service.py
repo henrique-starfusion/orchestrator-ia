@@ -218,6 +218,14 @@ class TaskService:
         # status dispararia uma nova thread para a mesma task na janela entre o
         # start e a primeira transição de estado.
         self._adopted: set[str] = set()
+        # bug-113 - o set evita repeticao neste TaskService; o lock curto
+        # serializa a lease QUEUED entre processos. Gate separado cobre polls
+        # concorrentes em threads do mesmo servidor MCP.
+        self._queue_adoption_gate = threading.Lock()
+        self._queue_adoption_lock = WriteLock(
+            config.orchestrator_root / "runtime" / "locks" / "queue.adopt.lock",
+            timeout_s=1,
+        )
         self.docs = DocumentationUpdater()
         self.lock = WriteLock(
             config.orchestrator_root / "runtime" / "locks" / "workspace.write.lock"
@@ -709,6 +717,9 @@ class TaskService:
         prompt = repair_mojibake(prompt)
         self._cancel_stale_received()
         self._cancel_stale_execution()
+        # bug-113 - criar outra task tambem e um poll duravel no MCP. Antes a
+        # cabeca QUEUED orfa so podia andar no finally de outro run_task.
+        self._adopt_orphan_received_safe()
         # bug-064 — idempotencia: mesmo prompt + mesmo dry_run em janela curta
         # com task nao-terminal devolve a existente (auditada com evento dedup)
         # em vez de criar duplicata que pode travar RECEIVED sem dono.
@@ -860,6 +871,10 @@ class TaskService:
         """Adoção nunca derruba leitura: observar é read-only para o chamador."""
         path = project_path or str(self.config.project_path)
         try:
+            # QUEUED vem primeiro: e fila explicita e sua cabeca nao pode ser
+            # furada por uma RECEIVED encontrada na varredura legada.
+            if self._adopt_orphan_queued(path):
+                return
             if self._busy_task_id(path) is None:
                 self._adopt_orphan_received(path)
         except Exception:  # noqa: BLE001
@@ -946,6 +961,9 @@ class TaskService:
         # bug-085 — o poll de status é o evento mais frequente da frota; é ele
         # que tira a órfã do limbo quando o processo criador não voltou.
         self._adopt_orphan_received_safe(task.project_path)
+        # A adocao pode ter iniciado a task em outra thread. Nao devolver o
+        # snapshot anterior se ela ja saiu da fila.
+        task = self.get(task_id)
         out: dict[str, Any] = {
             "id": task.id,
             "status": task.status.value,
@@ -984,6 +1002,10 @@ class TaskService:
         Devolve `cursor` para a próxima volta, e `terminal` para o laço saber
         quando parar sem inventar heurística de "parece pronto".
         """
+        task = self.get(task_id)
+        # bug-113 - `task watch` permanece vivo tempo suficiente para hospedar
+        # a thread existente ate a execucao terminar.
+        self._adopt_orphan_received_safe(task.project_path)
         eventos = self.repo.list_events_since(task_id, after_id, limit=limit)
         task = self.get(task_id)
         saida: dict[str, Any] = {
@@ -1556,6 +1578,83 @@ class TaskService:
         for thread in pendentes:
             thread.join(timeout=timeout_s)
         return len(pendentes)
+
+    def _queued_orphan_head(
+        self, project_path: str, after_s: int
+    ) -> TaskRecord | None:
+        """Return only the FIFO head when every adoption guard passes."""
+        queued = self.repo.list_queued(project_path)
+        if not queued:
+            return None
+        head = queued[0]
+        if (
+            head.cancel_requested
+            or head.id in self._running_tasks
+            or head.id in self._adopted
+        ):
+            return None
+        age_s = self._age_seconds(head.updated_at, datetime.now(timezone.utc))
+        if age_s is None or age_s < after_s:
+            return None
+
+        # Evidencia de orfandade: dono gravado terminou, OU nenhuma execucao
+        # segue ativa. Bloqueador vivo vence mesmo quando o escopo e disjunto.
+        active = self._active_tasks(project_path, head.id)
+        blocked_by = self._blocked_by_from_error(head.error)
+        blocker = self.repo.get(blocked_by) if blocked_by else None
+        blocker_terminal = bool(blocker and blocker.status in TERMINAL_STATES)
+        if active and not blocker_terminal:
+            return None
+
+        # Admissao normal continua soberana: teto e sobreposicao de escopo.
+        if self._blocking_task_id(project_path, head) is not None:
+            return None
+        return head
+
+    def _adopt_orphan_queued(self, project_path: str) -> bool:
+        """Claim the orphaned QUEUED FIFO head with a persisted lease (bug-113).
+
+        State remains QUEUED until the existing background path enters
+        ``run_task``. Refreshing ``updated_at`` under a cross-process lock is a
+        lease: another poll sees a recent head and cannot start it again. If the
+        process dies before start, the same head becomes eligible after the
+        configured window instead of disappearing from the queue.
+        """
+        after_s = self.config.limits.orphan_queued_adopt_after_s
+        if after_s <= 0 or self._queued_orphan_head(project_path, after_s) is None:
+            return False
+
+        claimed: TaskRecord | None = None
+        with self._queue_adoption_gate:
+            with self._queue_adoption_lock:
+                # Another poll may have claimed or dequeued between the cheap
+                # read above and the lock. Re-read every guard under the lock.
+                claimed = self._queued_orphan_head(project_path, after_s)
+                if claimed is None:
+                    return False
+                self._adopted.add(claimed.id)
+                self.repo.save(claimed)  # updates updated_at: persisted lease
+
+        try:
+            self._start_background(claimed.id, name="adopt-queued")
+        except Exception:
+            # Lease expires naturally; allow this process to retry afterwards.
+            self._adopted.discard(claimed.id)
+            raise
+
+        event = RuntimeEvent(
+            task_id=claimed.id,
+            type=EventType.STATE_CHANGED,
+            agent="runtime",
+            data={
+                "to": TaskState.QUEUED.value,
+                "reason": "orphan_queued_adopted",
+                "summary": "cabeca QUEUED sem dono adotada por poll do runtime",
+            },
+        )
+        self.bus.emit(event)
+        self.repo.add_event(event)
+        return True
 
     def _adopt_orphan_received(self, project_path: str) -> None:
         """Assume task RECEIVED que ficou sem dono (bug-085).

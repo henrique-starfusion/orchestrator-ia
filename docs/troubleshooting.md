@@ -6,6 +6,30 @@ Quickstart: [`quickstart-oneliner.md`](quickstart-oneliner.md)
 
 ---
 
+## 0.4.78 — Task permanece QUEUED depois que o bloqueador morreu
+
+**Sintoma (até 0.4.77):** task mostra `QUEUED`, `blocked_by` aponta para uma task
+terminal e o workspace tem vaga, mas polls sucessivos não iniciam trabalho.
+
+**Causa (bug-113):** `_maybe_start_next` só era chamado no `finally` ou no
+cancelamento de outra task. Se o processo que enfileirou saiu e o processo dono
+do workspace morreu, ninguém executava o dequeue. A adoção do bug-085 examinava
+somente `RECEIVED`.
+
+**Comportamento (0.4.78):** polls de `status`, `list`, `task watch` e
+`create_task` podem adotar a cabeça FIFO depois da lease configurável:
+
+```json
+{ "orphan_queued_adopt_after_s": 120 }
+```
+
+A adoção exige todas as guardas: bloqueador terminal ou nenhuma task ativa;
+vaga pelo teto; escopo disjunto; cabeça FIFO. Bloqueador vivo nunca é roubado.
+`queue.adopt.lock`, `updated_at` e `_adopted` impedem start duplicado entre
+pollers. `0` desliga. Nenhum daemon foi adicionado.
+
+---
+
 ## 0.4.77 — Revisão/documentação recebe critérios de correção de bug
 
 **Sintoma (até 0.4.76):** uma task de revisão independente ou documentação

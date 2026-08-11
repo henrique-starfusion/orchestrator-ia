@@ -87,6 +87,18 @@ morreu é assumida por quem observar, depois de
 `list_tasks` chamam a adoção (linhas 366-369 e 456-460), então qualquer poll
 tira a task do limbo.
 
+Desde 0.4.78, a adoção também cobre a **cabeça `QUEUED`**. Depois de
+`orphan_queued_adopt_after_s`, `status`, `list_tasks`, `follow_events`
+(`task watch`) e `create_task` podem reclamar a task somente quando o bloqueador
+registrado terminou ou não há execução ativa. `_blocking_task_id` ainda precisa
+aprovar teto e escopo. O adotador nunca pula a cabeça FIFO: se ela colide, uma
+task disjunta no meio da fila não é adotada por esse caminho.
+
+A reclamação renova `updated_at` sob `queue.adopt.lock`; essa lease persistida e
+o set `_adopted` impedem dois pollers de iniciarem a mesma task. O estado só sai
+de `QUEUED` quando a thread já existente entra em `run_task`. Não há daemon nem
+thread periódica nova.
+
 ## 3. ANALYZING (linha 779)
 
 `manager.analyze_task` classifica o pedido. Com o manager padrão
