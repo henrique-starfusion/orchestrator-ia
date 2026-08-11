@@ -74,7 +74,14 @@ function Sync-PackageCache {
     if ((Test-IsPackageRoot -Path $CachePath) -and -not $Force) {
         if ($git -and (Test-Path -LiteralPath $gitDir)) {
             Write-Host "[get] Atualizando cache: $CachePath"
-            & $git.Source -C $CachePath fetch --depth 1 origin $BranchName 2>$null | Out-Null
+            $shallowState = (& $git.Source -C $CachePath rev-parse --is-shallow-repository 2>$null | Out-String).Trim()
+            $fetchArgs = @('-C', $CachePath, 'fetch')
+            if ($LASTEXITCODE -eq 0 -and $shallowState -eq 'true') {
+                Write-Host '[get][AVISO] Cache ja possui historia truncada (shallow); mantendo fetch --depth 1. Para restaurar: git fetch --unshallow origin'
+                $fetchArgs += @('--depth', '1')
+            }
+            $fetchArgs += @('origin', $BranchName)
+            & $git.Source @fetchArgs 2>$null | Out-Null
             & $git.Source -C $CachePath checkout -q FETCH_HEAD 2>$null | Out-Null
             if ($LASTEXITCODE -ne 0) {
                 & $git.Source -C $CachePath pull --ff-only origin $BranchName 2>$null | Out-Null

@@ -1052,19 +1052,42 @@ function Sync-PackageSource {
     $previousEap = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        $null = & $git.Source -C $PackageRoot fetch --depth 1 origin $Branch 2>&1
+        $shallowState = (& $git.Source -C $PackageRoot rev-parse --is-shallow-repository 2>$null | Out-String).Trim()
+        $shallowStateCode = $LASTEXITCODE
+        $isShallowRepository = ($shallowStateCode -eq 0 -and $shallowState -eq 'true')
+        $fetchArgs = @('-C', $PackageRoot, 'fetch')
+        if ($isShallowRepository) {
+            Write-Host '[AVISO] Repositorio do pacote ja possui historia truncada (shallow); mantendo fetch --depth 1. Para restaurar: git fetch --unshallow origin'
+            $fetchArgs += @('--depth', '1')
+        }
+        elseif ($shallowStateCode -ne 0) {
+            Write-Host '[AVISO] Estado shallow do pacote nao pode ser determinado; fetch seguira sem limite de profundidade para preservar a historia.'
+        }
+        $fetchArgs += @('origin', $Branch)
+
+        $null = & $git.Source @fetchArgs 2>&1
         $fetchCode = $LASTEXITCODE
+        $syncCode = $fetchCode
         if ($fetchCode -eq 0) {
-            $null = & $git.Source -C $PackageRoot merge --ff-only "origin/$Branch" 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                $null = & $git.Source -C $PackageRoot pull --ff-only origin $Branch 2>&1
+            if ($isShallowRepository) {
+                $null = & $git.Source -C $PackageRoot checkout -q FETCH_HEAD 2>&1
+                $syncCode = $LASTEXITCODE
+            }
+            else {
+                $null = & $git.Source -C $PackageRoot merge --ff-only "origin/$Branch" 2>&1
+                $syncCode = $LASTEXITCODE
+                if ($syncCode -ne 0) {
+                    $null = & $git.Source -C $PackageRoot pull --ff-only origin $Branch 2>&1
+                    $syncCode = $LASTEXITCODE
+                }
             }
         }
-        else {
+        elseif (-not $isShallowRepository) {
             $null = & $git.Source -C $PackageRoot pull --ff-only 2>&1
+            $syncCode = $LASTEXITCODE
         }
 
-        if ($LASTEXITCODE -ne 0) {
+        if ($syncCode -ne 0) {
             Write-Host '[AVISO] Nao foi possivel atualizar o pacote via git; continuando com a copia local.'
             return $false
         }

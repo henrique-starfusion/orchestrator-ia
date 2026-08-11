@@ -102,7 +102,7 @@ Assim como o pytest, o runner **limpa `ORCHESTRATOR_CHILD_AGENT`** antes de
 começar (`tests/Run-AllTests.ps1:5-9`), porque a suíte pode estar rodando sob o
 próprio orquestrador em VALIDATING.
 
-Os 32 arquivos se agrupam assim:
+Os 33 arquivos se agrupam assim:
 
 | Grupo | Arquivos | Cobre |
 |---|---|---|
@@ -113,6 +113,7 @@ Os 32 arquivos se agrupam assim:
 | Roteamento e despacho | `Test-ModelRouting.ps1`, `Test-DispatchMonitoring.ps1`, `Test-CursorDefaultOrchestration.ps1` | Resolução de rota por classe de tarefa e comportamento padrão no Cursor |
 | Legacy | `Test-LegacyDetection.ps1`, `Test-LegacyBackup.ps1`, `Test-LegacyMigration.ps1`, `Test-LegacyRestore.ps1`, `Test-LegacyCleanupSafe.ps1`, `Test-LegacyCleanupAggressive.ps1`, `Test-LegacyCleanupReportOnly.ps1`, `Test-LegacyCleanupIdempotency.ps1`, `Test-LegacyUnknownPreservation.ps1`, `Test-LegacyUserOwnedPreservation.ps1`, `Test-NoLegacyArtifacts.ps1` | Todo o pipeline de configuração legada: detectar, fazer backup, migrar, remover nos três modos, restaurar, e nunca apagar o que é do usuário |
 | Propagação | `Test-ProjectPropagate.ps1` | Update do pacote chegando aos projetos registrados |
+| Pacote Git | `Test-PackageSyncHistory.ps1` | Clone completo preservado, merge ff-only, caminho shallow e clone novo com profundidade 1 |
 
 `Test-Helpers.ps1` é biblioteca, não teste — está explicitamente excluída da
 descoberta. Fixtures ficam em `tests/fixtures/`.

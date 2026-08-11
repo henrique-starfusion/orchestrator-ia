@@ -6,6 +6,34 @@ Quickstart: [`quickstart-oneliner.md`](quickstart-oneliner.md)
 
 ---
 
+## 0.4.81 — `orchestrator update` deixa o clone com um commit
+
+**Sintoma (até 0.4.80):** depois de `orchestrator update` ou `npm test`,
+`git rev-parse --is-shallow-repository` devolve `true`, `.git/shallow` existe e
+`git rev-list --count HEAD` cai para `1`. O remoto não perdeu commits: o clone
+local recebeu um enxerto shallow.
+
+**Causa (bug-117):** o sync do pacote sempre executava
+`git fetch --depth 1 origin develop`, inclusive quando `PackageRoot` era o clone
+completo onde o pacote estava sendo desenvolvido. O mesmo fetch removia a
+ancestralidade necessária para o `merge --ff-only` executado logo depois.
+
+**Comportamento (0.4.81):** o sync consulta o estado Git real. Repositório
+completo faz fetch sem `--depth` e continua completo; repositório já shallow
+mantém o caminho raso, atualiza por `FETCH_HEAD` e não tenta aprofundar sozinho.
+Caches novos e descartáveis continuam nascendo com `clone --depth 1`.
+
+Para recuperar um clone afetado antes da 0.4.81:
+
+```bash
+git fetch --unshallow origin
+```
+
+O caminho shallow também imprime esse comando explicitamente; truncamento de
+história não fica mais silencioso.
+
+---
+
 ## 0.4.78 — Task permanece QUEUED depois que o bloqueador morreu
 
 **Sintoma (até 0.4.77):** task mostra `QUEUED`, `blocked_by` aponta para uma task

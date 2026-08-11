@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## 0.4.81 - 2026-08-11
+
+### Fixed
+
+- **bug-117 — sync do pacote truncava a história do clone do dono.**
+  `Sync-PackageSource` executava `fetch --depth 1` em todo `PackageRoot`, mesmo
+  quando ele era um clone completo de desenvolvimento. O Git criava
+  `.git/shallow`, `rev-list` passava a enxergar só o tip e o `merge --ff-only`
+  seguinte podia recusar histórias sem ancestral comum
+- O sync consulta `rev-parse --is-shallow-repository` antes do fetch. Clone
+  completo usa fetch sem limite de profundidade e mantém `merge --ff-only`;
+  clone já shallow conserva `--depth 1`, avança para `FETCH_HEAD` sem aprofundar
+  e imprime aviso com `git fetch --unshallow origin`
+- O cache existente de `get.ps1` aplica a mesma decisão pelo estado real. Clone
+  novo e descartável continua usando `clone --depth 1`
+
+### Tests
+
+- `Test-PackageSyncHistory.ps1` cria origin e clones reais descartáveis para
+  provar preservação de história completa, avanço ff-only, atualização shallow,
+  aviso de recuperação e economia de banda na instalação nova
+
 ## 0.4.80 - 2026-08-11
 
 ### Fixed
