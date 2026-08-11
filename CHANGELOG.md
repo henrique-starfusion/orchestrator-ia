@@ -36,17 +36,23 @@
   `reaped_at` numa transação única, sob gate de thread e lock de arquivo curto
 - `kill_active()` no cancelamento segue exatamente como estava — a ceifa é
   adição, e cobre o caminho que ele nunca pôde cobrir
+- O registro passa a valer em **todo** ponto que fabrica executor, não só no
+  despacho comum: o fan-out cria um `CliExecutor` novo por subtarefa
+  (`_subtask_executor`) e executor novo nasce sem `on_launch`, então os CLIs mais
+  numerosos — N subtarefas em paralelo, o cenário dos 338 processos — ficavam
+  fora do registro e, por consequência, fora da ceifa
 
 ### Tests
 
-- `runtime/tests/unit/test_0482_orphan_agent_reaper.py` — 14 casos com
+- `runtime/tests/unit/test_0482_orphan_agent_reaper.py` — 16 casos com
   **processos reais**: órfão de runtime morto é ceifado; PID reciclado por outro
   programa **não** é morto (divergência de instante de criação e, em teste
   separado, de nome de imagem); agente de task em execução com dono vivo é
   intocado; limiar de tempo protege lançamento recente; a ceifa é idempotente
   entre dois serviços sobre o mesmo banco; o poll de `status` dispara a ceifa; o
-  lançamento persiste identidade e a saída fecha o registro; `kill_active()` sem
-  regressão
+  lançamento persiste identidade e a saída fecha o registro; o executor de
+  subtarefa do fan-out persiste o lançamento e seu CLI órfão é ceifado;
+  `kill_active()` sem regressão
 
 ## 0.4.81 - 2026-08-11
 

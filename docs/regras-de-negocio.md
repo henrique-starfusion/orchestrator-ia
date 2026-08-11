@@ -339,12 +339,21 @@ que ele já não está. `agent_runs` não serve para isso: a linha só nasce qua
 processo termina e a tabela não tem coluna de PID. Sem registro durável, nenhum
 outro processo consegue nem saber que aquele CLI existe.
 
+O registro vale para **todo** ponto que fabrica executor de CLI, não só o do
+despacho comum: o fan-out cria um `CliExecutor` NOVO por subtarefa (executor
+compartilhado quebraria o heartbeat e a sonda de silêncio, que olham a árvore
+principal enquanto a subtarefa escreve no worktree), e executor novo nasce sem
+`on_launch`. Sem ligar o rastreamento também lá, justamente os CLIs mais
+numerosos — N subtarefas em paralelo — ficariam invisíveis para a ceifa.
+
 **Evidência.** `AgentProcessRow` em
 `runtime/src/orchestrator_runtime/memory/database.py:113-140`;
 `CliExecutor.on_launch`/`_notify_launch`/`_notify_exit` em
 `runtime/src/orchestrator_runtime/agents/process.py:189-197,329,474-499`;
 `TaskService._register_process_tracking` em
-`runtime/src/orchestrator_runtime/tasks/service.py:1675-1723`;
+`runtime/src/orchestrator_runtime/tasks/service.py:1675-1723`, ligado no despacho
+comum em `runtime/src/orchestrator_runtime/tasks/service.py:4569` e no fan-out em
+`runtime/src/orchestrator_runtime/tasks/service.py:4242-4270`;
 `TaskRepository.add_agent_process` e `finish_agent_process` em
 `runtime/src/orchestrator_runtime/tasks/repository.py:427-441`.
 

@@ -4239,13 +4239,20 @@ class TaskService:
             return []
         return parse_subtasks(result.stdout or "", max_subtasks=max_subtasks)
 
-    def _subtask_executor(self, worktree: Path) -> CliExecutor:
+    def _subtask_executor(
+        self, worktree: Path, *, task_id: str, agent_id: str
+    ) -> CliExecutor:
         """Executor próprio por subtarefa.
 
         Compartilhar o executor principal quebraria duas coisas ao mesmo tempo:
         o heartbeat (um callback só para N agentes) e — pior — o watchdog de
         silêncio, cuja sonda olha a árvore PRINCIPAL. Como a subtarefa escreve
         no worktree, a sonda global veria "nada mudou" e mataria agentes vivos.
+
+        bug-119 — e por ser NOVO ele nasce sem `on_launch`: o registro do
+        `_register_heartbeat` fica no executor da task, não neste. Sem ligar o
+        rastreamento aqui, justamente os CLIs mais numerosos (N subtarefas em
+        paralelo) ficariam invisíveis para a ceifa.
         """
         executor = CliExecutor(
             self.config.project_path,
@@ -4256,6 +4263,9 @@ class TaskService:
         executor.no_output_timeout_s = self.config.limits.agent_no_output_timeout_s
         executor.progress_probe = lambda: bool(
             (run_git(worktree, "status", "--porcelain").stdout or "").strip()
+        )
+        self._register_process_tracking(
+            executor, task_id, role="executor", agent=agent_id
         )
         return executor
 
@@ -4281,6 +4291,7 @@ class TaskService:
     def _run_subtask_blocking(
         self,
         *,
+        task_id: str,
         agent_id: str,
         prompt: str,
         worktree: Path,
@@ -4303,7 +4314,9 @@ class TaskService:
         # é o executor — perfil e capacidades são só leitura.
         adapter = copy.copy(adapter)
         if hasattr(adapter, "executor"):
-            adapter.executor = self._subtask_executor(worktree)
+            adapter.executor = self._subtask_executor(
+                worktree, task_id=task_id, agent_id=agent_id
+            )
         request = AgentRequest(
             role="executor",
             prompt=prompt,
@@ -4353,6 +4366,7 @@ class TaskService:
                 *[
                     asyncio.to_thread(
                         self._run_subtask_blocking,
+                        task_id=task.id,
                         agent_id=plan_roles.executor,
                         prompt=self._subtask_prompt(base_prompt, spec),
                         worktree=handles[spec.id].path,

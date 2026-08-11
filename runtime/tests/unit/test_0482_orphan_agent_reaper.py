@@ -382,6 +382,54 @@ def test_lancamento_persiste_identidade_e_saida_fecha_o_registro(
     assert service._reap_orphan_agents(str(project)) == []
 
 
+def test_executor_do_fanout_tambem_persiste_o_lancamento(project: Path) -> None:
+    """O fan-out e onde N CLIs nascem de uma vez — nao pode ficar de fora.
+
+    `_subtask_executor` fabrica um `CliExecutor` NOVO por subtarefa (executor
+    compartilhado quebraria heartbeat e sonda de silencio). Executor novo nasce
+    sem `on_launch`: sem registrar aqui, exatamente os processos mais numerosos
+    ficam invisiveis para a ceifa — o cenario dos 338 processos.
+    """
+    service = _service(project)
+    task_id = _task(service, TaskState.EXECUTING)
+
+    executor = service._subtask_executor(
+        project, task_id=task_id, agent_id="codex"
+    )
+    result = executor.run([sys.executable, "-c", "print('ok')"], timeout_s=60)
+    assert result.exit_code == 0
+
+    linhas = service.repo.list_agent_processes(str(project))
+    assert len(linhas) == 1, "CLI de subtarefa nao foi persistido"
+    linha = linhas[0]
+    assert linha["task_id"] == task_id
+    assert linha["agent"] == "codex"
+    assert linha["image"] and linha["create_time"] > 0
+    assert linha["owner_pid"] == os.getpid()
+    assert linha["finished_at"]
+
+
+def test_cli_de_subtarefa_orfa_e_ceifado(project: Path, sleeper) -> None:
+    """Fecha o circuito: registrado pelo fan-out, ceifado como qualquer outro."""
+    service = _service(project)
+    proc = sleeper()
+    ident = process_identity(proc.pid)
+    assert ident is not None
+    task_id = _task(service, TaskState.EXECUTING)
+    # Mesma linha que `_subtask_executor` grava, com o dono ja morto.
+    _register(
+        service,
+        task_id=task_id,
+        pid=proc.pid,
+        image=ident.image,
+        create_time=ident.create_time,
+        owner_pid=_dead_pid(),
+    )
+
+    assert proc.pid in service._reap_orphan_agents(str(service.config.project_path))
+    assert _morreu(proc)
+
+
 def test_kill_active_no_cancelamento_segue_funcionando(project: Path, sleeper) -> None:
     """AC-5 — nenhuma regressao no caminho ordenado de cancelamento."""
     executor = CliExecutor(project, echo=False)
