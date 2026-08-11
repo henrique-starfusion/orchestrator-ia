@@ -402,6 +402,49 @@ em `runtime/src/orchestrator_runtime/tasks/service.py:882-891`;
 `RuntimeLimits.orphan_agent_reap_after_s` em
 `runtime/src/orchestrator_runtime/config.py:103,359-361`.
 
+## Disciplina de evidência
+
+### RN-024 — Nunca supor: verificar, medir ou consultar
+
+**Regra.** Antes de afirmar algo técnico, abra o arquivo, rode o comando,
+consulte o banco ou leia o `--help`, conforme a fonte real da resposta. Prefira
+número a adjetivo: `92,6% dos eventos são heartbeat` vale mais que `muitos
+eventos são heartbeat`. Cite a prova junto da afirmação como `arquivo:linha` ou
+saída de comando.
+
+Informação fora da máquina — licença de terceiro, API externa ou versão de
+ferramenta — exige consulta à fonte oficial na internet, não resposta de
+memória: o modelo tem corte de conhecimento. Se a informação não é conhecida e
+não pode ser verificada, a resposta correta é dizer que não sabe, sem preencher
+a lacuna com plausibilidade.
+
+**Razão.** Suposições plausíveis já inverteram diagnóstico, capacidade e causa
+raiz. Evidência próxima da conclusão torna a afirmação auditável, distingue
+limitação do adapter de limitação da ferramenta e evita corrigir o componente
+errado.
+
+**Casos medidos em 2026-08-11.**
+
+- Supor que `orchestrator_message` conversa com task viva estava errado:
+  `runtime/src/orchestrator_runtime/mcp/tools.py:932` exige
+  `WAITING_FOR_USER` e reinicia a análise.
+- Supor que mensagem não podia ser injetada em agente rodando estava errado: a
+  saída de `claude --help` contém `--input-format stream-json` para entrada
+  streaming em tempo real. A limitação era do adapter, não do CLI.
+- Supor que `same_issue_repeat_limit` era contador global estava errado:
+  `runtime/src/orchestrator_runtime/tasks/service.py:2964` mostra contagem por
+  critério.
+- Supor que a história Git tinha sido destruída estava errado: `.git/shallow`
+  fora criado pelo `fetch --depth 1` do próprio sync; a causa documentada virou
+  bug-117 (`CHANGELOG.md:77-87`).
+
+**Evidência da aplicação.** Descoberta e seleção em
+`runtime/src/orchestrator_runtime/rules/discovery.py:76-151`; seleção por relevância
+em `runtime/src/orchestrator_runtime/tasks/service.py:3227` e injeção no prompt do
+executor em `runtime/src/orchestrator_runtime/tasks/service.py:3415-3417`; propagação em
+`package/manifest.json` e teste de regressão em
+`runtime/tests/unit/test_0483_never_assume_rule.py`.
+
 ## Como alterar uma regra
 
 Mudança numa RN exige reconferir o símbolo citado, o motivo registrado nos
