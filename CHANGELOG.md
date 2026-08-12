@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 0.4.85 - 2026-08-12
+
+### Added
+
+- **Issue #15 — boundaries internas do Engine sem reorganização física.**
+  `engine.core`, `engine.agents`, `engine.memory`, `engine.persistence`,
+  `engine.server`, `engine.cli` e `engine.mcp` passam a ter consumidores
+  autorizados explícitos, preservando todos os caminhos atuais
+- As 18 arestas legadas que já contrariavam a tabela permanecem numa lista
+  exata e justificada; exceção sem motivo ou que deixou de representar uma
+  violação também quebra o teste
+
+### Tests
+
+- `runtime/tests/unit/test_0485_engine_internal_boundaries.py` percorre todos os
+  módulos Python com `ast`, monta o grafo de imports internos e informa arquivo,
+  linha e regra em cada violação
+
 ## 0.4.84 - 2026-08-11
 
 ### Added

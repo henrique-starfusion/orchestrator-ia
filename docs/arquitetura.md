@@ -167,6 +167,30 @@ Pacote `orchestrator_runtime`: 42 módulos, cerca de 11.8 mil linhas.
 | `skills/` e `rules/` | Descoberta de skills e regras do projeto para injetar no prompt | `_skill_dirs:54`, `select_rules` |
 | `callers.py` | Quem chamou muda eco, heartbeat e escolha de executor | `detect_caller:64`, `CallerProfile:40` |
 
+### Fronteiras internas do Engine (0.4.85)
+
+Estas fronteiras são lógicas: nenhum arquivo foi movido. Importações dentro da
+mesma fronteira são permitidas; a terceira coluna limita consumidores externos
+à fronteira.
+
+| Boundary | Módulos atuais | Consumidores autorizados |
+|---|---|---|
+| `engine.core` | `tasks/` (exceto `repository.py`), `planning/`, `routing/`, `execution/` | `engine.server`, `engine.cli` |
+| `engine.agents` | `agents/` | `engine.core` |
+| `engine.memory` | `memory/` (exceto `database.py`) | `engine.core` |
+| `engine.persistence` | `tasks/repository.py`, `memory/database.py` | `engine.core` |
+| `engine.server` | reservado para a fase que criará `server/` | ninguém interno |
+| `engine.cli` | `cli.py` | ninguém interno |
+| `engine.mcp` | `mcp/` | ninguém interno |
+
+O gate de CI é
+`runtime/tests/unit/test_0485_engine_internal_boundaries.py`. Ele usa `ast` para
+montar o grafo de imports de todo `orchestrator_runtime`, resolve imports
+absolutos e relativos e falha com arquivo, linha e regra violada. A lista
+`EXISTING_BOUNDARY_EXCEPTIONS` contém somente arestas legadas exatas, cada uma
+com motivo; o teste também rejeita exceção vazia ou obsoleta. Assim, dívida
+existente fica visível sem transformar exceção em regra nova.
+
 Observação de arquitetura: vários módulos são **stubs de uma linha** que só
 reexportam símbolos — `validation/completion_gate.py`, `validation/issues.py`,
 `validation/llm_review.py`, `planning/planner.py`, `planning/criteria.py`,
