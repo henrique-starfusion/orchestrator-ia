@@ -1,0 +1,40 @@
+name: Sync documentation to Wiki
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - docs/**
+      - scripts/Publish-Wiki.ps1
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wiki-sync
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    env:
+      GIT_AUTHOR_NAME: github-actions[bot]
+      GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+      GIT_COMMITTER_NAME: github-actions[bot]
+      GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Publish docs to Wiki
+        shell: pwsh
+        env:
+          WIKI_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $wikiUrl = "https://x-access-token:$env:WIKI_TOKEN@github.com/${{ github.repository }}.wiki.git"
+          ./scripts/Publish-Wiki.ps1 `
+            -WikiRepositoryUrl $wikiUrl `
+            -RepositoryUrl "https://github.com/${{ github.repository }}" `
+            -RepositoryRef "${{ github.sha }}"

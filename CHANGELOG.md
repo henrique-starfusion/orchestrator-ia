@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## 0.4.84 - 2026-08-11
+
+### Added
+
+- **Issue #9 — publicação derivada da documentação na Wiki.**
+  `scripts/Publish-Wiki.ps1` transforma cada Markdown de `docs/` em página,
+  gera `Home` a partir do índice, separa material-base de histórico e converte
+  links de documentos para a Wiki e links do repositório para URLs `blob`
+- A publicação clona a Wiki em diretório temporário e só cria commit/push quando
+  há mudança real; execução consecutiva idêntica não produz commit
+- `.github/wiki-sync.yml.disabled` preserva a automação futura fora de
+  `.github/workflows/`, pois Actions segue indisponível na conta
+- `docs/documentation-policy.md` formaliza `docs/` como fonte da verdade, a Wiki
+  como derivada e a sobrescrita de edições manuais
+
+### Tests
+
+- `tests/Test-WikiPublishing.ps1` cobre link relativo entre documentos, caminho
+  `docs/...`, arquivo de código, URL externa, página histórica e geração da Home
+
 ## 0.4.83 - 2026-08-11
 
 ### Added
